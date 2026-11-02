@@ -15,8 +15,8 @@
 #                      "~/.tmux/scripts/popup.sh '#{client_name}'"
 #
 # Status line: put #{sandesh_status} in status-right (or status-left); it
-# becomes "󰇮 3  󰭹 2" (unread mail threads, chat spaces), empty when
-# there is nothing new.
+# becomes "󰇮 3  󰭹 2  󰖣 1" (unread mail threads, chat spaces, WhatsApp
+# chats), empty when there is nothing new.
 
 dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 run="$dir/scripts/sandesh-run"
@@ -35,7 +35,7 @@ if [ "$key" != none ]; then
   else
     open="display-popup -E -w '$width' -h '$height' -d '#{pane_current_path}' -T '$title' \"$cmd\""
   fi
-  tmux bind-key -N "Open sandesh mail and chat popup (Gmail, Google Chat)" "$key" "$open"
+  tmux bind-key -N "Open sandesh mail and chat popup (Gmail, Google Chat, WhatsApp)" "$key" "$open"
 fi
 
 # #{sandesh_status} -> #('.../sandesh-run' status --tmux)

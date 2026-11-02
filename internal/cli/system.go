@@ -55,6 +55,9 @@ func auth(a *app.App, args []string) error {
 			return usageError("auth add needs a name, like work or personal")
 		}
 		name := pos[0]
+		if name == store.WhatsAppAccount {
+			return usageError("%q is WhatsApp's: sandesh whatsapp link links WhatsApp", name)
+		}
 		chat := !*noChat
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -188,7 +191,20 @@ func daemon(a *app.App, args []string) error {
 	}()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
+	var waNext time.Time
 	for {
+		// WhatsApp is a connection, not a sync: go online when linked
+		// (and take it over when the screen that held it quits)
+		if time.Now().After(waNext) {
+			waNext = time.Now().Add(30 * time.Second)
+			if _, linked := a.Store.WhatsApp(); linked && !a.WhatsAppOnline() {
+				if ok, err := a.StartWhatsApp(ctx); err != nil {
+					log.Printf("whatsapp: %v", err)
+				} else if ok {
+					log.Print("whatsapp: online")
+				}
+			}
+		}
 		for _, acc := range a.AccountNames() {
 			step(mailNext, acc, a.Config.MailInterval.Duration, a.SyncMail)
 			step(chatNext, acc, a.Config.ChatInterval.Duration, a.SyncChat)
@@ -295,6 +311,12 @@ func demo(args []string, tui func(*app.App, string) error) error {
 	}
 	defer a.Close()
 	if err := a.Store.AddAccount(store.Account{Name: "demo", Chat: true}); err != nil {
+		return err
+	}
+	w := fake.NewWhatsApp()
+	w.SeedWhatsApp()
+	a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }
+	if err := a.Store.AddWhatsApp("+919876500000", w.Me); err != nil {
 		return err
 	}
 	if _, errs := a.SyncAll(context.Background()); len(errs) > 0 {

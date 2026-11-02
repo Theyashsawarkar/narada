@@ -90,7 +90,7 @@ func Open(path string) (*Store, error) {
 }
 
 // schemaVersion: bump it with a step in migrate.
-const schemaVersion = 11
+const schemaVersion = 12
 
 func migrate(db *sql.DB) error {
 	var v int
@@ -196,6 +196,12 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+	if v < 12 {
+		// v12: accounts have a kind: google (mail and chat) or whatsapp
+		if _, err := db.Exec(`ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'google'`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
 	_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version=%d`, schemaVersion))
 	return err
 }
@@ -217,8 +223,11 @@ type Account struct {
 	LastError  string `json:"last_error,omitempty"`
 }
 
-func (s *Store) Accounts() ([]Account, error) {
-	rows, err := s.db.Query(`SELECT name,email,chat,history_id,chat_user,mail_synced,chat_synced,last_error FROM accounts ORDER BY position, name`)
+// Accounts are the Google accounts (WhatsApp is apart: WhatsApp()).
+func (s *Store) Accounts() ([]Account, error) { return s.accounts(KindGoogle) }
+
+func (s *Store) accounts(kind string) ([]Account, error) {
+	rows, err := s.db.Query(`SELECT name,email,chat,history_id,chat_user,mail_synced,chat_synced,last_error FROM accounts WHERE kind=? ORDER BY position, name`, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -234,10 +243,39 @@ func (s *Store) Accounts() ([]Account, error) {
 	return out, rows.Err()
 }
 
+// Account kinds.
+const (
+	KindGoogle   = "google"
+	KindWhatsApp = "whatsapp"
+)
+
+// WhatsAppAccount is the account name WhatsApp's chats are kept under.
+const WhatsAppAccount = "whatsapp"
+
+// WhatsApp is the linked WhatsApp account; ok is false before linking.
+// Email holds the phone number, ChatUser your own JID.
+func (s *Store) WhatsApp() (acc Account, ok bool) {
+	all, err := s.accounts(KindWhatsApp)
+	if err != nil || len(all) == 0 {
+		return Account{}, false
+	}
+	return all[0], true
+}
+
+// AddWhatsApp records the linked WhatsApp account (me: your JID).
+func (s *Store) AddWhatsApp(phone, me string) error {
+	_, err := s.db.Exec(`INSERT INTO accounts(name,email,chat,chat_user,kind,position) VALUES(?,?,1,?,?,1000)
+	  ON CONFLICT(name) DO UPDATE SET email=excluded.email, chat_user=excluded.chat_user, kind=excluded.kind, last_error=''`, WhatsAppAccount, phone, me, KindWhatsApp)
+	return err
+}
+
 func (s *Store) Account(name string) (Account, error) {
 	all, err := s.Accounts()
 	if err != nil {
 		return Account{}, err
+	}
+	if wa, ok := s.WhatsApp(); ok {
+		all = append(all, wa)
 	}
 	for _, a := range all {
 		if a.Name == name {
@@ -914,6 +952,8 @@ func (s *Store) SearchChat(accounts []string, query string, limit int, space str
 		for _, a := range accounts {
 			args = append(args, a)
 		}
+	} else {
+		where = append(where, "a.kind='google'")
 	}
 	args = append(args, limit)
 	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, sp.display_name, sp.type
@@ -1096,7 +1136,8 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 }
 
 // Spaces lists spaces, most recently active first, with unread counts
-// (messages from others after the space's read time).
+// (messages from others after the space's read time). No accounts means
+// every Google account: WhatsApp's chats only come when asked by name.
 func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error) {
 	q := `SELECT s.account,s.name,s.display_name,s.alias,s.threaded,s.pinned,s.type,s.last_active,s.last_read,s.synced_to,
 	  (SELECT COUNT(*) FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=s.account AND c.space=s.name AND c.created>s.last_read AND c.sender<>a.chat_user),
@@ -1110,6 +1151,8 @@ func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error)
 		for _, a := range accounts {
 			args = append(args, a)
 		}
+	} else {
+		q += " WHERE s.account IN (SELECT name FROM accounts WHERE kind='google')"
 	}
 	q += " ORDER BY s.last_active DESC"
 	rows, err := s.db.Query(q, args...)
@@ -1220,4 +1263,32 @@ func (s *Store) FirstNotify(account, key string) bool {
 	}
 	n, _ := res.RowsAffected()
 	return n == 1
+}
+
+// SetUnreadCount sets a chat's read time so its n newest messages from
+// others count as unread (WhatsApp's history gives a count, not a time).
+func (s *Store) SetUnreadCount(account, space string, n int) error {
+	_, err := s.db.Exec(`UPDATE spaces SET last_read=COALESCE((SELECT c.created FROM chat_messages c JOIN accounts a ON a.name=c.account
+	  WHERE c.account=? AND c.space=? AND c.sender<>a.chat_user ORDER BY c.created DESC LIMIT 1 OFFSET ?), CASE WHEN ?>0 THEN 0 ELSE last_read END)
+	  WHERE account=? AND name=?`, account, space, n, n, account, space)
+	return err
+}
+
+// UnreadChatMessages are the messages from others after the chat's read time.
+func (s *Store) UnreadChatMessages(account, space string) ([]ChatMessage, error) {
+	all, err := s.ChatMessages(account, space, 500)
+	if err != nil {
+		return nil, err
+	}
+	sp, err := s.Space(account, space)
+	if err != nil {
+		return nil, err
+	}
+	var out []ChatMessage
+	for _, m := range all {
+		if !m.Mine && m.Created > sp.LastRead {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }

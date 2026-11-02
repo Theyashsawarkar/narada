@@ -4,6 +4,18 @@ Newest first.
 
 ## Unreleased
 
+- **WhatsApp**: `sandesh whatsapp link` links your WhatsApp as a device
+  (QR code, or `--phone` for a code to type on the phone), and its chats
+  become a third tab (`Tab`: Mail → Chat → WhatsApp) with unread counts in
+  `sandesh status` and the tmux segment, notifications, read receipts and
+  quoted replies. `sandesh whatsapp list|read|send|unlink` on the command
+  line, `whatsapp_chats`, `whatsapp_read` and `whatsapp_send` for agents.
+  Every send goes through the outbox; an agent's always waits for you, and
+  WhatsApp sends are capped at `whatsapp_per_hour` (30). Without linking,
+  `whatsapp send` opens WhatsApp's click-to-chat page with the text typed
+  in instead. Text only for now. Linking isn't allowed by WhatsApp's terms
+  (see the README's WhatsApp section and ADR 5).
+
 - **HTML mail, for tables and the like**: `mail_send` and `mail_draft` take
   an optional `html` (and `sandesh mail send` an `--html FILE`). It goes
   out beside the plain text as `multipart/alternative`, so mail apps show

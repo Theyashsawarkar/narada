@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b>Gmail and Google Chat without leaving the terminal.</b><br>
+  <b>Gmail, Google Chat and WhatsApp without leaving the terminal.</b><br>
   Every unread mail and chat in one keyboard-driven screen, and an agent that can read, draft and send them for you.
 </p>
 
@@ -25,6 +25,7 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
 - [Getting started](#getting-started)
 - [The screen](#the-screen)
 - [Keys](#keys)
+- [WhatsApp](#whatsapp)
 - [Claude and other agents](#claude-and-other-agents)
 - [Sending safely](#sending-safely)
 - [Command line](#command-line)
@@ -61,6 +62,9 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
   for root commands).
 - **Notifications**: new inbox mail and chat DMs or mentions, through
   `notify-send`.
+- **WhatsApp too**: link it like WhatsApp Web (scan a QR code) and your
+  chats get a third tab, a status-line count and agent tools. See
+  [WhatsApp](#whatsapp) for what that means for your account.
 - **Several accounts**: work and personal side by side; `u` focuses on one.
 - **Safe with your login**: Google's own sign-in in your browser; tokens
   live in the system keyring and are never printed.
@@ -443,6 +447,47 @@ threads a minute, with a progress bar in the top bar.
   `send_policy` says, and the approval shows each file and where it came
   from. Agents save downloads only inside the downloads folder.
 
+## WhatsApp
+
+sandesh links to your WhatsApp the way WhatsApp Web does: as a linked
+device of your phone's account.
+
+```sh
+sandesh whatsapp link                  # scan the QR code: WhatsApp → Settings → Linked devices
+sandesh whatsapp link --phone +9198…   # or type a code on the phone instead
+```
+
+Your recent chats arrive over the next minutes. `Tab` in the screen now
+goes Mail → Chat → WhatsApp, with sections All, Unread, People, Groups and
+Scheduled; `i` types a message, `r` on a picked message replies quoting it,
+and opening a chat marks it read (the sender sees blue ticks). The status
+line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
+notify like chat DMs. The background service keeps WhatsApp online; without
+it, whichever sandesh is open (the screen, `sandesh mcp`) holds the
+connection.
+
+**Know the risk.** WhatsApp doesn't allow programs other than its own to
+link to an account. This works the same way WhatsApp Web does (through
+[whatsmeow](https://github.com/tulir/whatsmeow)), and normal one-to-one use
+looks like WhatsApp Web, but an account that sends a lot from such a device,
+especially to strangers or the same text to many, can be banned. So sandesh:
+
+- caps WhatsApp sends at `whatsapp_per_hour` (30), yours included;
+- sends one message to one chat at a time: there is no broadcast;
+- always asks you before an agent's WhatsApp message goes out, whatever
+  `send_policy` says.
+
+**Don't want to link?** `sandesh whatsapp send +9198… "text"` (and the
+`whatsapp_send` tool) then opens WhatsApp's own click-to-chat page with the
+message typed in, and you press Send there. `--link` does that even when
+linked.
+
+Not yet: sending photos and files (received ones show as "📷 Photo:
+caption"), reactions, editing and deleting, starting groups.
+`sandesh whatsapp unlink` logs this machine out and forgets the chats.
+WhatsApp unlinks devices whose phone has been offline for about two weeks;
+link again then.
+
 ## Claude and other agents
 
 sandesh doesn't embed a model. It offers tools over MCP, and whichever
@@ -478,6 +523,9 @@ claude  → contacts_find → mail_send
 | `chat_spaces` | Spaces and DMs with unread counts | reads |
 | `chat_read` | A space's recent messages | reads |
 | `chat_send` | Post in a space, DM or thread | **asks you** |
+| `whatsapp_chats` | WhatsApp chats with unread counts | reads |
+| `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
+| `whatsapp_send` | One text to one WhatsApp chat, optionally replying to a message; opens click-to-chat when not linked | **always asks you** |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
 
@@ -509,7 +557,9 @@ is written by strangers. So:
   policy. `send_policy` in the config: `confirm` (the default: every agent
   send asks), `known-contacts` (replies to people you've written to go
   straight out), `allow` (anything to people you've written to goes
-  straight out). Chat messages from agents always ask.
+  straight out). Chat and WhatsApp messages from agents always ask.
+- **WhatsApp is capped**: at most `whatsapp_per_hour` (30) sends an hour,
+  one chat at a time (see [WhatsApp](#whatsapp)).
 - **A log of every agent action** in `~/.local/state/sandesh/agent.log`.
 
 ## Command line
@@ -519,7 +569,7 @@ Every command has `--help`; the read commands take `--json`.
 | Command | Does |
 |---|---|
 | `sandesh` | The screen |
-| `sandesh --tab chat` | The screen, opened on the chat tab (`--tab mail` is the default); also with `--popup` |
+| `sandesh --tab chat\|whatsapp` | The screen, opened on that tab (`--tab mail` is the default); also with `--popup` |
 | `sandesh mail list [--today] [--unread] [--section S]` | Threads (`ls`) |
 | `sandesh mail read <thread> [--mark-read]` | A whole thread as text |
 | `sandesh mail search <query> [--local]` | Gmail search syntax; `--local` searches the local copy |
@@ -528,6 +578,11 @@ Every command has `--help`; the read commands take `--json`.
 | `sandesh chat list [--unread]` | Spaces and DMs |
 | `sandesh chat read <space> [--mark-read]` | A space's recent messages (`<space>` is its id or part of its name) |
 | `sandesh chat send <space> <text> [--thread T]` | Post in a space or DM |
+| `sandesh whatsapp link [--phone N]` | Link your WhatsApp (QR code, or a code to type on the phone) |
+| `sandesh whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
+| `sandesh whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
+| `sandesh whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
+| `sandesh whatsapp send <to> <text> [--at WHEN] [--link]` | Send one message (`--link`: open click-to-chat instead) |
 | `sandesh status [--json\|--tmux]` | Unread counts |
 | `sandesh sync` | Sync every account now |
 | `sandesh outbox` / `outbox cancel <id>` | Sends of the last week; stop one in its undo window |
@@ -552,7 +607,7 @@ segment. With [TPM](https://github.com/tmux-plugins/tpm):
 
 ```tmux
 set -g @plugin 'Theyashsawarkar/sandesh'
-set -g status-right '#{sandesh_status} %H:%M'   # 󰇮 3  󰭹 2
+set -g status-right '#{sandesh_status} %H:%M'   # 󰇮 3  󰭹 2  󰖣 1
 ```
 
 `prefix e` opens sandesh in a popup. If `sandesh` isn't on your `PATH`, the
@@ -583,6 +638,7 @@ chat_interval = "30s"       # and Google Chat
 initial_days  = 30          # how far back the first sync goes
 max_threads   = 150         # at most this many threads on the first sync (older mail: search)
 notify        = true        # desktop notifications for new mail and DMs
+whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
 ai_command    = ["claude", "-p"]   # what @, S, D and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed
 # compose     = "editor"           # write mail in the editor instead of the compose screen
@@ -619,6 +675,7 @@ file it writes and the screen follows your theme.
 | `~/.config/sandesh/client.json` | Your OAuth client (`auth setup`) |
 | keyring, service `sandesh` | Sign-in tokens (`secret-tool search service sandesh`); without a keyring, `~/.config/sandesh/tokens/` (mode 600) |
 | `~/.local/share/sandesh/cache.db` | The local copy (SQLite) |
+| `~/.local/share/sandesh/whatsapp.db` | This device's WhatsApp keys (mode 600; `whatsapp unlink` logs out) |
 | `~/.local/state/sandesh/agent.log` | What agents did |
 | `~/.local/state/sandesh/sections.json` | Searches saved with `W` |
 | `~/.config/systemd/user/sandesh.service` | The background sync (`service install`) |
@@ -648,6 +705,10 @@ file it writes and the screen follows your theme.
   OAuth flow with PKCE. Scopes: `gmail.modify`, Chat's spaces, messages,
   memberships and read state, `directory.readonly` (names for chat
   senders) and `profile`.
+- **WhatsApp as a linked device**: WhatsApp is a live connection, not
+  something to poll, so one process holds it (the daemon, else whichever
+  sandesh is open) and delivers WhatsApp sends; its chats live in the same
+  local copy as Google Chat's.
 - **Written in Go**: one static binary, Bubble Tea for the screen, the
   official MCP Go SDK, pure-Go SQLite.
 
@@ -668,6 +729,11 @@ Design decisions are recorded in [docs/adr](docs/adr).
   controls).
 - **Signed out every week**: the consent screen is External and still in
   Testing; publish it.
+- **WhatsApp says "the phone unlinked this device"**: the phone was offline
+  for about two weeks, or the device was removed there; run
+  `sandesh whatsapp link` again.
+- **"WhatsApp is in use by another sandesh"**: the daemon (or an open
+  screen) holds the connection; stop it to link or unlink.
 - **Logs**: `journalctl --user -u sandesh -f`.
 
 ## Contributing

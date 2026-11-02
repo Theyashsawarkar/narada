@@ -91,7 +91,7 @@ func approveOne(a *app.App, it store.OutboxItem) error {
 		case 'q', 'Q', 3, 27:
 			return nil
 		case 'e', 'E':
-			if it.Kind == "chat" {
+			if it.Kind == "chat" || it.Kind == "whatsapp" {
 				path, err := TempFile(a, "txt", ChatTemplate(out.SpaceName, out.Body))
 				if err != nil {
 					return err
@@ -144,7 +144,7 @@ func RenderApproval(it store.OutboxItem, out store.Outgoing) string {
 		fmt.Fprintf(&b, "\033[2mAsking because: %s\033[0m\n", it.Reason)
 	}
 	b.WriteString("\n")
-	if it.Kind == "chat" {
+	if it.Kind == "chat" || it.Kind == "whatsapp" {
 		fmt.Fprintf(&b, "  To:      %s\n", firstNonEmpty(out.SpaceName, out.Space))
 		if out.Thread != "" {
 			fmt.Fprintf(&b, "  Thread:  %s\n", out.Thread)

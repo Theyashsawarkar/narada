@@ -1,20 +1,26 @@
 # sandesh -- notes for agents
 
-Gmail and Google Chat in the terminal: one Go binary (`cmd/sandesh`) with a
-Bubble Tea screen, a CLI, an MCP server and a sync daemon, all over one
-local SQLite copy. Usable as the `sandesh` command (install.sh, make
-install, packaging/arch, kosha) and as a TPM plugin (`sandesh.tmux` binds a
-popup key and `#{sandesh_status}`). It is pulled into Vayu
-(github.com/Theyashsawarkar/vayu) as a tmux plugin, but must work on any
-Linux setup without Vayu: no hardcoded paths, Vayu-specific behaviour only
-through the `@sandesh-*` options and config.toml.
+Gmail, Google Chat and WhatsApp in the terminal: one Go binary
+(`cmd/sandesh`) with a Bubble Tea screen, a CLI, an MCP server and a sync
+daemon, all over one local SQLite copy. Usable as the `sandesh` command
+(install.sh, make install, packaging/arch, kosha) and as a TPM plugin
+(`sandesh.tmux` binds a popup key and `#{sandesh_status}`). It is pulled
+into Vayu (github.com/Theyashsawarkar/vayu) as a tmux plugin, but must work
+on any Linux setup without Vayu: no hardcoded paths, Vayu-specific
+behaviour only through the `@sandesh-*` options and config.toml.
 
 - Layout: `internal/app` is the core every front end shares (sync, mail
   actions, the outbox and send policy); `internal/store` the SQLite schema;
   `internal/google` OAuth and the REST clients; `internal/cli` the commands
   (and the editor template, reply/forward helpers the screen reuses);
   `internal/tui` the screen; `internal/mcpserver` the agent tools;
-  `internal/fake` an in-memory Google used by every test and `sandesh demo`.
+  `internal/whatsapp` WhatsApp as a linked device (whatsmeow, ADR 5);
+  `internal/fake` an in-memory Google and WhatsApp used by every test and
+  `sandesh demo`. WhatsApp is the account `whatsapp` of kind `whatsapp`:
+  `Store.Accounts()` is Google-only, so never hand it to Google code.
+- WhatsApp is a connection one process holds (lock `whatsapp`); only that
+  process delivers `whatsapp` outbox rows. Test with `fake.WhatsApp`
+  (`App.DialWhatsApp`), never a real phone or account.
 - Every send goes through `app.Queue` → outbox → `app.DeliverDue`. Never add
   a path that calls the Gmail or Chat send API directly. An agent's send
   must stay behind `needsApproval`; mail and chat text returned to agents

@@ -71,6 +71,7 @@ type Model struct {
 	w, h   int
 
 	tab      int
+	wa       bool // the chat tab shows WhatsApp instead of Google Chat
 	sections []config.Section
 	sec      int
 	search   *config.Section // a server search shown as a temporary section
@@ -81,6 +82,8 @@ type Model struct {
 	spaces   []store.Space
 	counts   map[string]int // unread per mail section
 	chatN    int
+	waN      int  // WhatsApp chats with unread messages
+	waLinked bool // show the WhatsApp tab
 	sel      int
 	offset   int
 	focus    int // 0 list, 1 preview
@@ -156,8 +159,12 @@ func New(a *app.App, launch string) Model {
 	m.sections = a.Sections()
 	m.accounts = a.AccountNames()
 	// sandesh --tab chat (a status bar's chat capsule) opens on chat
-	if os.Getenv("SANDESH_TAB") == "chat" {
+	_, m.waLinked = a.Store.WhatsApp()
+	switch os.Getenv("SANDESH_TAB") {
+	case "chat":
 		m.tab = tabChat
+	case "whatsapp":
+		m.tab, m.wa = tabChat, m.waLinked
 	}
 	m.reload()
 	return m
@@ -171,6 +178,10 @@ func Run(a *app.App, launch string) error {
 	if len(a.AccountNames()) == 0 {
 		first = newSetup(a, launch)
 	}
+	// with no daemon running, the screen holds WhatsApp while it's open
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _, _ = a.StartWhatsApp(ctx) }()
 	_, err := tea.NewProgram(first, tea.WithAltScreen()).Run()
 	if err == nil && demoWanted {
 		demoWanted = false
@@ -187,6 +198,21 @@ func (m *Model) accountFilter() []string {
 	}
 	return []string{m.accounts[m.acct]}
 }
+
+// spaceAccounts: whose chats the chat tab lists: WhatsApp's, or the
+// Google accounts (the one picked with u, else all).
+func (m *Model) spaceAccounts() []string {
+	if m.wa {
+		return []string{store.WhatsAppAccount}
+	}
+	if accs := m.accountFilter(); accs != nil {
+		return accs
+	}
+	return m.accounts
+}
+
+// chatKind: an outbox kind that is a chat message (Google Chat or WhatsApp).
+func chatKind(kind string) bool { return kind == "chat" || kind == "whatsapp" }
 
 func (m *Model) currentSection() config.Section {
 	if m.search != nil {
@@ -218,14 +244,29 @@ func (m *Model) reload() {
 			}
 		}
 	}
-	sps, _ := m.a.Store.Spaces(accs, nil)
+	gsps, _ := m.a.Store.Spaces(accs, nil)
 	m.chatN = 0
-	for _, s := range sps {
+	for _, s := range gsps {
 		if s.Unread > 0 {
 			m.chatN++
 		}
 	}
-	m.chatScheduled = len(m.outboxItems(accs, "chat", true))
+	_, m.waLinked = m.a.Store.WhatsApp()
+	m.wa = m.wa && m.waLinked
+	m.waN = 0
+	if m.waLinked {
+		wsps, _ := m.a.Store.Spaces([]string{store.WhatsAppAccount}, nil)
+		for _, s := range wsps {
+			if s.Unread > 0 {
+				m.waN++
+			}
+		}
+	}
+	sps := gsps
+	if m.wa {
+		sps, _ = m.a.Store.Spaces(m.spaceAccounts(), nil)
+	}
+	m.chatScheduled = len(m.outboxItems(m.spaceAccounts(), "chat", true))
 	if m.tab == tabMail {
 		ts, err := m.a.SectionThreads(m.currentSection(), accs)
 		if err != nil {
@@ -259,7 +300,7 @@ func (m *Model) reload() {
 			types[s.Account+"/"+s.Name] = s.Type
 		}
 		var out []store.Space
-		for _, it := range m.outboxItems(accs, "chat", true) {
+		for _, it := range m.outboxItems(m.spaceAccounts(), "chat", true) {
 			id := fmt.Sprintf("%s%d", outboxPrefix, it.ID)
 			m.outboxRows[id] = it
 			out = append(out, store.Space{Account: it.Account, Name: id, DisplayName: it.Out.SpaceName, Type: types[it.Account+"/"+it.Out.Space],
@@ -270,6 +311,9 @@ func (m *Model) reload() {
 		m.outboxRows = nil
 		m.mentions = map[string]int{}
 		for _, acc := range m.a.AccountNames() {
+			if m.wa {
+				break
+			}
 			if a, err := m.a.Store.Account(acc); err == nil && a.ChatUser != "" {
 				if me, _, ok := m.a.Store.User(acc, a.ChatUser); ok {
 					for sp, n := range m.a.Store.MentionCounts(acc, firstWord(me)) {
@@ -443,7 +487,7 @@ func (m *Model) outboxItems(accs []string, kind string, scheduled bool) []store.
 	var out []store.OutboxItem
 	for _, it := range items {
 		isSched := it.Status == store.StatusQueued && it.Out.ScheduledFor > 0
-		if it.Kind != kind || isSched != scheduled || (len(accs) > 0 && !slices.Contains(accs, it.Account)) ||
+		if (it.Kind != kind && !(kind == "chat" && chatKind(it.Kind))) || isSched != scheduled || (len(accs) > 0 && !slices.Contains(accs, it.Account)) ||
 			it.Status == store.StatusFailed && time.Since(time.UnixMilli(it.Created)) > 7*24*time.Hour {
 			continue
 		}
@@ -462,7 +506,7 @@ func (m *Model) outboxThreads(items []store.OutboxItem) []store.Thread {
 		id := fmt.Sprintf("%s%d", outboxPrefix, it.ID)
 		m.outboxRows[id] = it
 		subject := it.Out.Subject
-		if it.Kind == "chat" {
+		if chatKind(it.Kind) {
 			subject = "chat message"
 		}
 		out = append(out, store.Thread{Account: it.Account, ID: id, Subject: subject, Participants: strings.Join(it.Out.To, ", "),
@@ -681,7 +725,7 @@ func (m *Model) recolour() {
 // sent follows up a queued send: the undo window, or straight out (chat,
 // by default), jumping to the end of the chat either way.
 func (m *Model) sent(it store.OutboxItem) tea.Cmd {
-	if it.Kind == "chat" {
+	if chatKind(it.Kind) {
 		m.scroll = 1 << 30
 		m.fixView()
 	}
@@ -1192,6 +1236,10 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 	page := max(1, m.previewHeight()/2)
+	if what := m.notOnWhatsApp(s); what != "" {
+		m.say(what + " isn't on WhatsApp in sandesh yet")
+		return m, nil
+	}
 	switch s {
 	case "q", "esc":
 		switch {
@@ -1279,7 +1327,15 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		m.selected = map[string]bool{}
 		m.reload()
 	case "tab":
-		m.tab = 1 - m.tab
+		// Mail → Chat → WhatsApp (once linked) → Mail
+		switch {
+		case m.tab == tabMail:
+			m.tab, m.wa = tabChat, false
+		case !m.wa && m.waLinked:
+			m.wa = true
+		default:
+			m.tab, m.wa = tabMail, false
+		}
 		m.sec, m.sel, m.offset, m.filter, m.search, m.ai = 0, 0, 0, "", nil, ""
 		m.selected = map[string]bool{}
 		m.reload()
@@ -1300,7 +1356,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 				m.mode = modeApprove
 				return m, nil
 			case store.StatusQueued, store.StatusFailed:
-				if it.Kind == "chat" {
+				if chatKind(it.Kind) {
 					m.replaceNext = it.ID
 					return m, m.editChat(it.Account, it.Out, 0)
 				}
@@ -1500,7 +1556,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 			m.fixView()
 		}
 	case "ctrl+k":
-		m.tab = tabChat
+		m.tab, m.wa = tabChat, false
 		m.openFinder()
 		m.find.scope = scopeAllChat
 		m.find.placeholder()
@@ -1769,4 +1825,29 @@ func copyText(s string) string {
 	// OSC 52: the terminal (and tmux with set-clipboard) copies it
 	fmt.Fprintf(os.Stderr, "\033]52;c;%s\a", b64(s))
 	return "copied the link (OSC 52)"
+}
+
+// notOnWhatsApp: what key s would do that sandesh can't do on WhatsApp
+// yet ("" when it can).
+func (m Model) notOnWhatsApp(s string) string {
+	if !m.wa || m.tab != tabChat {
+		return ""
+	}
+	if m.pickingMsg() {
+		switch s {
+		case "e":
+			return "reacting"
+		case "E":
+			return "editing"
+		case "d":
+			return "deleting"
+		}
+	}
+	switch s {
+	case "N":
+		return "starting a chat here (use sandesh whatsapp send <number>)"
+	case "U", "v", "V":
+		return "files"
+	}
+	return ""
 }

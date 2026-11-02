@@ -41,7 +41,7 @@ func (a *App) Reschedule(id int64, at time.Time) error {
 
 // UndoWindow is how long a send of this kind waits before going out.
 func (a *App) UndoWindow(kind string) time.Duration {
-	if kind == "chat" {
+	if kind == "chat" || kind == "whatsapp" {
 		return time.Duration(a.Config.ChatUndoSeconds) * time.Second
 	}
 	return time.Duration(a.Config.UndoSeconds) * time.Second
@@ -62,8 +62,16 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 		return store.OutboxItem{}, err
 	}
 	out.Files = files
+	if kind == "chat" && account == store.WhatsAppAccount {
+		kind = "whatsapp" // the chat screen sends WhatsApp's as chat
+	}
 	if err := validate(kind, out); err != nil {
 		return store.OutboxItem{}, err
+	}
+	if kind == "whatsapp" {
+		if n := a.Store.SentSince(kind, time.Now().Add(-time.Hour)); n >= a.Config.WhatsAppPerHour {
+			return store.OutboxItem{}, fmt.Errorf("%d WhatsApp sends in the last hour, the limit (whatsapp_per_hour); try later", n)
+		}
 	}
 	it := store.OutboxItem{Account: account, Kind: kind, Out: out, Origin: origin}
 	if origin == OriginAgent {
@@ -102,6 +110,16 @@ func validate(kind string, out store.Outgoing) error {
 		if strings.TrimSpace(out.Body) == "" && out.DraftID == "" && len(out.Files) == 0 {
 			return errors.New("the message is empty")
 		}
+	case "whatsapp":
+		if out.Space == "" {
+			return errors.New("no chat")
+		}
+		if len(out.Files) > 0 {
+			return errors.New("sandesh can't send files on WhatsApp yet")
+		}
+		if strings.TrimSpace(out.Body) == "" {
+			return errors.New("the message is empty")
+		}
 	case "chat":
 		if out.Space == "" {
 			return errors.New("no space")
@@ -120,7 +138,7 @@ func describe(kind string, out store.Outgoing) string {
 	for _, f := range out.Files {
 		files += fmt.Sprintf(" +file %q (%s)", f.Name, HumanSize(f.Size))
 	}
-	if kind == "chat" {
+	if kind == "chat" || kind == "whatsapp" {
 		return "to " + firstNonEmpty(out.SpaceName, out.Space) + files
 	}
 	return fmt.Sprintf("to %s subject %q", strings.Join(append(append([]string{}, out.To...), out.Cc...), ","), out.Subject) + files
@@ -139,6 +157,9 @@ func firstNonEmpty(s ...string) string {
 // may go out). Recipients you have never written to always ask.
 func (a *App) needsApproval(account, kind string, out store.Outgoing) string {
 	policy := a.Config.SendPolicy
+	if kind == "whatsapp" {
+		return "WhatsApp messages from agents always ask"
+	}
 	if policy == config.PolicyConfirm {
 		return "send_policy is confirm"
 	}
@@ -246,6 +267,9 @@ func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 	}
 	var done []store.OutboxItem
 	for _, it := range due {
+		if it.Kind == "whatsapp" && !a.WhatsAppOnline() {
+			continue // the process that holds WhatsApp sends it
+		}
 		ok, err := a.Store.Transition(it.ID, store.StatusQueued, store.StatusSending, 0)
 		if err != nil || !ok {
 			continue
@@ -273,6 +297,9 @@ func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 }
 
 func (a *App) deliver(ctx context.Context, it store.OutboxItem) (string, error) {
+	if it.Kind == "whatsapp" {
+		return a.deliverWhatsApp(ctx, it)
+	}
 	c, err := a.Client(it.Account)
 	if err != nil {
 		return "", err

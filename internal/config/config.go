@@ -100,11 +100,14 @@ type Config struct {
 	// OlderPage is how many older threads "load older" fetches at a time
 	OlderPage int `toml:"older_page"`
 	// NerdFont draws round avatars and icons with Nerd Font glyphs
-	NerdFont   bool     `toml:"nerd_font"`
-	MaxThreads int      `toml:"max_threads"`
-	Notify     bool     `toml:"notify"`
-	AICommand  []string `toml:"ai_command"`
-	Editor     string   `toml:"editor"`
+	NerdFont   bool `toml:"nerd_font"`
+	MaxThreads int  `toml:"max_threads"`
+	Notify     bool `toml:"notify"`
+	// WhatsAppPerHour caps WhatsApp sends (yours and agents') an hour: a
+	// linked device that sends a lot risks the account
+	WhatsAppPerHour int      `toml:"whatsapp_per_hour"`
+	AICommand       []string `toml:"ai_command"`
+	Editor          string   `toml:"editor"`
 	// Compose is "screen" (the built-in compose screen) or "editor"
 	// (write the whole mail in $EDITOR)
 	Compose  string    `toml:"compose"`
@@ -127,17 +130,18 @@ func (d duration) MarshalText() ([]byte, error) { return []byte(d.String()), nil
 
 func Default() Config {
 	return Config{
-		SendPolicy:   PolicyConfirm,
-		UndoSeconds:  10,
-		MailInterval: duration{60 * time.Second},
-		ChatInterval: duration{30 * time.Second},
-		InitialDays:  30,
-		Keep:         "none",
-		OlderPage:    10,
-		NerdFont:     true,
-		MaxThreads:   150,
-		Notify:       true,
-		AICommand:    []string{"claude", "-p"},
+		SendPolicy:      PolicyConfirm,
+		UndoSeconds:     10,
+		MailInterval:    duration{60 * time.Second},
+		ChatInterval:    duration{30 * time.Second},
+		InitialDays:     30,
+		Keep:            "none",
+		OlderPage:       10,
+		NerdFont:        true,
+		MaxThreads:      150,
+		Notify:          true,
+		AICommand:       []string{"claude", "-p"},
+		WhatsAppPerHour: 30,
 		Sections: []Section{
 			{Name: "Inbox", Label: "INBOX"},
 			{Name: "Today", Label: "INBOX", Today: true},
@@ -195,6 +199,9 @@ func Load(p Paths) (Config, error) {
 	if len(c.AICommand) == 0 {
 		c.AICommand = Default().AICommand
 	}
+	if c.WhatsAppPerHour <= 0 {
+		c.WhatsAppPerHour = Default().WhatsAppPerHour
+	}
 	return c, nil
 }
 
@@ -248,6 +255,7 @@ nerd_font     = true   # round avatars (needs a Nerd Font, as most terminal setu
 older_page    = 10     # how many older threads j at the end of a list loads (+ / - change it there)
 max_threads   = 150    # at most this many threads on the first sync (older mail: search)
 notify        = true   # desktop notification for new mail and DMs
+whatsapp_per_hour = 30 # at most this many WhatsApp sends an hour (a linked device that sends a lot risks the account)
 ai_command    = ["claude", "-p"]   # what @, S, D and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed
 # compose     = "editor"           # write mail in the editor instead of the compose screen

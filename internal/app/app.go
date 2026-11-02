@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,15 @@ type App struct {
 	ChatAppMissing atomic.Bool
 	directoryOff   atomic.Bool // the People API said no: don't ask again
 
+	// DialWhatsApp, when set, replaces the real WhatsApp (tests, demo).
+	DialWhatsApp func(ctx context.Context) (WhatsAppConn, error)
+	waMu         sync.Mutex
+	wa           WhatsAppConn  // set while this process holds the connection
+	waReady      chan struct{} // closed once it is connected
+	waReadyOnce  *sync.Once
+	waUnreadMu   sync.Mutex
+	waUnread     map[string]int // unread counts from the phone's history
+
 	// Progress, when set, hears how a mail sync is going (threads fetched
 	// of total); the setup screen draws its bar from it.
 	Progress func(done, total int)
@@ -61,6 +71,9 @@ func (a *App) Close() error { return a.Store.Close() }
 // Client returns the API client for an account, signing it in from the
 // stored token.
 func (a *App) Client(account string) (*google.Client, error) {
+	if account == store.WhatsAppAccount {
+		return nil, errors.New("not available for WhatsApp yet")
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if c, ok := a.clients[account]; ok {

@@ -247,7 +247,7 @@ func (m Model) approveKey(s string) (tea.Model, tea.Cmd) {
 			m.say("declined, nothing sent")
 		}
 	case "e":
-		if it.Kind == "chat" {
+		if chatKind(it.Kind) {
 			return m, m.editChat(it.Account, it.Out, it.ID)
 		}
 		if it.Kind == "mail" {

@@ -539,7 +539,7 @@ func (m Model) openFound() (tea.Model, tea.Cmd) {
 		return m, m.conversationCmd(m.defaultAccount(), []person{f.people[i]})
 	}
 	hit := f.chat[i]
-	m.tab = tabChat
+	m.tab, m.wa = tabChat, hit.Account == store.WhatsAppAccount
 	m.search, m.filter = nil, ""
 	m.sec = 0 // All
 	m.reload()

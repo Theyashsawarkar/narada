@@ -208,7 +208,7 @@ func (m *Model) openSpace(sp store.Space) {
 }
 
 func (m *Model) showSpace(sp store.Space) {
-	m.tab = tabChat
+	m.tab, m.wa = tabChat, sp.Account == store.WhatsAppAccount
 	m.search, m.filter = nil, ""
 	m.sec = 0 // All
 	m.reload()

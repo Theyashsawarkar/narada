@@ -247,7 +247,7 @@ func (m *Model) listView(w, h int) string {
 					border = col
 				}
 				to := "→ " + m.toNames(it.Account, strings.Join(it.Out.To, ", "))
-				if it.Kind == "chat" {
+				if chatKind(it.Kind) {
 					to = "→ # " + it.Out.SpaceName
 				}
 				hint := map[string]string{store.StatusQueued: "z cancels", store.StatusFailed: "R sends it again · ⏎ edits",

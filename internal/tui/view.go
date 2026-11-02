@@ -163,6 +163,14 @@ func (m Model) View() string {
 	return strings.Join(rows, "\n")
 }
 
+// tabLabel: a tab's name with its unread count.
+func (m Model) tabLabel(name string, n int) string {
+	if n > 0 {
+		return fmt.Sprintf("%s %d", name, n)
+	}
+	return name
+}
+
 func (m Model) tabsView() string {
 	s := m.styles
 	var parts []string
@@ -181,21 +189,33 @@ func (m Model) tabsView() string {
 		if m.search != nil {
 			parts = append(parts, s.round(s.tabOn, m.search.Name))
 		}
-		chat := "Chat"
-		if m.chatN > 0 {
-			chat += fmt.Sprintf(" %d", m.chatN)
+		parts = append(parts, s.muted.Render("│"), s.tabOff.Render(m.tabLabel("Chat", m.chatN)))
+		if m.waLinked {
+			parts = append(parts, s.tabOff.Render(m.tabLabel("WhatsApp", m.waN)))
 		}
-		parts = append(parts, s.muted.Render("│"), s.tabOff.Render(chat))
 	} else {
-		mail := "Mail"
-		if n := m.counts[m.sections[0].Name]; n > 0 {
-			mail += fmt.Sprintf(" %d", n)
+		parts = append(parts, s.tabOff.Render(m.tabLabel("Mail", m.counts[m.sections[0].Name])))
+		if m.wa {
+			parts = append(parts, s.tabOff.Render(m.tabLabel("Chat", m.chatN)))
 		}
-		parts = append(parts, s.tabOff.Render(mail), s.muted.Render("│"))
+		parts = append(parts, s.muted.Render("│"))
+		if m.wa {
+			parts = append(parts, s.accent2.Render("WhatsApp"))
+		}
+		unread := m.chatN
+		if m.wa {
+			unread = m.waN
+		}
 		for i, name := range chatSections {
 			label := name
-			if name == "All" && m.chatN > 0 {
-				label += fmt.Sprintf(" %d", m.chatN)
+			if name == "All" && unread > 0 {
+				label += fmt.Sprintf(" %d", unread)
+			}
+			if name == "DMs" && m.wa {
+				label = "People"
+			}
+			if name == "Spaces" && m.wa {
+				label = "Groups"
 			}
 			if name == "Scheduled" && m.chatScheduled > 0 {
 				label += fmt.Sprintf(" %d", m.chatScheduled)
@@ -206,11 +226,17 @@ func (m Model) tabsView() string {
 				parts = append(parts, s.tabOff.Render(label))
 			}
 		}
+		if !m.wa && m.waLinked {
+			parts = append(parts, s.muted.Render("│"), s.tabOff.Render(m.tabLabel("WhatsApp", m.waN)))
+		}
 	}
 	left := " " + strings.Join(parts, " ")
 	var right string
 	acct := "all accounts"
-	if f := m.accountFilter(); len(f) > 0 {
+	if m.wa {
+		wa, _ := m.a.Store.WhatsApp()
+		acct = wa.Email
+	} else if f := m.accountFilter(); len(f) > 0 {
 		acct = f[0]
 	} else if len(m.accounts) == 1 {
 		acct = m.accounts[0]
@@ -344,7 +370,7 @@ func (m Model) outgoingView(kind string, out store.Outgoing, note string, w int)
 			lines = append(lines, s.muted.Render(fmt.Sprintf("%-8s", k))+s.bold.Render(v))
 		}
 	}
-	if kind == "chat" {
+	if chatKind(kind) {
 		field("To", firstNonEmpty(out.SpaceName, out.Space))
 		if out.Thread != "" {
 			field("Thread", "replying in the latest thread")
@@ -441,12 +467,12 @@ func (m Model) footerView() string {
 		keys = [][2]string{{"?", "close"}}
 	default:
 		if m.tab == tabMail {
-			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", "chat"}, {"⏎", "open"}, {"m/M", "read/unread"}, {"c", "compose"}, {"r", "reply"},
+			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"m/M", "read/unread"}, {"c", "compose"}, {"r", "reply"},
 				{"e", "archive"}, {"Q", "quoted"}, {"o", "link"}, {"@", "ask"}, {"?", "keys"}}
 		} else if m.pickingMsg() {
 			keys = [][2]string{{"j/k", "pick"}, {"⏎", "to the original"}, {"⌫", "back"}, {"r", "reply"}, {"e", "react"}, {"E", "edit"}, {"d", "delete"}, {"y", "copy"}, {"[ ]", "chats"}, {"1", "list"}}
 		} else {
-			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", "mail"}, {"⏎", "open"}, {"i", "type"}, {"r", "reply"}, {"N", "new chat"},
+			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"i", "type"}, {"r", "reply"}, {"N", "new chat"},
 				{"m/M", "read/unread"}, {"@", "ask"}, {"?", "keys"}}
 		}
 	}
@@ -466,4 +492,15 @@ func (m Model) footerView() string {
 	left = ansi.Truncate(left, max(10, m.w-rw-2), "")
 	gap := max(1, m.w-lipgloss.Width(left)-rw-1)
 	return left + strings.Repeat(" ", gap) + right
+}
+
+// nextTab: where Tab goes from here.
+func (m Model) nextTab() string {
+	switch {
+	case m.tab == tabMail:
+		return "chat"
+	case !m.wa && m.waLinked:
+		return "whatsapp"
+	}
+	return "mail"
 }

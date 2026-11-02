@@ -24,10 +24,10 @@ import (
 	"github.com/Theyashsawarkar/sandesh/internal/store"
 )
 
-const usage = `sandesh -- Gmail and Google Chat in the terminal
+const usage = `sandesh -- Gmail, Google Chat and WhatsApp in the terminal
 
 Usage:
-  sandesh                          open the screen (--tab chat: on chat)
+  sandesh                          open the screen (--tab chat|whatsapp: on that tab)
   sandesh mail list [flags]        threads (--today --unread --section NAME --json)
   sandesh mail read <thread>       a whole thread as text (--json, --mark-read)
   sandesh mail search <query>      Gmail search (--local: the local copy only)
@@ -36,6 +36,9 @@ Usage:
   sandesh chat list                spaces and DMs with unread counts (--json)
   sandesh chat read <space>        a space's recent messages (--json, --mark-read)
   sandesh chat send <space> <text> post in a space or DM (--thread T)
+  sandesh whatsapp link            link your WhatsApp to this machine (QR code, or --phone N)
+  sandesh whatsapp list|read <chat> WhatsApp chats and messages (--json, --mark-read)
+  sandesh whatsapp send <to> <text> send on WhatsApp (--link: open click-to-chat instead)
   sandesh status                   unread counts (--json, --tmux)
   sandesh sync                     sync every account now
   sandesh outbox                   sends of the last week (cancel <id> stops one)
@@ -75,8 +78,8 @@ func Run(args []string, tui func(*app.App, string) error) int {
 	// --tab mail|chat, anywhere before the command: the tab the screen opens on
 	for i := 0; i+1 < len(args) && strings.HasPrefix(args[i], "-"); i++ {
 		if args[i] == "--tab" {
-			if t := args[i+1]; t != "mail" && t != "chat" {
-				return check(usageError("--tab is mail or chat, not %q", t))
+			if t := args[i+1]; t != "mail" && t != "chat" && t != "whatsapp" {
+				return check(usageError("--tab is mail, chat or whatsapp, not %q", t))
 			}
 			os.Setenv("SANDESH_TAB", args[i+1])
 			args = append(args[:i:i], args[i+2:]...)
@@ -111,6 +114,8 @@ func Run(args []string, tui func(*app.App, string) error) int {
 			return mail(a, rest)
 		case "chat", "c":
 			return chat(a, rest)
+		case "whatsapp", "wa", "w":
+			return whatsApp(a, rest)
 		case "status", "st":
 			return status(a, rest)
 		case "sync":
@@ -970,10 +975,12 @@ func oneLine(s string, n int) string {
 // ----------------------------------------------------------------- status
 
 type Counts struct {
-	Mail    int               `json:"mail"`
-	Chat    int               `json:"chat"`
-	Waiting int               `json:"waiting_approval"`
-	Errors  map[string]string `json:"errors,omitempty"`
+	Mail int `json:"mail"`
+	Chat int `json:"chat"`
+	// WhatsApp: chats with unread messages; -1 when WhatsApp isn't linked
+	WhatsApp int               `json:"whatsapp"`
+	Waiting  int               `json:"waiting_approval"`
+	Errors   map[string]string `json:"errors,omitempty"`
 }
 
 func GetCounts(a *app.App) Counts {
@@ -984,6 +991,22 @@ func GetCounts(a *app.App) Counts {
 	for _, s := range sps {
 		if s.Unread > 0 {
 			c.Chat++
+		}
+	}
+	c.WhatsApp = -1
+	if wa, ok := a.Store.WhatsApp(); ok {
+		c.WhatsApp = 0
+		sps, _ := a.Store.Spaces([]string{store.WhatsAppAccount}, nil)
+		for _, s := range sps {
+			if s.Unread > 0 {
+				c.WhatsApp++
+			}
+		}
+		if wa.LastError != "" {
+			if c.Errors == nil {
+				c.Errors = map[string]string{}
+			}
+			c.Errors[wa.Name] = wa.LastError
 		}
 	}
 	w, _ := a.Store.Outbox(store.StatusApproval)
@@ -1001,7 +1024,7 @@ func GetCounts(a *app.App) Counts {
 }
 
 func status(a *app.App, args []string) error {
-	fs := flags("sandesh status", "sandesh status [--json | --tmux]\n\nUnread mail threads in the inbox and chat spaces with unread messages.\n--tmux prints a status-line segment (empty when there is nothing).")
+	fs := flags("sandesh status", "sandesh status [--json | --tmux]\n\nUnread mail threads in the inbox, and chat spaces and WhatsApp chats with\nunread messages.\n--tmux prints a status-line segment (empty when there is nothing).")
 	asJSON := fs.Bool("json", false, "JSON output")
 	tmux := fs.Bool("tmux", false, "a tmux status-line segment")
 	if _, err := parse(fs, args); err != nil {
@@ -1022,6 +1045,9 @@ func status(a *app.App, args []string) error {
 		if c.Chat > 0 {
 			parts = append(parts, fmt.Sprintf("󰭹 %d", c.Chat))
 		}
+		if c.WhatsApp > 0 {
+			parts = append(parts, fmt.Sprintf("󰖣 %d", c.WhatsApp))
+		}
 		if len(c.Errors) > 0 && len(parts) == 0 {
 			parts = append(parts, "󰇮 !")
 		}
@@ -1029,6 +1055,9 @@ func status(a *app.App, args []string) error {
 		return nil
 	}
 	fmt.Printf("mail: %d unread\nchat: %d spaces unread\n", c.Mail, c.Chat)
+	if c.WhatsApp >= 0 {
+		fmt.Printf("whatsapp: %d chats unread\n", c.WhatsApp)
+	}
 	if c.Waiting > 0 {
 		fmt.Printf("waiting for your approval: %d (sandesh approve)\n", c.Waiting)
 	}

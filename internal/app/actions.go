@@ -75,6 +75,11 @@ func (a *App) Untrash(ctx context.Context, account, thread string) error {
 // MarkSpaceRead marks a chat space read up to now, here and in Chat.
 func (a *App) MarkSpaceRead(ctx context.Context, account, space string) error {
 	t := time.Now()
+	if account == store.WhatsAppAccount {
+		err := a.markWhatsAppRead(ctx, space)
+		_ = a.Store.SetSpaceRead(account, space, t.UnixMilli())
+		return err
+	}
 	if err := a.Store.SetSpaceRead(account, space, t.UnixMilli()); err != nil {
 		return err
 	}
@@ -100,6 +105,9 @@ func (a *App) MarkSpaceUnread(ctx context.Context, account, space string) error 
 	t := time.UnixMilli(last - 1)
 	if err := a.Store.ForceSpaceRead(account, space, t.UnixMilli()); err != nil {
 		return err
+	}
+	if account == store.WhatsAppAccount {
+		return nil // only here: linked devices can't mark unread
 	}
 	c, err := a.Client(account)
 	if err != nil {

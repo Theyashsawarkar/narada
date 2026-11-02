@@ -189,3 +189,11 @@ func (s *Store) Reschedule(id int64, out Outgoing, at int64) (bool, error) {
 	n, _ := res.RowsAffected()
 	return n == 1, nil
 }
+
+// SentSince counts sends of one kind queued since t that weren't called
+// off (cancelled or declined).
+func (s *Store) SentSince(kind string, t time.Time) int {
+	var n int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE kind=? AND created>=? AND status NOT IN (?,?)`, kind, t.UnixMilli(), StatusCancelled, StatusDeclined).Scan(&n)
+	return n
+}

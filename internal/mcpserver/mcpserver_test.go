@@ -71,7 +71,7 @@ func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any)
 func TestTools(t *testing.T) {
 	a, g, cs := session(t)
 	tools, err := cs.ListTools(context.Background(), nil)
-	if err != nil || len(tools.Tools) != 12 {
+	if err != nil || len(tools.Tools) != 15 {
 		t.Fatalf("tools: %v %v", len(tools.Tools), err)
 	}
 	out := call(t, cs, "mail_list", map[string]any{"today": true})
@@ -150,5 +150,49 @@ func TestTools(t *testing.T) {
 	}
 	if call(t, cs, "mail_read", map[string]any{"thread_id": "nope"})[:5] != "ERROR" {
 		t.Fatal("missing thread should be a tool error")
+	}
+}
+
+func TestWhatsAppTools(t *testing.T) {
+	a, _, cs := session(t)
+	if out := call(t, cs, "whatsapp_chats", nil); !strings.Contains(out, "not linked") {
+		t.Fatalf("unlinked: %s", out)
+	}
+	w := fake.NewWhatsApp()
+	w.SeedWhatsApp()
+	a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }
+	if err := a.Store.AddWhatsApp("+919876500000", w.Me); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if ok, err := a.StartWhatsApp(ctx); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	out := call(t, cs, "whatsapp_chats", map[string]any{"unread_only": true})
+	if !strings.Contains(out, `group "Weekend trek"  unread=3`) || !strings.Contains(out, "<untrusted") || strings.Contains(out, `person "Ravi Kulkarni"`) {
+		t.Fatalf("whatsapp_chats: %s", out)
+	}
+	out = call(t, cs, "whatsapp_read", map[string]any{"chat": "trek"})
+	if !strings.Contains(out, "Sneha (message 120363000000000001@g.us/H7): I'm in!") {
+		t.Fatalf("whatsapp_read: %s", out)
+	}
+	// Google Chat's tools don't see WhatsApp
+	if out := call(t, cs, "chat_spaces", nil); strings.Contains(out, "trek") {
+		t.Fatalf("chat_spaces shows WhatsApp: %s", out)
+	}
+	go func() {
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			items, _ := a.Store.Outbox(store.StatusApproval)
+			if len(items) > 0 {
+				_ = a.Approve(items[0].ID, nil)
+				return
+			}
+		}
+	}()
+	out = call(t, cs, "whatsapp_send", map[string]any{"to": "Amma", "text": "Yes, ate. Curtains look nice!", "reply_to": "919800000001@s.whatsapp.net/H3"})
+	if out != "Sent." || len(w.Sent) != 1 || w.Sent[0].Quoted != "H3" || w.Sent[0].Chat != "919800000001@s.whatsapp.net" {
+		t.Fatalf("whatsapp_send: %q %+v", out, w.Sent)
 	}
 }
