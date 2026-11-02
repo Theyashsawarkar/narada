@@ -241,7 +241,8 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `x` | Select the thread for e / d / m / M |
 | `i` | Start typing a chat message right in the preview (Ctrl+t sends it later) |
 | `Enter` / `2` (chat) | Pick messages in the chat with j/k (k past the first loads earlier ones) |
-| `Enter` (picking) | Jump to the message a reply quotes (again goes further back) |
+| `Enter` (picking) | Jump to the message a reply quotes (again goes further back); on a photo, view it full size |
+| `Space` (picking) | View the picked photo or GIF full size (h/l previous / next, v opens it, Esc back) |
 | `Backspace` (picking) | Jump back to the reply you came from |
 | `e` (picking) | Toggle a reaction on the picked message (yours are marked ✓; picking one removes it) |
 | `E` (picking) | Edit your picked message in the message box |
@@ -250,6 +251,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `[` / `]` | Switch to the previous / next chat (staying in the conversation) |
 | `Ctrl+k` | Open the chat switcher (search chats, people and messages) |
 | `Ctrl+o` (typing) | Add a file to the chat message you're typing |
+| `Ctrl+v` (typing) | Paste a copied image (a screenshot) into the chat message as a file |
 | `Enter` (typing) | Send the chat message and keep typing the next one (Esc leaves the box) |
 | `Alt+Enter` / `Ctrl+j` (typing) | Start a new line in the chat message |
 | `←→` `Alt+b/f` `Ctrl+a/e` (typing) | Move the cursor in the message by letter, word, line start / end |
@@ -501,9 +503,19 @@ tmux and its popups too (needs `set -g allow-passthrough on`); GIFs and
 video previews play, and elsewhere you get coloured blocks. `images` in the
 config chooses (`auto`, `kitty`, `blocks`, `off`). New photos, stickers and
 GIFs up to 8 MB download as they arrive and larger files when you open
-them, into `~/.cache/sandesh/media`. To send one, press `Ctrl+o` while
-typing (or `U` in the chat): what you type becomes the first file's
-caption, and each file goes as its own message. GIFs and video previews
+them, into `~/.cache/sandesh/media`. Pick a message and press `Space` (or
+`Enter`) to see a picture as big as the screen allows; `h`/`l` go through
+the chat's pictures. To send one, press `Ctrl+o` while typing (or `U` in
+the chat), or `Ctrl+v` to paste a copied image such as a screenshot (needs
+`wl-paste` or `xclip`): a small preview of each file shows above the box,
+what you type becomes the first file's caption, and each file goes as its
+own message.
+
+**Ticks** beside your messages show how far they got, as on the phone:
+✓ sent, ✓✓ delivered, blue ✓✓ read. In a group sandesh shows at most
+delivered, as blue ticks need every member to have read it. A message
+still in its undo window shows under the conversation, counting down
+(`z` cancels it), and so does one waiting for your approval. GIFs and video previews
 need `ffmpeg`, as WhatsApp sends GIFs as MP4.
 
 Photos from before this feature carry no download details, so they stay a
@@ -673,6 +685,7 @@ chat_interval = "30s"       # and Google Chat
 initial_days  = 30          # how far back the first sync goes
 max_threads   = 150         # at most this many threads on the first sync (older mail: search)
 notify        = true        # desktop notifications for new mail and DMs
+chat_list     = "compact" # chats in the list: compact (two rows each) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
 ai_command    = ["claude", "-p"]   # what @, S, D and T run

@@ -4,6 +4,21 @@ Newest first.
 
 ## Unreleased
 
+- **Ticks**: ✓ sent, ✓✓ delivered and blue ✓✓ read beside your WhatsApp
+  messages, from the phone's receipts and its history.
+- **Paste a screenshot**: `Ctrl+v` while typing attaches a copied image;
+  files about to go show as small previews above the box.
+- **Pictures full size**: `Space` (or `Enter`) on a picked photo or GIF
+  fills the screen; `h`/`l` go through the chat's pictures.
+- **Compact chat list**: two rows per chat instead of a box, so about twice
+  as many fit; `chat_list = "cards"` brings the boxes back.
+- **The undo window where you look**: a message counting down to send, or
+  waiting for approval, shows under the conversation; `z` cancels the open
+  chat's own first.
+- **Clearer**: the unread count sits on Unread, not All; the list title says
+  "chats"; a one-to-one chat shows the number, not "You, Amma · 2 people";
+  the hint under the message box, which repeated the key bar, is gone.
+
 - **Photos, GIFs and files on WhatsApp**: they show in the conversation (on
   kitty as real pictures, in tmux popups too, and GIFs play; elsewhere as
   coloured blocks; the `images` option chooses), and `Ctrl+o` while typing

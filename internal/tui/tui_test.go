@@ -483,8 +483,9 @@ func TestChatExtras(t *testing.T) {
 	g.AddChat(fake.ChatMessage{Space: "spaces/dm-priya", Sender: "users/2", Text: "from last month", Created: time.Now().AddDate(0, -1, 0)})
 	m = press(m, "tab") // Priya's DM
 	v := m.View()
-	if !strings.Contains(v, "new") || !strings.Contains(v, "You, Priya Kulkarni · 2 people") {
-		t.Fatalf("new line / people header:\n%s", v)
+	// a DM doesn't list "You, Priya · 2 people": its title says who
+	if !strings.Contains(v, "new") || strings.Contains(v, "2 people") {
+		t.Fatalf("new line / no people header in a DM:\n%s", v)
 	}
 	// react to her message
 	m = press(m, "enter", "e")

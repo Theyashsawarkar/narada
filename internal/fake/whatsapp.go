@@ -41,6 +41,9 @@ type WhatsApp struct {
 	// LinkDelay is how long the "phone" takes to scan (the demo shows
 	// the QR code meanwhile).
 	LinkDelay time.Duration
+	// Receipts: the "other side" gets each message you send a second
+	// later and reads it three seconds later (the demo's ticks)
+	Receipts bool
 	// Files are the media on WhatsApp's servers, by Media.Raw.
 	Files map[string][]byte
 }
@@ -161,6 +164,7 @@ func (c *WhatsAppConn) Send(ctx context.Context, chat, text string, quote *whats
 		m.Quoted = quote.ID
 	}
 	w.Sent = append(w.Sent, m)
+	w.receipts(chat, m.ID)
 	return m.ID, nil
 }
 
@@ -188,7 +192,21 @@ func (c *WhatsAppConn) SendFile(ctx context.Context, chat, path, caption string,
 		m.Quoted = quote.ID
 	}
 	w.Sent = append(w.Sent, m)
+	w.receipts(chat, m.ID)
 	return m.ID, md, nil
+}
+
+// receipts plays delivered and read for a sent message (w.mu held).
+func (w *WhatsApp) receipts(chat, id string) {
+	if !w.Receipts {
+		return
+	}
+	go func() {
+		time.Sleep(time.Second)
+		w.Receipt(chat, whatsapp.TickDelivered, id)
+		time.Sleep(3 * time.Second)
+		w.Receipt(chat, whatsapp.TickRead, id)
+	}()
 }
 
 func (c *WhatsAppConn) Download(ctx context.Context, raw []byte) ([]byte, error) {

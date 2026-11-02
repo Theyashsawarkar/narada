@@ -169,6 +169,11 @@ func imageKind(f store.ChatFile) (show, anim, video bool) {
 // wide, or nil when it isn't one (or images are off). The first time it
 // starts fetching and preparing it in the background.
 func (m *Model) mediaLines(account, msgName string, idx int, f store.ChatFile, maxCols int) []string {
+	return m.mediaSized(account, msgName, idx, f, min(maxCols, 44), 14)
+}
+
+// mediaSized is mediaLines at most maxCols × maxRows (the viewer's size).
+func (m *Model) mediaSized(account, msgName string, idx int, f store.ChatFile, maxCols, maxRows int) []string {
 	show, anim, video := imageKind(f)
 	imgs.setup(m.a.Config.Images)
 	if !show || imgs.mode == imgOff {
@@ -200,25 +205,60 @@ func (m *Model) mediaLines(account, msgName string, idx int, f store.ChatFile, m
 	}
 	imgs.mu.Lock()
 	defer imgs.mu.Unlock()
-	cols, rows := fitCells(e.pw, e.ph, min(maxCols, 44), 14)
-	var lines []string
+	lines := e.lines(maxCols, maxRows)
+	if video {
+		lines = append(append([]string{}, lines...), s.muted.Render("▶ video · v plays it"))
+	}
+	return lines
+}
+
+// fileLines draws a local file (one about to be sent) as a small still
+// picture at most maxCols × maxRows, or nil when it isn't an image.
+func (m *Model) fileLines(path string, maxCols, maxRows int) []string {
+	imgs.setup(m.a.Config.Images)
+	if imgs.mode == imgOff || !localImage(path) {
+		return nil
+	}
+	key := "local:" + path
+	imgs.mu.Lock()
+	e := imgs.entries[key]
+	if e == nil {
+		e = &imgEntry{state: "preparing", id: imageID(key)}
+		imgs.entries[key] = e
+		dir := filepath.Join(m.a.Paths.Cache, "media", "view")
+		go prepareFrom(e, path, dir, false, isVideo(path))
+	}
+	defer imgs.mu.Unlock()
+	if e.state != "ready" {
+		return nil
+	}
+	return e.lines(maxCols, maxRows)
+}
+
+// lines is a ready entry drawn at most maxCols × maxRows (imgs.mu held).
+func (e *imgEntry) lines(maxCols, maxRows int) []string {
+	cols, rows := fitCells(e.pw, e.ph, maxCols, maxRows)
 	if imgs.mode == imgKitty {
 		if e.sentCols != cols || e.sentRows != rows {
 			imgs.kittyWrite(kittyPlace(e, cols, rows)...)
 			e.sentCols, e.sentRows = cols, rows
 		}
-		lines = placeholders(e.id, cols, rows)
-	} else {
-		if e.blocksCols != cols {
-			e.blocks = halfBlocks(e.frames[0], cols, rows)
-			e.blocksCols = cols
-		}
-		lines = e.blocks
+		return placeholders(e.id, cols, rows)
 	}
-	if video {
-		lines = append(append([]string{}, lines...), s.muted.Render("▶ video · v plays it"))
+	if e.blocksCols != cols {
+		e.blocks = halfBlocks(e.frames[0], cols, rows)
+		e.blocksCols = cols
 	}
-	return lines
+	return e.blocks
+}
+
+// localImage: a file whose name says it is a picture or a video.
+func localImage(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov", ".mkv":
+		return true
+	}
+	return false
 }
 
 // fitCells sizes an image in terminal cells (a cell about twice as tall
@@ -344,8 +384,18 @@ func prepareMedia(a *app.App, e *imgEntry, account, msgName string, idx int, f s
 		src = p
 		break
 	}
+	prepareFrom(e, src, filepath.Join(filepath.Dir(src), "view"), anim, video)
+}
+
+// prepareFrom makes src's frames (PNGs in dir) and marks e ready.
+func prepareFrom(e *imgEntry, src, dir string, anim, video bool) {
+	set := func(state, err string) {
+		imgs.mu.Lock()
+		e.state, e.err = state, err
+		imgs.mu.Unlock()
+		wake()
+	}
 	set("preparing", "")
-	dir := filepath.Join(filepath.Dir(src), "view")
 	_ = os.MkdirAll(dir, 0o700)
 	base := filepath.Join(dir, strings.TrimSuffix(filepath.Base(src), filepath.Ext(src)))
 	var frames []string

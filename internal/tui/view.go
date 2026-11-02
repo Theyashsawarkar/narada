@@ -125,7 +125,9 @@ func (m Model) View() string {
 	default:
 		right = m.previewBox(pw, bh)
 	}
-	if m.tab == tabChat && m.wa && !m.waLinked {
+	if m.mode == modeView && m.viewer != nil {
+		rows = append(rows, m.box(m.w, bh, m.viewerTitle(), m.viewerView(m.w-4, bh-2), true, m.partColor()))
+	} else if m.tab == tabChat && m.wa && !m.waLinked {
 		rows = append(rows, m.box(m.w, bh, "WhatsApp · not linked", m.linkPanel(m.w-2, bh-2), true, m.styles.c.Green))
 	} else if under == modeCompose && m.comp != nil {
 		rows = append(rows, m.composerPanes(bh))
@@ -233,7 +235,8 @@ func (m Model) tabsView() string {
 		for i, name := range chatSections {
 			label := name
 			switch {
-			case name == "All" && unread > 0:
+			case name == "Unread" && unread > 0:
+				// the count sits where those chats are, not on All
 				label += fmt.Sprintf(" %d", unread)
 			case name == "DMs" && m.wa:
 				label = "People"
@@ -322,7 +325,7 @@ func (m Model) listTitle() string {
 		}
 		return t
 	}
-	t := fmt.Sprintf("%s · %d", chatSections[m.sec%len(chatSections)], len(m.spaces))
+	t := fmt.Sprintf("%s · %d chat%s", chatSections[m.sec%len(chatSections)], len(m.spaces), plural(len(m.spaces)))
 	if m.filter != "" {
 		t += " · /" + m.filter
 	}
@@ -451,7 +454,7 @@ func (m Model) inputView() string {
 func (m Model) footerView() string {
 	s := m.styles
 	modeName := map[mode]string{modeNormal: "normal", modeFilter: "filter", modeAsk: "ask", modeSearch: "search", modeSaveName: "save",
-		modeDraftHint: "draft", modePhone: "link", modeReview: "review", modeApprove: "approve", modeHelp: "keys", modeChatMsg: "message", modeLink: "link", modeCompose: "compose", modeFind: "search", modeRename: "rename", modePick: "files", modeWhen: "later", modeConvo: "new chat", modeReact: "react"}[m.mode]
+		modeDraftHint: "draft", modePhone: "link", modeReview: "review", modeApprove: "approve", modeHelp: "keys", modeChatMsg: "message", modeLink: "link", modeCompose: "compose", modeFind: "search", modeRename: "rename", modePick: "files", modeWhen: "later", modeConvo: "new chat", modeReact: "react", modeView: "picture"}[m.mode]
 	var keys [][2]string
 	switch m.mode {
 	case modeReview:
@@ -479,8 +482,10 @@ func (m Model) footerView() string {
 		}
 	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone:
 		keys = [][2]string{{"enter", "done"}, {"esc", "cancel"}, {"ctrl+u", "clear"}}
+	case modeView:
+		keys = [][2]string{{"h/l", "previous/next"}, {"v", "open in its app"}, {"esc", "back"}}
 	case modeChatMsg:
-		keys = [][2]string{{"enter", "send"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+t", "send later"}, {"↑↓", "lines"}, {"esc", "done"}}
+		keys = [][2]string{{"enter", "send"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+v", "paste image"}, {"ctrl+t", "later"}, {"esc", "done"}}
 		if m.editingMsg != "" {
 			keys = [][2]string{{"enter", "save the edit"}, {"esc", "cancel"}}
 		}
@@ -493,7 +498,7 @@ func (m Model) footerView() string {
 		} else if m.pickingMsg() {
 			keys = [][2]string{{"j/k", "pick"}, {"⏎", "to the original"}, {"⌫", "back"}, {"r", "reply"}, {"e", "react"}, {"E", "edit"}, {"d", "delete"}, {"y", "copy"}, {"[ ]", "chats"}, {"1", "list"}}
 		} else {
-			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"i", "type"}, {"r", "reply"}, {"N", "new chat"},
+			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"i", "type"}, {"c", "editor"}, {"r", "reply"}, {"N", "new chat"},
 				{"m/M", "read/unread"}, {"@", "ask"}, {"?", "keys"}}
 		}
 	}

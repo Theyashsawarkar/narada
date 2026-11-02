@@ -42,6 +42,7 @@ const (
 	modePhone   // typing your number to link WhatsApp with a code
 	modeCompose // the compose screen
 	modeFind    // the search window
+	modeView    // a picture full size
 )
 
 const (
@@ -113,6 +114,8 @@ type Model struct {
 	toast         string
 	toastAt       time.Time
 	undo          *undo
+	viewer        *viewer // modeView: the picture shown full size
+	pending       bool    // the open chat has messages counting down to send
 	review        *review
 	older         store.Backfill // the download of older mail, all accounts
 	olderN        int            // how many "load older" fetches
@@ -860,6 +863,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg := msg.(type) {
+	case pastedMsg:
+		if msg.err != nil {
+			m.say(msg.err.Error())
+		} else if msg.path != "" {
+			m.chatFiles = append(m.chatFiles, store.File{Source: msg.path})
+		} else if msg.text != "" && m.mode == modeChatMsg {
+			m.insert([]rune(msg.text)...)
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		m.fixView()
@@ -882,6 +894,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		if time.Since(m.toastAt) > 4*time.Second {
 			m.toast = ""
+		}
+		if m.pending {
+			m.fixView() // the countdown under the conversation
 		}
 		// pick up the daemon's syncs and the agents' approvals
 		if time.Now().Unix()%3 == 0 && m.mode != modeReview && m.mode != modeCompose {
@@ -1058,6 +1073,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // re-renders the preview, so what View draws and what the keys move agree.
 func (m *Model) fixView() {
 	visible := max(1, (m.bodyHeight()-3)/m.cardRows())
+	if m.compactChats() {
+		visible = max(1, (m.bodyHeight()-2-4)/2) // as the list draws it
+	}
 	if m.sel < m.offset {
 		m.offset = m.sel
 	}
@@ -1071,7 +1089,7 @@ func (m *Model) fixView() {
 	m.buildPreview(inner)
 	avail := m.bodyHeight() - 2 - len(m.aiLines(inner))
 	if _, ok := m.curSpace(); ok {
-		avail -= 4 // the message box
+		avail -= 3 // the message box
 	}
 	if m.scrollToNew && m.newLine > 0 {
 		m.scroll, m.scrollToNew = max(0, m.newLine-2), false
@@ -1101,12 +1119,18 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeChatMsg && s == "ctrl+o" {
 		return m, m.pickFiles("chatbox")
 	}
+	if m.mode == modeChatMsg && s == "ctrl+v" {
+		return m, m.pasteImage()
+	}
 	if m.mode == modeChatMsg && s == "backspace" && len(m.input) == 0 && len(m.chatFiles) > 0 {
 		m.chatFiles = m.chatFiles[:len(m.chatFiles)-1]
 		return m, nil
 	}
 	if m.mode == modeReact {
 		return m.reactKey(s)
+	}
+	if m.mode == modeView {
+		return m.viewKey(s)
 	}
 	// Ctrl+t while typing a chat message: send it later
 	if m.mode == modeChatMsg && s == "ctrl+t" {
@@ -1435,9 +1459,19 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		m.focus = 1
 		m.chatSel = len(m.chatMsgs) - 1 // the latest message
 		m.fixView()
-	case "enter":
+	case "enter", " ", "space":
 		if m.pickingMsg() {
-			return m, m.jumpToQuote()
+			// a picture opens full size (Enter only when it isn't a reply)
+			if c := m.chatMsgs[m.chatSel]; (s != "enter" || c.Quoted == "") && m.openViewer(c.Name) {
+				return m, nil
+			}
+			if s == "enter" {
+				return m, m.jumpToQuote()
+			}
+			return m, nil
+		}
+		if s != "enter" {
+			return m, nil
 		}
 		if it, ok := m.curOutbox(); ok {
 			// a mail or message still waiting: open it to change it
@@ -1802,6 +1836,14 @@ func (m *Model) undoCmd() tea.Cmd {
 	if u == nil {
 		// a send in its undo window?
 		items, _ := m.a.Store.Outbox(store.StatusQueued)
+		// newest first; the open chat's own before any other
+		var here []store.OutboxItem
+		for _, it := range slices.Backward(m.pendingHere()) {
+			if it.Status == store.StatusQueued || it.Status == store.StatusApproval {
+				here = append(here, it)
+			}
+		}
+		items = append(here, items...)
 		if len(items) == 0 {
 			m.say("nothing to undo")
 			return nil

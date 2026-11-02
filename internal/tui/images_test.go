@@ -35,3 +35,15 @@ func TestPlaceholders(t *testing.T) {
 		}
 	}
 }
+
+func TestPickClipType(t *testing.T) {
+	if got := pickClipType([]string{"text/plain", "image/jpeg", "image/png"}); got != "image/png" {
+		t.Fatalf("image first: %q", got)
+	}
+	if got := pickClipType([]string{"TARGETS", "UTF8_STRING"}); got != "UTF8_STRING" {
+		t.Fatalf("text: %q", got)
+	}
+	if got := pickClipType([]string{"x-special/gnome-copied-files"}); got != "" {
+		t.Fatalf("nothing: %q", got)
+	}
+}

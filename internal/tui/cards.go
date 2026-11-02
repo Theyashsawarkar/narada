@@ -3,7 +3,10 @@ package tui
 import (
 	"fmt"
 	"github.com/Theyashsawarkar/sandesh/internal/app"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,7 +30,34 @@ func (m Model) cardRows() int {
 	if m.tab == tabMail {
 		return mailCardRows
 	}
+	if m.compactChats() {
+		return 2
+	}
 	return chatCardRows
+}
+
+// compactChats: the chat list draws each chat as two rows, not a box.
+func (m Model) compactChats() bool { return m.tab == tabChat && m.a.Config.ChatList != "cards" }
+
+// listItem draws one entry of the list: a card (and the gap after it),
+// or, in the compact chat list, two rows with a bar by the selected one.
+func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []string {
+	if !m.compactChats() {
+		return append(m.cardBox(lines, w, border, sel, dot), "")
+	}
+	s := m.styles
+	var out []string
+	for i, l := range lines {
+		gutter := "  "
+		switch {
+		case sel:
+			gutter = fg(border).Bold(true).Render("▌") + " "
+		case dot && i == 0:
+			gutter = s.accent.Bold(true).Render("●") + " "
+		}
+		out = append(out, gutter+fit(l, w+2))
+	}
+	return out
 }
 
 func fg(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(c)) }
@@ -141,6 +171,53 @@ func firstWord(s string) string {
 	return s
 }
 
+// attachedLines shows the files about to go with the message: a small
+// picture of each image, its name and size, side by side.
+func (m *Model) attachedLines(w int) []string {
+	s := m.styles
+	var tiles []string
+	for _, f := range m.chatFiles {
+		path := expandHome(f.Source)
+		name := filepath.Base(path)
+		size := ""
+		if fi, err := os.Stat(path); err == nil {
+			size = " · " + app.HumanSize(fi.Size())
+		}
+		thumb := m.fileLines(path, 18, 5)
+		width := 24
+		if len(thumb) > 0 {
+			width = max(14, ansi.StringWidth(thumb[0]))
+		}
+		icon := "📄 "
+		if len(thumb) > 0 {
+			icon = ""
+		}
+		label := ansi.Truncate(icon+s.text.Render(name)+s.muted.Render(size), width, "…")
+		tiles = append(tiles, lipgloss.JoinVertical(lipgloss.Left, append(thumb, label)...))
+	}
+	row := lipgloss.JoinHorizontal(lipgloss.Bottom, intersperse(tiles, "  ")...)
+	out := strings.Split(row, "\n")
+	for i := range out {
+		out[i] = ansi.Truncate(out[i], w, "")
+	}
+	hint := fmt.Sprintf("%d file%s", len(m.chatFiles), map[bool]string{true: "s", false: ""}[len(m.chatFiles) != 1])
+	if m.wa {
+		hint += " · the text is the first one's caption"
+	}
+	return append(out, s.muted.Render(hint+" · backspace in an empty box drops the last"))
+}
+
+func intersperse(xs []string, sep string) []string {
+	var out []string
+	for i, x := range xs {
+		if i > 0 {
+			out = append(out, sep)
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
 // ticks is WhatsApp's mark for how far your message got: ✓ sent,
 // ✓✓ delivered, blue ✓✓ read.
 func (m Model) ticks(level int) string {
@@ -223,6 +300,9 @@ func (m *Model) listView(w, h int) string {
 	cw := w - 6 // card inner width: margins, borders and padding on both sides
 	var out []string
 	visible := max(1, (h-1)/m.cardRows())
+	if m.compactChats() {
+		visible = max(1, (h-4)/2) // room for the pinned / today / earlier labels
+	}
 	group := func(i int) string { // chat list: pinned, today, earlier
 		if m.tab != tabChat || i >= len(m.spaces) || strings.HasPrefix(m.spaces[i].Name, outboxPrefix) {
 			return ""
@@ -283,10 +363,9 @@ func (m *Model) listView(w, h int) string {
 				}
 				lines = []string{row(s.text.Render(to), fg(col).Render(status), cw), s.text.Render(t.Subject),
 					ansi.Truncate(fg(col).Render(hint)+s.muted.Render("  "+oneLine(it.Out.Body)), cw, "…")}
-				for _, l := range m.cardBox(lines, cw, border, sel, false) {
+				for _, l := range m.listItem(lines, cw, border, sel, false) {
 					out = append(out, " "+l)
 				}
-				out = append(out, "")
 				continue
 			}
 			sentSt, isSent := m.sentStat[t.Account+"/"+t.ID]
@@ -326,10 +405,9 @@ func (m *Model) listView(w, h int) string {
 				}
 				lines = []string{row(m.avatar(sp.DisplayName)+" "+s.text.Render("→ "+sp.DisplayName), fg(col).Render(status), cw),
 					m.indent() + ansi.Truncate(s.muted.Render(sp.LastText), cw-lipgloss.Width(m.indent()), "…")}
-				for _, l := range m.cardBox(lines, cw, border, sel, false) {
+				for _, l := range m.listItem(lines, cw, border, sel, false) {
 					out = append(out, " "+l)
 				}
-				out = append(out, "")
 				continue
 			}
 			dot = sp.Unread > 0
@@ -355,10 +433,9 @@ func (m *Model) listView(w, h int) string {
 			}
 			lines = []string{row(m.avatar(name)+" "+mark+title, s.muted.Render(cli.When(sp.LastActive)), cw), m.indent() + s.muted.Render(last)}
 		}
-		for _, l := range m.cardBox(lines, cw, border, sel, dot) {
+		for _, l := range m.listItem(lines, cw, border, sel, dot) {
 			out = append(out, " "+l)
 		}
-		out = append(out, "")
 	}
 	// the end of a mail list: older mail comes from Gmail on demand
 	if m.tab == tabMail && m.offset+visible >= m.count() && !m.currentSection().Today && m.currentSection().Label != "SCHEDULED" {
@@ -634,7 +711,15 @@ func (m *Model) chatLines(w int) []string {
 			people = append(people, c.SenderName)
 		}
 	}
-	head := []string{s.muted.Render(ansi.Truncate(strings.Join(people, ", "), w-14, "…") + fmt.Sprintf(" · %d people", len(people)))}
+	var head []string
+	if sp, ok := m.curSpace(); ok && sp.Type == "DIRECT_MESSAGE" {
+		// one to one: who it is says it all; WhatsApp adds their number
+		if sp.Account == store.WhatsAppAccount && strings.HasSuffix(sp.Name, "@s.whatsapp.net") {
+			head = []string{s.muted.Render("+" + strings.TrimSuffix(sp.Name, "@s.whatsapp.net"))}
+		}
+	} else {
+		head = []string{s.muted.Render(ansi.Truncate(strings.Join(people, ", "), w-14, "…") + fmt.Sprintf(" · %d people", len(people)))}
+	}
 	newSince := int64(0)
 	if sp, ok := m.curSpace(); ok {
 		newSince = m.newMark[sp.Account+"/"+sp.Name]
@@ -763,6 +848,60 @@ func (m *Model) chatLines(w int) []string {
 		}
 		i = j
 	}
+	return append(out, m.pendingLines(w)...)
+}
+
+// pendingHere lists this chat's messages still on their way: in their
+// undo window, sending, or waiting for your approval.
+func (m *Model) pendingHere() []store.OutboxItem {
+	sp, ok := m.curSpace()
+	if !ok {
+		return nil
+	}
+	items, _ := m.a.Store.Outbox(store.StatusQueued, store.StatusSending, store.StatusApproval)
+	var out []store.OutboxItem
+	for _, it := range slices.Backward(items) { // oldest first, as the chat reads
+		if it.Account == sp.Account && it.Out.Space == sp.Name && it.Out.ScheduledFor == 0 {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// pendingLines shows them under the conversation, counting down, so the
+// undo window is where you're looking, not only in a notification.
+func (m *Model) pendingLines(w int) []string {
+	s := m.styles
+	items := m.pendingHere()
+	m.pending = len(items) > 0
+	var out []string
+	for _, it := range items {
+		var body []string
+		for _, f := range it.Out.Files {
+			body = append(body, "📎 "+firstNonEmpty(f.Name, filepath.Base(f.Source)))
+		}
+		if t := strings.TrimSpace(it.Out.Body); t != "" {
+			body = append(body, wrap(t, max(10, w*2/3-4))...)
+		}
+		who := "You"
+		if it.Origin == "agent" {
+			who = "An agent"
+		}
+		var note string
+		switch it.Status {
+		case store.StatusQueued:
+			secs := max(0, int(time.Until(time.UnixMilli(it.SendAt)).Seconds()+0.5))
+			note = s.yellow.Render(fmt.Sprintf("sending in %ds", secs)) + s.muted.Render(" · z cancels")
+		case store.StatusSending:
+			note = s.muted.Render("sending…")
+		case store.StatusApproval:
+			note = s.peach.Render("waiting for your approval") + s.muted.Render(" · A")
+		}
+		out = append(out, "", padLeft(s.muted.Render(who+" · ")+note, w))
+		for _, l := range bubble(body, w*2/3, m.styles.c.Border, false) {
+			out = append(out, padLeft(s.muted.Render(l), w))
+		}
+	}
 	return out
 }
 
@@ -868,23 +1007,17 @@ func (m Model) previewBox(w, h int) string {
 	if sp, ok := m.curSpace(); ok {
 		rows := max(1, min(8, (h-2)/3))
 		if m.mode == modeChatMsg {
-			hint := s.muted.Render("enter sends · alt+enter new line · ctrl+o file · ctrl+t later · esc done")
-			if n := len([]rune(strings.TrimSpace(string(m.input)))); n > 0 {
-				hint += s.muted.Render(fmt.Sprintf(" · %d", n))
-			}
-			bottom = m.chatBoxLines(inner, rows, true, "Message "+cli.SpaceTitle(sp)+"…", hint)
+			// the keys are in the bar below: no second hint here
+			bottom = m.chatBoxLines(inner, rows, true, "Message "+cli.SpaceTitle(sp)+"…", "")
 			var chips []string
 			if m.editingMsg != "" {
 				chips = append(chips, s.peach.Render("✎ editing your message")+s.muted.Render(" · enter saves · esc"))
 			}
-			for _, f := range m.chatFiles {
-				chips = append(chips, s.muted.Render("‹")+"📎 "+s.text.Render(f.Source[strings.LastIndex(f.Source, "/")+1:])+s.muted.Render("›"))
-			}
-			if len(m.chatFiles) > 0 {
-				chips = append(chips, s.muted.Render("backspace drops the last file"))
-			}
 			if len(chips) > 0 {
 				bottom = append([]string{ansi.Truncate(strings.Join(chips, "  "), inner, "…")}, bottom...)
+			}
+			if len(m.chatFiles) > 0 {
+				bottom = append(m.attachedLines(inner), bottom...)
 			}
 			if r := m.replyTo; r != nil {
 				who := r.SenderName
@@ -895,7 +1028,7 @@ func (m Model) previewBox(w, h int) string {
 				bottom = append([]string{ansi.Truncate(line, inner-12, "…") + s.muted.Render("  esc drops")}, bottom...)
 			}
 		} else {
-			hint := s.muted.Render("i types here · c writes it in your editor · r replies")
+			hint := ""
 			if m.a.ChatAppMissing.Load() && !m.wa {
 				hint = s.yellow.Render("! ") + s.muted.Render("read and unread stay on this machine until Chat API → Configuration is filled in (sandesh doctor)")
 			}
