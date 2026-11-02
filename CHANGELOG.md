@@ -4,6 +4,21 @@ Newest first.
 
 ## Unreleased
 
+- **Photos, GIFs and files on WhatsApp**: they show in the conversation (on
+  kitty as real pictures, in tmux popups too, and GIFs play; elsewhere as
+  coloured blocks; the `images` option chooses), and `Ctrl+o` while typing
+  or `U` sends them, with the text as the first file's caption.
+- **Link WhatsApp from its tab**: `L` shows the QR code, `P` a phone code,
+  and a bar follows the sync, with no separate terminal.
+- **`send_policy = "trust"` and `ask_first`**: agents send without asking
+  unless you told them to ask, after an undo window with a notification
+  that can cancel it (ADR 6). The approval screen is redesigned.
+- **The chat box grows**: long messages wrap and the box gets taller, and
+  Enter sends and keeps you typing. The active tab is a filled pill in its
+  own colour.
+- **Fixed**: WhatsApp names and mentions showing as numbers; `@` and the AI
+  keys not finding `claude` or `sandesh` from a tmux popup.
+
 - **WhatsApp**: `sandesh whatsapp link` links your WhatsApp as a device
   (QR code, or `--phone` for a code to type on the phone), and its chats
   become a third tab (`Tab`: Mail → Chat → WhatsApp) with unread counts in
@@ -13,7 +28,7 @@ Newest first.
   Every send goes through the outbox; an agent's always waits for you, and
   WhatsApp sends are capped at `whatsapp_per_hour` (30). Without linking,
   `whatsapp send` opens WhatsApp's click-to-chat page with the text typed
-  in instead. Text only for now. Linking isn't allowed by WhatsApp's terms
+  in instead. Linking isn't allowed by WhatsApp's terms
   (see the README's WhatsApp section and ADR 5).
 
 - **HTML mail, for tables and the like**: `mail_send` and `mail_draft` take

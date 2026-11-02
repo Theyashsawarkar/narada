@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -341,11 +343,21 @@ func (m *Model) runAI(title, prompt, stdin string, tools bool, draftFor *review)
 	if isClaude && tools {
 		argv = append(argv, "--allowedTools", "mcp__sandesh")
 	}
+	if isClaude {
+		// --allowedTools takes many values: without "--" it eats the prompt too
+		argv = append(argv, "--")
+	}
 	argv = append(argv, prompt)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+		cmd.Env = append(os.Environ(), "PATH="+aiPath())
+		if !strings.ContainsRune(argv[0], '/') {
+			if p, err := lookPath(argv[0], aiPath()); err == nil {
+				cmd.Path, cmd.Err = p, nil
+			}
+		}
 		cmd.Stdin = strings.NewReader(stdin)
 		var out, errb bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &errb
@@ -361,6 +373,35 @@ func (m *Model) runAI(title, prompt, stdin string, tools bool, draftFor *review)
 		}
 		return aiMsg{title: title, text: out.String(), draftFor: draftFor}
 	}
+}
+
+// aiPath is PATH plus the folders sandesh and claude usually live in.
+// From a tmux popup PATH often lacks ~/.local/bin, and then claude can't
+// start `sandesh mcp` (its MCP config names plain "sandesh").
+func aiPath() string {
+	dirs := filepath.SplitList(os.Getenv("PATH"))
+	home, _ := os.UserHomeDir()
+	extra := []string{filepath.Dir(app.Executable())}
+	if home != "" {
+		extra = append(extra, filepath.Join(home, ".local", "bin"), filepath.Join(home, "go", "bin"))
+	}
+	for _, d := range extra {
+		if !slices.Contains(dirs, d) {
+			dirs = append(dirs, d)
+		}
+	}
+	return strings.Join(dirs, string(filepath.ListSeparator))
+}
+
+// lookPath is exec.LookPath over the given PATH instead of the process's.
+func lookPath(name, path string) (string, error) {
+	for _, d := range filepath.SplitList(path) {
+		p := filepath.Join(d, name)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return p, nil
+		}
+	}
+	return "", exec.ErrNotFound
 }
 
 const style = " Answer in plain text for a terminal: no markdown headings, no tables, short lines, at most 15 lines."

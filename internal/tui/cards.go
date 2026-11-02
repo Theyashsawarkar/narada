@@ -143,6 +143,7 @@ func firstWord(s string) string {
 
 func (m Model) avatar(name string) string {
 	h := hash(name)
+	name = strings.TrimPrefix(name, "~") // a name they gave themselves
 	var ini []rune
 	for _, w := range strings.FieldsFunc(name, func(r rune) bool { return r == ' ' || r == '.' || r == '@' || r == '_' || r == ',' || r == '+' }) {
 		ini = append(ini, []rune(strings.ToUpper(w))[0])
@@ -676,10 +677,25 @@ func (m *Model) chatLines(w int) []string {
 				lines = append(lines, s.muted.Render("▏")+s.sub.Bold(true).Render(who)+s.muted.Render(" · "+ansi.Truncate(what, bw-lipgloss.Width(who)-8, "…")))
 			}
 			text := mime.Clean(g.Text)
+			// photos, stickers and GIFs show as themselves, above the text
+			shown := map[int]bool{}
+			for fi, f := range g.Files {
+				if img := m.mediaLines(g.Account, g.Name, fi, f, bw-4); img != nil {
+					lines = append(lines, img...)
+					shown[fi] = true
+				}
+			}
+			if len(shown) > 0 && g.Account == store.WhatsAppAccount {
+				text = dropMediaLabel(text)
+			}
 			var files []string
+			n := 0
 			for _, l := range strings.Split(text, "\n") {
 				if strings.HasPrefix(l, "📎 ") {
-					files = append(files, strings.TrimPrefix(l, "📎 "))
+					if !shown[n] {
+						files = append(files, strings.TrimPrefix(l, "📎 "))
+					}
+					n++
 				}
 			}
 			var body []string
@@ -688,8 +704,10 @@ func (m *Model) chatLines(w int) []string {
 					body = append(body, l)
 				}
 			}
-			for _, l := range wrap(strings.Join(body, "\n"), bw-4) {
-				lines = append(lines, m.chatLinks(styleMentions(l, s.text, mention)))
+			if strings.TrimSpace(strings.Join(body, "\n")) != "" {
+				for _, l := range wrap(strings.Join(body, "\n"), bw-4) {
+					lines = append(lines, m.chatLinks(styleMentions(l, s.text, mention)))
+				}
 			}
 			if g.Edited && len(lines) > 0 {
 				lines[len(lines)-1] += s.muted.Render(" (edited)")
@@ -894,4 +912,18 @@ func (m Model) previewBox(w, h int) string {
 		view = append(view, " "+l)
 	}
 	return m.box(w, h, title, strings.Join(view, "\n"), m.focus == 1 && m.mode == modeNormal || m.mode == modeChatMsg, m.partColor())
+}
+
+// dropMediaLabel leaves a WhatsApp message's caption once its photo or
+// GIF shows: "📷 Photo: the curtains" → "the curtains".
+func dropMediaLabel(text string) string {
+	for _, l := range []string{"📷 Photo", "GIF", "Sticker", "🎬 Video"} {
+		if text == l {
+			return ""
+		}
+		if strings.HasPrefix(text, l+": ") {
+			return strings.TrimPrefix(text, l+": ")
+		}
+	}
+	return text
 }

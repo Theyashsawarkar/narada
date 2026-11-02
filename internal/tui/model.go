@@ -185,7 +185,9 @@ func Run(a *app.App, launch string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _, _ = a.StartWhatsApp(ctx) }()
-	_, err := tea.NewProgram(first, tea.WithAltScreen()).Run()
+	program = tea.NewProgram(first, tea.WithAltScreen())
+	_, err := program.Run()
+	imgs.forget()
 	if err == nil && demoWanted {
 		demoWanted = false
 		return app.ErrDemo
@@ -847,6 +849,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg.(type) {
 	case waLinkMsg, waLinkTick:
 		return m.linkUpdate(msg)
+	case imgReadyMsg:
+		// a photo finished loading: draw it, staying at the bottom if there
+		follow := m.atBottom
+		m.fixView()
+		if follow {
+			m.scroll = 1 << 30
+			m.fixView()
+		}
+		return m, nil
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -1060,7 +1071,7 @@ func (m *Model) fixView() {
 	m.buildPreview(inner)
 	avail := m.bodyHeight() - 2 - len(m.aiLines(inner))
 	if _, ok := m.curSpace(); ok {
-		avail -= 2
+		avail -= 4 // the message box
 	}
 	if m.scrollToNew && m.newLine > 0 {
 		m.scroll, m.scrollToNew = max(0, m.newLine-2), false

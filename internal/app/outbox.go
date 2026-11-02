@@ -121,10 +121,7 @@ func validate(kind string, out store.Outgoing) error {
 		if out.Space == "" {
 			return errors.New("no chat")
 		}
-		if len(out.Files) > 0 {
-			return errors.New("sandesh can't send files on WhatsApp yet")
-		}
-		if strings.TrimSpace(out.Body) == "" {
+		if strings.TrimSpace(out.Body) == "" && len(out.Files) == 0 {
 			return errors.New("the message is empty")
 		}
 	case "chat":
@@ -274,6 +271,7 @@ func (a *App) Cancel(id int64) error {
 // an item is atomic, so each is sent once.
 func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 	_ = a.Store.RecoverSending()
+	a.fetchAsked(ctx)
 	due, err := a.Store.DueOutbox()
 	if err != nil {
 		return nil

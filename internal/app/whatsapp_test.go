@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -129,10 +131,6 @@ func TestWhatsAppSendThroughOutbox(t *testing.T) {
 	if err != nil || it.Status != store.StatusApproval {
 		t.Fatalf("agent send: %+v %v", it, err)
 	}
-	// files aren't supported yet
-	if _, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: sp.Name, Body: "x", Files: []store.File{{Source: "/etc/hostname"}}}, OriginYou); err == nil {
-		t.Fatal("a file went into a WhatsApp send")
-	}
 	// a phone number starts a chat
 	sp, err = a.WhatsAppChat(ctx, "+1 555 000 2222")
 	if err != nil || sp.Name != "15550002222@s.whatsapp.net" {
@@ -257,5 +255,57 @@ func TestTrustPolicy(t *testing.T) {
 	mine, _ := a.Queue("work", "chat", store.Outgoing{Space: "spaces/x", Body: "yo"}, OriginYou)
 	if time.Until(time.UnixMilli(mine.SendAt)) > time.Second {
 		t.Fatal("your chat message waits")
+	}
+}
+
+func TestWhatsAppSendFiles(t *testing.T) {
+	a, _ := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sp, err := a.WhatsAppChat(ctx, "ravi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	one, two := filepath.Join(dir, "one.txt"), filepath.Join(dir, "two.txt")
+	if err := os.WriteFile(one, []byte("first"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(two, []byte("second"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := a.Store.ChatMessages(store.WhatsAppAccount, sp.Name, 0)
+	it, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: sp.Name, Body: "both",
+		Files: []store.File{{Source: one}, {Source: two}}}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.DeliverDue(ctx)
+	if it, _ = a.Store.OutboxItem(it.ID); it.Status != store.StatusSent {
+		t.Fatalf("status %s %s", it.Status, it.Error)
+	}
+	// each file is its own message: its own preview, the text on the first only
+	msgs, _ := a.Store.ChatMessages(store.WhatsAppAccount, sp.Name, 0)
+	if len(msgs) != len(before)+2 {
+		t.Fatalf("%d messages, want %d", len(msgs), len(before)+2)
+	}
+	for i, want := range []string{"first", "second"} {
+		m := msgs[len(before)+i]
+		if len(m.Files) != 1 || !m.Mine {
+			t.Fatalf("message %d: %+v", i, m)
+		}
+		if strings.Contains(m.Text, "both") != (i == 0) {
+			t.Fatalf("message %d text: %q", i, m.Text)
+		}
+		p, ok := a.CachedChatFile(store.WhatsAppAccount, m.Name, 0)
+		if !ok {
+			t.Fatalf("message %d isn't cached", i)
+		}
+		if b, _ := os.ReadFile(p); string(b) != want {
+			t.Fatalf("message %d shows %q, want %q", i, b, want)
+		}
 	}
 }

@@ -19,11 +19,12 @@ type Paths struct {
 	Config string // config.toml, client.json
 	Data   string // cache.db
 	State  string // agent.log, sections.json
+	Cache  string // media: photos and files shown in the screen
 }
 
 func DefaultPaths() Paths {
 	if h := os.Getenv("SANDESH_HOME"); h != "" {
-		return Paths{Config: filepath.Join(h, "config"), Data: filepath.Join(h, "data"), State: filepath.Join(h, "state")}
+		return Paths{Config: filepath.Join(h, "config"), Data: filepath.Join(h, "data"), State: filepath.Join(h, "state"), Cache: filepath.Join(h, "cache")}
 	}
 	home, _ := os.UserHomeDir()
 	env := func(k, def string) string {
@@ -36,11 +37,12 @@ func DefaultPaths() Paths {
 		Config: filepath.Join(env("XDG_CONFIG_HOME", ".config"), "sandesh"),
 		Data:   filepath.Join(env("XDG_DATA_HOME", ".local/share"), "sandesh"),
 		State:  filepath.Join(env("XDG_STATE_HOME", ".local/state"), "sandesh"),
+		Cache:  filepath.Join(env("XDG_CACHE_HOME", ".cache"), "sandesh"),
 	}
 }
 
 func (p Paths) Ensure() error {
-	for _, d := range []string{p.Config, p.Data, p.State} {
+	for _, d := range []string{p.Config, p.Data, p.State, p.Cache} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}
@@ -107,6 +109,10 @@ type Config struct {
 	Keep string `toml:"keep"`
 	// OlderPage is how many older threads "load older" fetches at a time
 	OlderPage int `toml:"older_page"`
+	// Images: how photos show in the screen: "auto" (kitty's graphics
+	// where the terminal speaks them, else coloured blocks), "kitty",
+	// "blocks" or "off"
+	Images string `toml:"images"`
 	// NerdFont draws round avatars and icons with Nerd Font glyphs
 	NerdFont   bool `toml:"nerd_font"`
 	MaxThreads int  `toml:"max_threads"`
@@ -270,6 +276,7 @@ nerd_font     = true   # round avatars (needs a Nerd Font, as most terminal setu
 older_page    = 10     # how many older threads j at the end of a list loads (+ / - change it there)
 max_threads   = 150    # at most this many threads on the first sync (older mail: search)
 notify        = true   # desktop notification for new mail and DMs
+images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30 # at most this many WhatsApp sends an hour (a linked device that sends a lot risks the account)
 ai_command    = ["claude", "-p"]   # what @, S, D and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed

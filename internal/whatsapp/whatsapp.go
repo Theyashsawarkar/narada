@@ -38,6 +38,7 @@ type Message struct {
 	Quoted     string // the id of the message this one replies to
 	Edit       bool   // Text replaces message ID's text
 	Revoke     bool   // message ID was deleted for everyone
+	Media      *Media // a photo, GIF, file... it carries
 }
 
 // Chat is a conversation: a person or a group.
@@ -472,6 +473,7 @@ func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool
 	if m.Text == "" {
 		return Message{}, false
 	}
+	m.Media = media(msg)
 	if ci := contextInfo(msg); ci != nil {
 		m.Quoted = ci.GetStanzaID()
 		m.Text = cl.mentions(ctx, m.Text, ci.GetMentionedJID())
@@ -558,6 +560,9 @@ func Text(msg *waE2E.Message) string {
 	case msg.GetImageMessage() != nil:
 		return with("📷 Photo", msg.GetImageMessage().GetCaption())
 	case msg.GetVideoMessage() != nil:
+		if msg.GetVideoMessage().GetGifPlayback() {
+			return with("GIF", msg.GetVideoMessage().GetCaption())
+		}
 		return with("🎬 Video", msg.GetVideoMessage().GetCaption())
 	case msg.GetAudioMessage() != nil:
 		if msg.GetAudioMessage().GetPTT() {

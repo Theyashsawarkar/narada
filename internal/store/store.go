@@ -90,7 +90,7 @@ func Open(path string) (*Store, error) {
 }
 
 // schemaVersion: bump it with a step in migrate.
-const schemaVersion = 12
+const schemaVersion = 13
 
 func migrate(db *sql.DB) error {
 	var v int
@@ -199,6 +199,14 @@ func migrate(db *sql.DB) error {
 	if v < 12 {
 		// v12: accounts have a kind: google (mail and chat) or whatsapp
 		if _, err := db.Exec(`ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'google'`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
+	if v < 13 {
+		// v13: WhatsApp files asked for by a process that isn't online:
+		// the one holding WhatsApp downloads them
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS media_fetch (account TEXT NOT NULL, msg TEXT NOT NULL, idx INTEGER NOT NULL,
+		  asked INTEGER NOT NULL, error TEXT NOT NULL DEFAULT '', PRIMARY KEY (account, msg, idx))`); err != nil {
 			return err
 		}
 	}
@@ -914,6 +922,11 @@ type ChatFile struct {
 	Type  string `json:"type,omitempty"`
 	Ref   string `json:"ref,omitempty"`
 	Drive string `json:"drive,omitempty"`
+	// WhatsApp: image, sticker, gif, video, voice, audio or document; its
+	// size, and its small JPEG preview (base64)
+	Kind  string `json:"kind,omitempty"`
+	Size  int64  `json:"size,omitempty"`
+	Thumb string `json:"thumb,omitempty"`
 }
 
 func (s *Store) PutSpace(sp Space) error {
@@ -1312,4 +1325,54 @@ func (s *Store) RepairWhatsAppNames() error {
 		}
 	}
 	return nil
+}
+
+// MediaFetch is a file one process asked another (WhatsApp's holder) to download.
+type MediaFetch struct {
+	Account, Msg string
+	Idx          int
+	Error        string
+}
+
+// AskMedia queues a file for download (asking again clears an old error).
+func (s *Store) AskMedia(account, msg string, idx int) error {
+	_, err := s.db.Exec(`INSERT INTO media_fetch(account,msg,idx,asked) VALUES(?,?,?,?)
+	  ON CONFLICT(account,msg,idx) DO UPDATE SET asked=excluded.asked, error=''`, account, msg, idx, now())
+	return err
+}
+
+// MediaAsked lists the downloads waiting (not failed), oldest first.
+func (s *Store) MediaAsked(limit int) ([]MediaFetch, error) {
+	rows, err := s.db.Query(`SELECT account,msg,idx,error FROM media_fetch WHERE error='' ORDER BY asked LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MediaFetch
+	for rows.Next() {
+		var f MediaFetch
+		if err := rows.Scan(&f.Account, &f.Msg, &f.Idx, &f.Error); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// MediaFetchError is why a download failed ("" when it didn't, or wasn't asked).
+func (s *Store) MediaFetchError(account, msg string, idx int) string {
+	var e string
+	_ = s.db.QueryRow(`SELECT error FROM media_fetch WHERE account=? AND msg=? AND idx=?`, account, msg, idx).Scan(&e)
+	return e
+}
+
+// MediaFetched ends a request: done (err "") or failed.
+func (s *Store) MediaFetched(account, msg string, idx int, err string) error {
+	var e error
+	if err == "" {
+		_, e = s.db.Exec(`DELETE FROM media_fetch WHERE account=? AND msg=? AND idx=?`, account, msg, idx)
+	} else {
+		_, e = s.db.Exec(`UPDATE media_fetch SET error=? WHERE account=? AND msg=? AND idx=?`, err, account, msg, idx)
+	}
+	return e
 }

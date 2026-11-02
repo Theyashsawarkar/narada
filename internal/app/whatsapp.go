@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -23,6 +25,8 @@ type WhatsAppConn interface {
 	Link(ctx context.Context, phone string, show func(qr, code string), handler func(whatsapp.Event)) error
 	Connect(handler func(whatsapp.Event)) error
 	Send(ctx context.Context, chat, text string, quote *whatsapp.Message) (string, error)
+	SendFile(ctx context.Context, chat, path, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error)
+	Download(ctx context.Context, raw []byte) ([]byte, error)
 	MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error
 	Resolve(ctx context.Context, phone string) (string, error)
 	GroupName(ctx context.Context, chat string) (string, error)
@@ -317,6 +321,12 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			if m.Quoted != "" {
 				cm.Quoted = waName(m.Chat, m.Quoted)
 			}
+			if f, ok := waFile(m.Media); ok {
+				cm.Files = []store.ChatFile{f}
+				if !e.History {
+					defer func(name string, f store.ChatFile) { go a.autoFetch(ctx, name, f) }(name, f)
+				}
+			}
 			put = append(put, cm)
 			touched[m.Chat] = max(touched[m.Chat], cm.Created)
 			if !m.FromMe && m.Sender == m.Chat && m.SenderName != "" {
@@ -469,18 +479,52 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 			quote = &whatsapp.Message{ID: id, Sender: q.Sender, Text: q.Text}
 		}
 	}
-	id, err := c.Send(ctx, out.Space, out.Body, quote)
-	if err != nil {
-		return "", err
-	}
 	wa, _ := a.Store.WhatsApp()
-	now := time.Now().UnixMilli()
-	name := waName(out.Space, id)
-	_ = a.Store.PutSpace(store.Space{Account: store.WhatsAppAccount, Name: out.Space, DisplayName: a.waChatName(out.Space, out.SpaceName),
-		Type: waType(out.Space), LastActive: now})
-	_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: store.WhatsAppAccount, Name: name, Space: out.Space, Sender: wa.ChatUser,
-		SenderName: "You", Text: out.Body, Created: now, Quoted: out.Quote}})
-	_ = a.Store.SetSpaceRead(store.WhatsAppAccount, out.Space, now)
+	var name string
+	keep := func(id, text string, files []store.ChatFile) {
+		now := time.Now().UnixMilli()
+		name = waName(out.Space, id)
+		_ = a.Store.PutSpace(store.Space{Account: store.WhatsAppAccount, Name: out.Space, DisplayName: a.waChatName(out.Space, out.SpaceName),
+			Type: waType(out.Space), LastActive: now})
+		_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: store.WhatsAppAccount, Name: name, Space: out.Space, Sender: wa.ChatUser,
+			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files}})
+		_ = a.Store.SetSpaceRead(store.WhatsAppAccount, out.Space, time.Now().UnixMilli())
+	}
+	if len(out.Files) == 0 {
+		id, err := c.Send(ctx, out.Space, out.Body, quote)
+		if err != nil {
+			return "", err
+		}
+		keep(id, out.Body, nil)
+		return name, nil
+	}
+	// each file is its own WhatsApp message, and is kept as one
+	for i, f := range out.Files {
+		// the text goes as the first file's caption, like WhatsApp does
+		caption := ""
+		if i == 0 {
+			caption = out.Body
+		}
+		id, sent, err := c.SendFile(ctx, out.Space, f.Path, caption, quote)
+		if err != nil {
+			if i > 0 {
+				return name, fmt.Errorf("%d of %d files went out, then: %w", i, len(out.Files), err)
+			}
+			return "", err
+		}
+		cf, ok := waFile(sent)
+		if !ok {
+			keep(id, caption, nil)
+			continue
+		}
+		cf.Name = firstNonEmpty(f.Name, cf.Name)
+		// what you sent shows at once: it is its own cached copy
+		if data, rerr := os.ReadFile(f.Path); rerr == nil && sent.Kind != "gif" {
+			_ = writeCache(a.mediaPath(store.WhatsAppAccount+"/"+waName(out.Space, id)+"0", cf.Name), data)
+		}
+		keep(id, whatsapp.MediaLabel(cf.Kind, cf.Name, caption), []store.ChatFile{cf})
+		quote = nil
+	}
 	return name, nil
 }
 
@@ -577,4 +621,17 @@ func OpenURL(u string) error {
 		}
 	}
 	return errors.New("no xdg-open to open " + u)
+}
+
+// waFile is a message's media as a chat file: its kind, size, preview,
+// and Ref to download it with.
+func waFile(m *whatsapp.Media) (store.ChatFile, bool) {
+	if m == nil || len(m.Raw) == 0 {
+		return store.ChatFile{}, false
+	}
+	f := store.ChatFile{Name: m.Name, Type: m.Mime, Kind: m.Kind, Size: m.Size, Ref: waRef + base64.StdEncoding.EncodeToString(m.Raw)}
+	if len(m.Thumb) > 0 {
+		f.Thumb = base64.StdEncoding.EncodeToString(m.Thumb)
+	}
+	return f, true
 }

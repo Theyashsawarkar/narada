@@ -75,7 +75,8 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
 **Requirements**: Linux, a Google account (Google Chat needs a Google
 Workspace account; a personal Gmail gets mail only). Optional: `tmux` for
 the popup and status line, `secret-tool` (libsecret) for the keyring,
-`notify-send` for notifications, `fzf` for the label picker, `wl-copy` or
+`notify-send` for notifications, `ffmpeg` for GIFs and video previews on
+WhatsApp, `fzf` for the label picker, `wl-copy` or
 `xclip` for copying links, [Claude Code](https://docs.claude.com/en/docs/claude-code)
 for the AI keys.
 
@@ -450,9 +451,8 @@ threads a minute, with a progress bar in the top bar.
   `chat send`. Up to 25 MB per message.
 - What is attached is copied when you queue the send (privately, 0600), so
   the file you reviewed is the file that goes out. Agents can attach files
-  too, but those sends **always** wait for your approval, whatever
-  `send_policy` says, and the approval shows each file and where it came
-  from. Agents save downloads only inside the downloads folder.
+  too, but those sends wait for your approval unless `send_policy` is
+  `trust`, and the approval shows each file and where it came from. Agents save downloads only inside the downloads folder.
 
 ## WhatsApp
 
@@ -487,16 +487,30 @@ especially to strangers or the same text to many, can be banned. So sandesh:
 
 - caps WhatsApp sends at `whatsapp_per_hour` (30), yours included;
 - sends one message to one chat at a time: there is no broadcast;
-- always asks you before an agent's WhatsApp message goes out, whatever
-  `send_policy` says.
+- asks you before an agent's WhatsApp message goes out, unless you set
+  `send_policy = "trust"` (see [Sending safely](#sending-safely)).
 
 **Don't want to link?** `sandesh whatsapp send +9198… "text"` (and the
 `whatsapp_send` tool) then opens WhatsApp's own click-to-chat page with the
 message typed in, and you press Send there. `--link` does that even when
 linked.
 
-Not yet: sending photos and files (received ones show as "📷 Photo:
-caption"), reactions, editing and deleting, starting groups.
+**Photos, GIFs, stickers and videos** show inside the conversation: on
+kitty (and terminals that speak its graphics protocol) as real pictures, in
+tmux and its popups too (needs `set -g allow-passthrough on`); GIFs and
+video previews play, and elsewhere you get coloured blocks. `images` in the
+config chooses (`auto`, `kitty`, `blocks`, `off`). New photos, stickers and
+GIFs up to 8 MB download as they arrive and larger files when you open
+them, into `~/.cache/sandesh/media`. To send one, press `Ctrl+o` while
+typing (or `U` in the chat): what you type becomes the first file's
+caption, and each file goes as its own message. GIFs and video previews
+need `ffmpeg`, as WhatsApp sends GIFs as MP4.
+
+Photos from before this feature carry no download details, so they stay a
+"📷 Photo: caption" line until WhatsApp sends them again, which it may do
+when you link anew.
+
+Not yet: reactions, editing and deleting, starting groups.
 `sandesh whatsapp unlink` logs this machine out and forgets the chats.
 WhatsApp unlinks devices whose phone has been offline for about two weeks;
 link again then.
@@ -538,7 +552,7 @@ claude  → contacts_find → mail_send
 | `chat_send` | Post in a space, DM or thread | **asks you** |
 | `whatsapp_chats` | WhatsApp chats with unread counts | reads |
 | `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
-| `whatsapp_send` | One text to one WhatsApp chat, optionally replying to a message; opens click-to-chat when not linked | **always asks you** |
+| `whatsapp_send` | One message to one WhatsApp chat, optionally replying to a message; opens click-to-chat when not linked | **always asks you** |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
 
@@ -566,11 +580,18 @@ is written by strangers. So:
 - **Mail is data, not instructions.** Everything the tools return from
   mail or chat is wrapped in an `<untrusted>` block, and the server tells
   the agent not to follow instructions found there.
-- **A recipient you've never written to always asks**, whatever the
-  policy. `send_policy` in the config: `confirm` (the default: every agent
+- **A recipient you've never written to always asks**, except under
+  `trust`. `send_policy` in the config: `confirm` (the default: every agent
   send asks), `known-contacts` (replies to people you've written to go
   straight out), `allow` (anything to people you've written to goes
-  straight out). Chat and WhatsApp messages from agents always ask.
+  straight out). Chat and WhatsApp messages from agents ask under these.
+  `trust` lifts all of that, unknown recipients and local files included:
+  agents send without asking unless you told them to ask (`ask_first` on
+  the tool, which they pass when you say "ask me first" or when they're
+  unsure). Each send still waits out a short undo window, with a
+  notification that can cancel it. Mail an agent reads could try to talk it
+  into sending, and under `trust` nothing stops that but the undo window,
+  so choose it knowingly.
 - **WhatsApp is capped**: at most `whatsapp_per_hour` (30) sends an hour,
   one chat at a time (see [WhatsApp](#whatsapp)).
 - **A log of every agent action** in `~/.local/state/sandesh/agent.log`.
@@ -643,14 +664,16 @@ inside the screen as `# keybind:` lines, so both show up in tmux's
 prints this:
 
 ```toml
-send_policy   = "confirm"   # confirm | known-contacts | allow (see Sending safely)
+send_policy   = "confirm"   # confirm | known-contacts | allow | trust (see Sending safely)
 undo_seconds  = 10          # every mail waits this long; z cancels
 chat_undo_seconds = 0       # the same for chat (default: sent at once)
+agent_undo_seconds = 10     # the least a send by an agent waits (matters under trust)
 mail_interval = "60s"       # how often the background sync checks Gmail
 chat_interval = "30s"       # and Google Chat
 initial_days  = 30          # how far back the first sync goes
 max_threads   = 150         # at most this many threads on the first sync (older mail: search)
 notify        = true        # desktop notifications for new mail and DMs
+images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
 ai_command    = ["claude", "-p"]   # what @, S, D and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed

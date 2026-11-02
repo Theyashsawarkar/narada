@@ -35,7 +35,8 @@ sign-in:
 - **AI agents** see mail inside `<untrusted>` blocks and are told not to
   follow instructions in it. Every agent send waits for your approval unless
   your `send_policy` says otherwise, and a recipient you have never written
-  to always asks. Every send, yours included, waits `undo_seconds` and can be
+  to asks under every policy but `trust`, which you opt into and which sends
+  everything after the undo window unless you asked to approve it. Every send, yours included, waits `undo_seconds` and can be
   cancelled. Agent actions are logged to `~/.local/state/sandesh/agent.log`.
 - `SANDESH_GOOGLE_URL` (the test suite's fake Google) is honoured only for a
   local address.

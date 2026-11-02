@@ -109,14 +109,14 @@ func (a *App) SaveChatAttachment(ctx context.Context, account, msgName string, n
 		return "", fmt.Errorf("that message has no file %d", n+1)
 	}
 	f := m.Files[n]
-	if f.Ref == "" {
-		return "", fmt.Errorf("%s is a Drive file: open it in Chat (b)", f.Name)
+	p, err := a.ChatFile(ctx, account, msgName, n)
+	if errors.Is(err, ErrMediaWaiting) {
+		return "", errors.New("WhatsApp files download through the sandesh that is online (the daemon, or an open screen); try again in a moment")
 	}
-	c, err := a.Client(account)
 	if err != nil {
 		return "", err
 	}
-	data, err := c.ChatMedia(ctx, f.Ref)
+	data, err := os.ReadFile(p)
 	if err != nil {
 		return "", err
 	}
@@ -361,7 +361,7 @@ func (a *App) SaveThreadAttachments(ctx context.Context, thread string, n int, d
 
 // SaveChatFiles downloads a chat message's files (n from 1; 0 = all).
 func (a *App) SaveChatFiles(ctx context.Context, msgName string, n int, dir string) ([]string, error) {
-	for _, acc := range a.AccountNames() {
+	for _, acc := range append(a.AccountNames(), store.WhatsAppAccount) {
 		m, err := a.Store.ChatMessage(acc, msgName)
 		if err != nil {
 			continue

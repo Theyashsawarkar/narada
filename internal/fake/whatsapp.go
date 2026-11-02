@@ -1,9 +1,18 @@
 package fake
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/gif"
+	"image/png"
+	"math"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -32,11 +41,13 @@ type WhatsApp struct {
 	// LinkDelay is how long the "phone" takes to scan (the demo shows
 	// the QR code meanwhile).
 	LinkDelay time.Duration
+	// Files are the media on WhatsApp's servers, by Media.Raw.
+	Files map[string][]byte
 }
 
 // NewWhatsApp is a fake account with the phone number +91 98765 00000.
 func NewWhatsApp() *WhatsApp {
-	return &WhatsApp{Me: "919876500000@s.whatsapp.net", Groups: map[string]string{}, People: map[string]string{}}
+	return &WhatsApp{Me: "919876500000@s.whatsapp.net", Groups: map[string]string{}, People: map[string]string{}, Files: map[string][]byte{}}
 }
 
 // Conn is what app.DialWhatsApp returns: one linked device of this
@@ -148,6 +159,42 @@ func (c *WhatsAppConn) Send(ctx context.Context, chat, text string, quote *whats
 	return m.ID, nil
 }
 
+func (c *WhatsAppConn) SendFile(ctx context.Context, chat, path, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", nil, err
+	}
+	w := c.w
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if c.closed || w.handler == nil {
+		return "", nil, errors.New("offline")
+	}
+	w.nextID++
+	kind := whatsapp.KindOf(filepath.Base(path), http.DetectContentType(data))
+	if kind == "sticker" {
+		kind = "image"
+	}
+	md := &whatsapp.Media{Kind: kind, Name: filepath.Base(path), Mime: http.DetectContentType(data), Size: int64(len(data)),
+		Raw: []byte(fmt.Sprintf("sent-%d", w.nextID))}
+	w.Files[string(md.Raw)] = data
+	m := whatsapp.Message{ID: fmt.Sprintf("OUT%04d", w.nextID), Chat: chat, Sender: w.Me, Text: caption, Time: time.Now(), FromMe: true, Media: md}
+	if quote != nil {
+		m.Quoted = quote.ID
+	}
+	w.Sent = append(w.Sent, m)
+	return m.ID, md, nil
+}
+
+func (c *WhatsAppConn) Download(ctx context.Context, raw []byte) ([]byte, error) {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	if b, ok := c.w.Files[string(raw)]; ok {
+		return b, nil
+	}
+	return nil, errors.New("no such file on the fake WhatsApp")
+}
+
 func (c *WhatsAppConn) MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error {
 	c.w.mu.Lock()
 	defer c.w.mu.Unlock()
@@ -198,13 +245,73 @@ func (w *WhatsApp) SeedWhatsApp() {
 	w.History = []whatsapp.Message{
 		{ID: "H1", Chat: amma, Sender: w.Me, FromMe: true, Text: "Reached office, will call at lunch", Time: at(5 * time.Hour)},
 		{ID: "H2", Chat: amma, Sender: amma, Text: "Did you eat?", Time: at(25 * time.Minute)},
-		{ID: "H3", Chat: amma, Sender: amma, Text: "📷 Photo: the new curtains", Time: at(20 * time.Minute)},
+		{ID: "H3", Chat: amma, Sender: amma, Text: "📷 Photo: the new curtains", Time: at(20 * time.Minute),
+			Media: &whatsapp.Media{Kind: "image", Name: "photo.png", Mime: "image/png", Raw: []byte("demo-photo")}},
 		{ID: "H4", Chat: ravi, Sender: ravi, SenderName: "Ravi", Text: "PR is up, can you look today?", Time: at(4 * time.Hour)},
 		{ID: "H5", Chat: ravi, Sender: w.Me, FromMe: true, Text: "Yes, after standup", Time: at(3 * time.Hour), Quoted: "H4"},
 		{ID: "H6", Chat: group, Sender: ravi, SenderName: "Ravi", Text: "Rajmachi this Saturday?", Time: at(2 * time.Hour)},
 		{ID: "H7", Chat: group, Sender: "919800000003@s.whatsapp.net", SenderName: "Sneha", Text: "I'm in! Leaving 5am?", Time: at(70 * time.Minute)},
 		{ID: "H8", Chat: group, Sender: "919800000004@s.whatsapp.net", SenderName: "Kunal", Text: "📍 Location https://maps.google.com/?q=18.828,73.395: base village", Time: at(50 * time.Minute)},
 		{ID: "H9", Chat: group, Sender: ravi, SenderName: "Ravi", Text: "Done, 5am at Lonavala station", Time: at(40 * time.Minute)},
+		{ID: "H10", Chat: group, Sender: "919800000003@s.whatsapp.net", SenderName: "Sneha", Text: "GIF", Time: at(35 * time.Minute),
+			Media: &whatsapp.Media{Kind: "gif", Name: "gif.gif", Mime: "image/gif", Raw: []byte("demo-gif")}},
+	}
+	w.Files["demo-photo"] = demoPhoto()
+	w.Files["demo-gif"] = demoGIF()
+	for i := range w.History {
+		if md := w.History[i].Media; md != nil {
+			md.Size = int64(len(w.Files[string(md.Raw)]))
+		}
 	}
 	w.linked = true
+}
+
+// demoPhoto is a made-up photo: a sunset gradient with a sun.
+func demoPhoto() []byte {
+	const W, H = 480, 320
+	img := image.NewRGBA(image.Rect(0, 0, W, H))
+	for y := 0; y < H; y++ {
+		for x := 0; x < W; x++ {
+			t := float64(y) / H
+			c := color.RGBA{uint8(250 - 120*t), uint8(140 - 90*t), uint8(90 + 100*t), 255}
+			dx, dy := x-W/2, y-H*2/3
+			if dx*dx+dy*dy < 60*60 {
+				c = color.RGBA{255, 214, 120, 255}
+			}
+			if y > H*3/4 {
+				c = color.RGBA{uint8(40 + 30*t), uint8(50 + 30*t), 90, 255}
+			}
+			img.Set(x, y, c)
+		}
+	}
+	var b bytes.Buffer
+	_ = png.Encode(&b, img)
+	return b.Bytes()
+}
+
+// demoGIF is a made-up GIF: a ball bouncing across, 12 frames.
+func demoGIF() []byte {
+	const W, H = 160, 100
+	pal := color.Palette{color.RGBA{30, 30, 46, 255}, color.RGBA{166, 227, 161, 255}, color.RGBA{137, 180, 250, 255}}
+	var g gif.GIF
+	for f := 0; f < 12; f++ {
+		img := image.NewPaletted(image.Rect(0, 0, W, H), pal)
+		cx := 20 + f*10
+		cy := 70 - int(40*math.Abs(math.Sin(float64(f)*math.Pi/6)))
+		for y := 0; y < H; y++ {
+			for x := 0; x < W; x++ {
+				switch {
+				case (x-cx)*(x-cx)+(y-cy)*(y-cy) < 12*12:
+					img.SetColorIndex(x, y, 1)
+				case y > 84:
+					img.SetColorIndex(x, y, 2)
+				}
+			}
+		}
+		g.Image = append(g.Image, img)
+		g.Delay = append(g.Delay, 8)
+	}
+	var b bytes.Buffer
+	_ = gif.EncodeAll(&b, &g)
+	return b.Bytes()
 }
