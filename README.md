@@ -7,6 +7,10 @@
   Every unread mail and chat in one keyboard-driven screen, and an agent that can read, draft and send them for you.
 </p>
 
+<p align="center">
+  <img alt="sandesh's mail tab: the inbox as cards on the left, the open thread on the right with its formatting, a table and numbered links" src="assets/screenshots/mail.png" width="100%">
+</p>
+
 > *Sandesh* (संदेश) is Sanskrit for "message": the thing carried from one
 > person to another, whichever road it took.
 
@@ -167,6 +171,12 @@ sandesh doctor                         # checks all of it
 `sandesh` opens the screen.
 
 ## The screen
+
+<p align="center">
+  <img alt="A Google Chat conversation: your messages on the right, theirs on the left with a quoted reply and a reaction, and the message box at the bottom" src="assets/screenshots/chat.png" width="49%">
+  <img alt="The WhatsApp tab: the compact chat list, a photo shown inside the conversation, and blue read ticks on your message" src="assets/screenshots/whatsapp.png" width="49%">
+</p>
+<p align="center"><sub>All screenshots use <code>sandesh demo</code>: made-up mail, chats and people.</sub></p>
 
 Sections on top, the list on the left, the selected thread or space on
 the right, keys at the bottom.

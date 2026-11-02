@@ -2,8 +2,9 @@
 
 Newest first.
 
-## Unreleased
+## v0.3.0 -- 2026-11-02
 
+- **Screenshots** in the README and on the website (from `sandesh demo`).
 - **Ticks**: ✓ sent, ✓✓ delivered and blue ✓✓ read beside your WhatsApp
   messages, from the phone's receipts and its history.
 - **Paste a screenshot**: `Ctrl+v` while typing attaches a copied image;
