@@ -390,7 +390,11 @@ func (cl *Client) contacts(ctx context.Context) map[string]string {
 	}
 	out := map[string]string{}
 	for jid, c := range all {
-		if n := firstNonEmpty(c.FullName, c.FirstName, c.PushName, c.BusinessName); n != "" {
+		n := firstNonEmpty(c.FullName, c.FirstName, c.BusinessName)
+		if n == "" && c.PushName != "" {
+			n = "~" + c.PushName // their own name: not in your contacts
+		}
+		if n != "" {
 			out[cl.chatJID(ctx, jid)] = n
 		}
 	}
@@ -402,7 +406,7 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 	var msgs []Message
 	for _, conv := range e.Data.GetConversations() {
 		jid, err := types.ParseJID(conv.GetID())
-		if err != nil || jid.Server == types.BroadcastServer || jid.Server == types.NewsletterServer {
+		if err != nil || Hidden(jid.String()) || jid.Server == types.BroadcastServer || jid.Server == types.NewsletterServer {
 			continue
 		}
 		ch := Chat{JID: cl.chatJID(ctx, jid), Name: conv.GetName(), Group: jid.Server == types.GroupServer,
@@ -431,10 +435,20 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 // sandesh doesn't show (status updates, key exchanges, reactions).
 func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool) {
 	info := e.Info
-	if info.Chat.Server == types.BroadcastServer || info.Chat.Server == types.NewsletterServer {
+	if Hidden(info.Chat.String()) || info.Chat.Server == types.BroadcastServer || info.Chat.Server == types.NewsletterServer {
 		return Message{}, false
 	}
-	m := Message{ID: info.ID, Chat: cl.chatJID(ctx, info.Chat), Sender: cl.chatJID(ctx, info.Sender), SenderName: info.PushName,
+	sender := info.Sender
+	if sender.Server == types.HiddenUserServer && info.SenderAlt.Server == types.DefaultUserServer {
+		sender = info.SenderAlt // the phone number WhatsApp sent beside the hidden id
+	}
+	chat := info.Chat
+	if chat.Server == types.HiddenUserServer {
+		if alt := firstPN(info.SenderAlt, info.RecipientAlt); !alt.IsEmpty() && !info.IsGroup {
+			chat = alt
+		}
+	}
+	m := Message{ID: info.ID, Chat: cl.chatJID(ctx, chat), Sender: cl.chatJID(ctx, sender), SenderName: info.PushName,
 		Time: info.Timestamp, FromMe: info.IsFromMe}
 	msg := e.Message
 	if pm := msg.GetProtocolMessage(); pm != nil {
@@ -458,9 +472,54 @@ func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool
 	}
 	if ci := contextInfo(msg); ci != nil {
 		m.Quoted = ci.GetStanzaID()
+		m.Text = cl.mentions(ctx, m.Text, ci.GetMentionedJID())
 	}
 	return m, true
 }
+
+// mentions writes "@Priya" for the "@1234…" WhatsApp puts in the text
+// (a hidden id, or a phone number) where it knows the name.
+func (cl *Client) mentions(ctx context.Context, text string, jids []string) string {
+	for _, s := range jids {
+		j, err := types.ParseJID(s)
+		if err != nil || !strings.Contains(text, "@"+j.User) {
+			continue
+		}
+		if name := cl.name(ctx, j); name != "" {
+			text = strings.ReplaceAll(text, "@"+j.User, "@"+name)
+		}
+	}
+	return text
+}
+
+// name is what you call someone: your contact name, else theirs.
+func (cl *Client) name(ctx context.Context, j types.JID) string {
+	for _, try := range []types.JID{j, mustJID(cl.chatJID(ctx, j))} {
+		if c, err := cl.c.Store.Contacts.GetContact(ctx, try); err == nil && c.Found {
+			if n := firstNonEmpty(c.FullName, c.FirstName, c.PushName, c.BusinessName); n != "" {
+				return n
+			}
+		}
+	}
+	return ""
+}
+
+func mustJID(s string) types.JID { j, _ := types.ParseJID(s); return j }
+
+func firstPN(js ...types.JID) types.JID {
+	for _, j := range js {
+		if j.Server == types.DefaultUserServer {
+			return j
+		}
+	}
+	return types.JID{}
+}
+
+// Hidden: WhatsApp's own service chats (its announcements), not people.
+func Hidden(jid string) bool { return jid == "0@s.whatsapp.net" || strings.HasPrefix(jid, "status@") }
+
+// Known names for WhatsApp's own accounts.
+var Known = map[string]string{"13135550002@s.whatsapp.net": "Meta AI"}
 
 func contextInfo(msg *waE2E.Message) *waE2E.ContextInfo {
 	switch {

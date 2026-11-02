@@ -73,11 +73,11 @@ func TestWhatsAppReceiveEditRevoke(t *testing.T) {
 	stranger := "15550001111@s.whatsapp.net"
 	w.Receive(whatsapp.Message{ID: "N1", Chat: stranger, Sender: stranger, SenderName: "Courier", Text: "At your gate"})
 	sp, err := a.Store.Space(store.WhatsAppAccount, stranger)
-	if err != nil || sp.DisplayName != "Courier" || sp.Unread != 1 {
+	if err != nil || sp.DisplayName != "~Courier" || sp.Unread != 1 {
 		t.Fatalf("new chat: %+v %v", sp, err)
 	}
-	if name, _, _ := a.Store.User(store.WhatsAppAccount, stranger); name != "Courier" {
-		t.Fatalf("push name kept: %q", name)
+	if m, _ := a.Store.ChatMessages(store.WhatsAppAccount, stranger, 0); len(m) != 1 || m[0].SenderName != "~Courier" {
+		t.Fatalf("their own name, marked: %+v", m)
 	}
 	w.Receive(whatsapp.Message{ID: "N1", Chat: stranger, Sender: stranger, Text: "At your gate now", Edit: true})
 	m, _ := a.Store.ChatMessage(store.WhatsAppAccount, stranger+"/N1")

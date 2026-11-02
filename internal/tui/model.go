@@ -103,6 +103,7 @@ type Model struct {
 
 	mode          mode
 	input         []rune
+	back          int // the cursor's distance from the end of input
 	filter        string
 	ai            string
 	aiTitle       string
@@ -1124,8 +1125,14 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// a new line in a chat message: alt+enter or ctrl+j (enter sends)
+	if m.mode == modeChatMsg && (k.Type == tea.KeyEnter && k.Alt || k.Type == tea.KeyCtrlJ) {
+		m.insert('\n')
+		return m, nil
+	}
 	switch k.Type {
 	case tea.KeyEsc:
+		m.back = 0
 		m.replyTo, m.editingMsg, m.chatFiles = nil, "", nil
 		if m.mode == modeFilter {
 			m.filter = ""
@@ -1136,7 +1143,13 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		text := strings.TrimSpace(string(m.input))
 		md := m.mode
-		m.mode, m.input = modeNormal, nil
+		if md == modeChatMsg && text == "" && len(m.chatFiles) == 0 && m.editingMsg == "" {
+			return m, nil // nothing to send: keep typing
+		}
+		m.mode, m.input, m.back = modeNormal, nil, 0
+		if md == modeChatMsg && m.editingMsg == "" {
+			m.mode = modeChatMsg // sent: stay in the box for the next one
+		}
 		switch md {
 		case modeFilter:
 			m.filter = text
@@ -1209,22 +1222,67 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyBackspace:
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
-	case tea.KeyCtrlU:
-		m.input = nil
-	case tea.KeyCtrlW:
-		t := strings.TrimRight(string(m.input), " ")
-		if i := strings.LastIndex(t, " "); i >= 0 {
-			m.input = []rune(t[:i+1])
+		if k.Alt {
+			m.deleteWordBack()
 		} else {
-			m.input = nil
+			m.deleteBack()
+		}
+	case tea.KeyDelete:
+		m.deleteFwd()
+	case tea.KeyCtrlU:
+		m.input, m.back = nil, 0
+	case tea.KeyCtrlK:
+		m.input, m.back = m.input[:m.cursor()], 0
+	case tea.KeyCtrlW:
+		m.deleteWordBack()
+	case tea.KeyLeft, tea.KeyCtrlB:
+		if k.Alt {
+			m.setCursor(wordBack(m.input, m.cursor()))
+		} else {
+			m.setCursor(m.cursor() - 1)
+		}
+	case tea.KeyRight, tea.KeyCtrlF:
+		if k.Alt {
+			m.setCursor(wordFwd(m.input, m.cursor()))
+		} else {
+			m.setCursor(m.cursor() + 1)
+		}
+	case tea.KeyCtrlLeft:
+		m.setCursor(wordBack(m.input, m.cursor()))
+	case tea.KeyCtrlRight:
+		m.setCursor(wordFwd(m.input, m.cursor()))
+	case tea.KeyHome, tea.KeyCtrlA:
+		m.setCursor(lineStart(m.input, m.cursor()))
+	case tea.KeyEnd, tea.KeyCtrlE:
+		m.setCursor(lineEnd(m.input, m.cursor()))
+	case tea.KeyUp, tea.KeyDown:
+		if m.mode == modeChatMsg {
+			d := map[bool]int{true: -1, false: 1}[k.Type == tea.KeyUp]
+			m.moveLine(m.chatBoxWidth(m.previewInner())-1, d)
 		}
 	case tea.KeySpace:
-		m.input = append(m.input, ' ')
+		m.insert(' ')
 	case tea.KeyRunes:
-		m.input = append(m.input, k.Runes...)
+		r := k.Runes
+		if k.Alt && len(r) == 1 {
+			switch r[0] {
+			case 'b':
+				m.setCursor(wordBack(m.input, m.cursor()))
+				return m, nil
+			case 'f':
+				m.setCursor(wordFwd(m.input, m.cursor()))
+				return m, nil
+			}
+		}
+		if k.Paste {
+			// pasted text keeps its lines in a chat message, flattens elsewhere
+			txt := strings.ReplaceAll(strings.ReplaceAll(string(r), "\r\n", "\n"), "\r", "\n")
+			if m.mode != modeChatMsg {
+				txt = strings.Join(strings.Fields(txt), " ")
+			}
+			r = []rune(txt)
+		}
+		m.insert(r...)
 	}
 	if m.mode == modeFilter {
 		m.filter = string(m.input)

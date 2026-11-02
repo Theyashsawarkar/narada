@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/Theyashsawarkar/sandesh/internal/cli"
 	"github.com/Theyashsawarkar/sandesh/internal/mime"
@@ -154,7 +155,16 @@ func (m Model) avatar(name string) string {
 			ini = append(ini, r[1])
 		}
 	}
-	for len(ini) < 2 {
+	if t := strings.TrimSpace(name); t != "" && (t[0] == '+' || t[0] >= '0' && t[0] <= '9') {
+		ini = []rune{'#', ' '} // a phone number: no initials to show
+		if m.a.Config.NerdFont {
+			ini = []rune{'\uf095', ' '}
+		}
+	}
+	if len(ini) > 0 && runewidth.RuneWidth(ini[0]) > 1 {
+		ini = ini[:1] // an emoji fills both cells
+	}
+	for len(ini) < 2 && runewidth.StringWidth(string(ini)) < 2 {
 		ini = append(ini, ' ')
 	}
 	ac := m.styles.avatarColors()
@@ -822,9 +832,14 @@ func (m Model) previewBox(w, h int) string {
 	}
 	aiLines := m.aiLines(inner)
 	var bottom []string
-	if _, ok := m.curSpace(); ok {
+	if sp, ok := m.curSpace(); ok {
+		rows := max(1, min(8, (h-2)/3))
 		if m.mode == modeChatMsg {
-			bottom = []string{s.muted.Render(strings.Repeat("─", inner)), s.accent.Render("› ") + s.text.Render(string(m.input)) + s.accent.Render("▏")}
+			hint := s.muted.Render("enter sends · alt+enter new line · ctrl+o file · ctrl+t later · esc done")
+			if n := len([]rune(strings.TrimSpace(string(m.input)))); n > 0 {
+				hint += s.muted.Render(fmt.Sprintf(" · %d", n))
+			}
+			bottom = m.chatBoxLines(inner, rows, true, "Message "+cli.SpaceTitle(sp)+"…", hint)
 			var chips []string
 			if m.editingMsg != "" {
 				chips = append(chips, s.peach.Render("✎ editing your message")+s.muted.Render(" · enter saves · esc"))
@@ -836,7 +851,7 @@ func (m Model) previewBox(w, h int) string {
 				chips = append(chips, s.muted.Render("backspace drops the last file"))
 			}
 			if len(chips) > 0 {
-				bottom = append([]string{bottom[0], ansi.Truncate(strings.Join(chips, "  "), inner, "…")}, bottom[1:]...)
+				bottom = append([]string{ansi.Truncate(strings.Join(chips, "  "), inner, "…")}, bottom...)
 			}
 			if r := m.replyTo; r != nil {
 				who := r.SenderName
@@ -844,13 +859,14 @@ func (m Model) previewBox(w, h int) string {
 					who = "your message"
 				}
 				line := s.accent.Render("↩ replying to ") + s.bold.Render(who) + s.muted.Render(": "+oneLine(r.Text))
-				bottom = append([]string{bottom[0], ansi.Truncate(line, inner-12, "…") + s.muted.Render("  esc drops")}, bottom[1:]...)
+				bottom = append([]string{ansi.Truncate(line, inner-12, "…") + s.muted.Render("  esc drops")}, bottom...)
 			}
 		} else {
-			bottom = []string{s.muted.Render(strings.Repeat("─", inner)), s.accent.Render("› ") + s.muted.Render("i types a message here · c writes it in your editor · r replies in the thread")}
-			if m.a.ChatAppMissing.Load() {
-				bottom[1] = s.yellow.Render("! ") + s.muted.Render("read and unread stay on this machine until Chat API → Configuration is filled in (sandesh doctor)")
+			hint := s.muted.Render("i types here · c writes it in your editor · r replies")
+			if m.a.ChatAppMissing.Load() && !m.wa {
+				hint = s.yellow.Render("! ") + s.muted.Render("read and unread stay on this machine until Chat API → Configuration is filled in (sandesh doctor)")
 			}
+			bottom = m.chatBoxLines(inner, 1, false, "Message "+cli.SpaceTitle(sp)+"…  (i)", hint)
 		}
 	}
 	avail := h - 2 - len(aiLines) - len(bottom)
@@ -877,5 +893,5 @@ func (m Model) previewBox(w, h int) string {
 	for _, l := range bottom {
 		view = append(view, " "+l)
 	}
-	return m.box(w, h, title, strings.Join(view, "\n"), m.focus == 1 && m.mode == modeNormal, s.c.Accent)
+	return m.box(w, h, title, strings.Join(view, "\n"), m.focus == 1 && m.mode == modeNormal || m.mode == modeChatMsg, m.partColor())
 }

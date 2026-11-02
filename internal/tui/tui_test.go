@@ -90,6 +90,10 @@ func press(m Model, keys ...string) Model {
 			msg = tea.KeyMsg{Type: tea.KeyCtrlU}
 		case "backspace":
 			msg = tea.KeyMsg{Type: tea.KeyBackspace}
+		case "alt+b":
+			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b"), Alt: true}
+		case "end":
+			msg = tea.KeyMsg{Type: tea.KeyEnd}
 		default:
 			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 		}
@@ -463,8 +467,11 @@ func TestChatReplies(t *testing.T) {
 	if sent.Text != "here they are" || sent.Quoted != "spaces/dm-priya/messages/m-notes" {
 		t.Fatalf("sent: %+v", sent)
 	}
+	if m.mode != modeChatMsg || len(m.input) != 0 {
+		t.Fatalf("after sending: still typing, box empty (mode %v, %q)", m.mode, string(m.input))
+	}
 	// from the list, r replies to the latest message from someone else
-	m = press(m, "1", "r")
+	m = press(m, "esc", "1", "r")
 	if m.replyTo == nil || m.replyTo.Mine {
 		t.Fatalf("list reply target: %+v", m.replyTo)
 	}

@@ -105,7 +105,7 @@ func (m Model) View() string {
 	lw := m.listWidth()
 	pw := m.w - lw
 	bh := m.bodyHeight()
-	left := m.box(lw, bh, m.listTitle(), m.listView(lw-2, bh-2), m.focus == 0 && m.mode == modeNormal, m.styles.c.Accent)
+	left := m.box(lw, bh, m.listTitle(), m.listView(lw-2, bh-2), m.focus == 0 && m.mode == modeNormal, m.partColor())
 	// under a popup, draw what it was opened over
 	under := m.mode
 	switch {
@@ -173,61 +173,74 @@ func (m Model) tabLabel(name string, n int) string {
 
 func (m Model) tabsView() string {
 	s := m.styles
+	// the three places first, the one you're in filled in its colour;
+	// then that place's sections, the current one underlined
+	type place struct {
+		name, icon, color string
+		n                 int
+		on                bool
+	}
+	places := []place{
+		{"Mail", "󰇮", s.c.Accent, m.counts[m.sections[0].Name], m.tab == tabMail},
+		{"Chat", "󰭹", s.c.Accent2, m.chatN, m.tab == tabChat && !m.wa},
+	}
+	if m.waLinked {
+		places = append(places, place{"WhatsApp", "󰖣", s.c.Green, m.waN, m.wa})
+	}
 	var parts []string
+	for _, p := range places {
+		label := p.name
+		if s.nerd {
+			label = p.icon + " " + label
+		}
+		if p.n > 0 {
+			label += fmt.Sprintf(" %d", p.n)
+		}
+		if p.on {
+			pill := s.tabOn.Background(lipgloss.Color(p.color))
+			parts = append(parts, s.round(pill, label))
+		} else {
+			parts = append(parts, s.tabOff.Render(label))
+		}
+	}
+	parts = append(parts, s.muted.Render("│"))
+	col := lipgloss.NewStyle().Foreground(lipgloss.Color(m.partColor())).Bold(true).Underline(true).Padding(0, 1)
+	section := func(label string, on bool) {
+		if on {
+			parts = append(parts, col.Render(label))
+		} else {
+			parts = append(parts, s.tabOff.Render(label))
+		}
+	}
 	if m.tab == tabMail {
 		for i, sec := range m.sections {
 			label := sec.Name
 			if n := m.counts[sec.Name]; n > 0 {
 				label += fmt.Sprintf(" %d", n)
 			}
-			if i == m.sec && m.search == nil {
-				parts = append(parts, s.round(s.tabOn, label))
-			} else {
-				parts = append(parts, s.tabOff.Render(label))
-			}
+			section(label, i == m.sec && m.search == nil)
 		}
 		if m.search != nil {
-			parts = append(parts, s.round(s.tabOn, m.search.Name))
-		}
-		parts = append(parts, s.muted.Render("│"), s.tabOff.Render(m.tabLabel("Chat", m.chatN)))
-		if m.waLinked {
-			parts = append(parts, s.tabOff.Render(m.tabLabel("WhatsApp", m.waN)))
+			section(m.search.Name, true)
 		}
 	} else {
-		parts = append(parts, s.tabOff.Render(m.tabLabel("Mail", m.counts[m.sections[0].Name])))
-		if m.wa {
-			parts = append(parts, s.tabOff.Render(m.tabLabel("Chat", m.chatN)))
-		}
-		parts = append(parts, s.muted.Render("│"))
-		if m.wa {
-			parts = append(parts, s.accent2.Render("WhatsApp"))
-		}
 		unread := m.chatN
 		if m.wa {
 			unread = m.waN
 		}
 		for i, name := range chatSections {
 			label := name
-			if name == "All" && unread > 0 {
+			switch {
+			case name == "All" && unread > 0:
 				label += fmt.Sprintf(" %d", unread)
-			}
-			if name == "DMs" && m.wa {
+			case name == "DMs" && m.wa:
 				label = "People"
-			}
-			if name == "Spaces" && m.wa {
+			case name == "Spaces" && m.wa:
 				label = "Groups"
-			}
-			if name == "Scheduled" && m.chatScheduled > 0 {
+			case name == "Scheduled" && m.chatScheduled > 0:
 				label += fmt.Sprintf(" %d", m.chatScheduled)
 			}
-			if i == m.sec {
-				parts = append(parts, s.round(s.tabOn, label))
-			} else {
-				parts = append(parts, s.tabOff.Render(label))
-			}
-		}
-		if !m.wa && m.waLinked {
-			parts = append(parts, s.muted.Render("│"), s.tabOff.Render(m.tabLabel("WhatsApp", m.waN)))
+			section(label, i == m.sec)
 		}
 	}
 	left := " " + strings.Join(parts, " ")
@@ -424,7 +437,12 @@ func (m Model) inputView() string {
 	s := m.styles
 	prompt := map[mode]string{modeFilter: "/", modeAsk: "@claude ", modeSearch: "search gmail: ", modeSaveName: "section name (Enter: the search itself): ",
 		modeDraftHint: "draft a reply that says (Enter for Claude's pick): ", modeLink: fmt.Sprintf("open link (1-%d): ", len(m.links)), modeRename: m.renamePrompt()}[m.mode]
-	return " " + s.accent2.Bold(true).Render(prompt) + s.text.Render(string(m.input)) + s.accent.Render("▏")
+	cur := m.cursor()
+	under, rest := " ", ""
+	if cur < len(m.input) {
+		under, rest = string(m.input[cur]), string(m.input[cur+1:])
+	}
+	return " " + s.accent2.Bold(true).Render(prompt) + s.text.Render(string(m.input[:cur])) + lipgloss.NewStyle().Reverse(true).Render(under) + s.text.Render(rest)
 }
 
 func (m Model) footerView() string {
@@ -459,7 +477,7 @@ func (m Model) footerView() string {
 	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename:
 		keys = [][2]string{{"enter", "done"}, {"esc", "cancel"}, {"ctrl+u", "clear"}}
 	case modeChatMsg:
-		keys = [][2]string{{"enter", "send"}, {"ctrl+o", "file"}, {"ctrl+t", "send later"}, {"esc", "cancel"}, {"ctrl+u", "clear"}}
+		keys = [][2]string{{"enter", "send"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+t", "send later"}, {"↑↓", "lines"}, {"esc", "done"}}
 		if m.editingMsg != "" {
 			keys = [][2]string{{"enter", "save the edit"}, {"esc", "cancel"}}
 		}
@@ -503,4 +521,16 @@ func (m Model) nextTab() string {
 		return "whatsapp"
 	}
 	return "mail"
+}
+
+// partColor is the colour of the place you're in: Mail, Chat or
+// WhatsApp; its pill, the focused pane's border and the message box use it.
+func (m Model) partColor() string {
+	switch {
+	case m.tab == tabMail:
+		return m.styles.c.Accent
+	case m.wa:
+		return m.styles.c.Green
+	}
+	return m.styles.c.Accent2
 }

@@ -247,6 +247,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 	case e.State != "":
 		switch e.State {
 		case "connected":
+			_ = a.Store.RepairWhatsAppNames()
 			a.waMu.Lock()
 			if a.waReadyOnce != nil {
 				a.waReadyOnce.Do(func() { close(a.waReady) })
@@ -294,6 +295,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 	case len(e.Messages) > 0:
 		var put []store.ChatMessage
 		touched := map[string]int64{}
+		self := map[string]string{} // the name a stranger gave themselves, for their chat's title
 		for _, m := range e.Messages {
 			name := waName(m.Chat, m.ID)
 			switch {
@@ -306,7 +308,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 					continue
 				}
 			}
-			cm := store.ChatMessage{Account: acc, Name: name, Space: m.Chat, Sender: m.Sender, SenderName: a.waPerson(m.Sender, m.SenderName),
+			cm := store.ChatMessage{Account: acc, Name: name, Space: m.Chat, Sender: m.Sender, SenderName: a.waPerson(m.Chat, m.Sender, m.SenderName),
 				Text: m.Text, Created: m.Time.UnixMilli(), Edited: m.Edit}
 			if m.FromMe {
 				cm.Sender, cm.SenderName = wa.ChatUser, "You"
@@ -314,13 +316,11 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			if m.Quoted != "" {
 				cm.Quoted = waName(m.Chat, m.Quoted)
 			}
-			if m.SenderName != "" && !m.FromMe && !whatsapp.IsGroup(m.Sender) {
-				if _, _, known := a.Store.User(acc, m.Sender); !known {
-					_ = a.Store.PutUser(acc, m.Sender, m.SenderName, phoneOf(m.Sender))
-				}
-			}
 			put = append(put, cm)
 			touched[m.Chat] = max(touched[m.Chat], cm.Created)
+			if !m.FromMe && m.Sender == m.Chat && m.SenderName != "" {
+				self[m.Chat] = "~" + m.SenderName
+			}
 			if !e.History && !m.FromMe && a.Config.Notify && a.Store.FirstNotify(acc, name) {
 				title := a.waChatName(m.Chat, "")
 				if whatsapp.IsGroup(m.Chat) {
@@ -331,7 +331,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 		}
 		for chat, last := range touched {
 			if _, err := a.Store.Space(acc, chat); errors.Is(err, store.ErrNotFound) {
-				_ = a.Store.PutSpace(store.Space{Account: acc, Name: chat, DisplayName: a.waChatName(chat, ""), Type: waType(chat), LastActive: last})
+				_ = a.Store.PutSpace(store.Space{Account: acc, Name: chat, DisplayName: a.waChatName(chat, self[chat]), Type: waType(chat), LastActive: last})
 				if whatsapp.IsGroup(chat) {
 					go a.waGroupName(ctx, chat)
 				}
@@ -392,20 +392,37 @@ func phoneOf(jid string) string {
 
 // waChatName: the name to show for a chat: your contact's, else
 // WhatsApp's, else the phone number.
+// A name starting with ~ is the one people gave themselves (shown when
+// they aren't in your contacts, as WhatsApp does).
 func (a *App) waChatName(jid, given string) string {
+	if n, ok := whatsapp.Known[jid]; ok {
+		return n
+	}
 	if !whatsapp.IsGroup(jid) {
-		if name, _, ok := a.Store.User(store.WhatsAppAccount, jid); ok && name != "" {
+		if name, _, ok := a.Store.User(store.WhatsAppAccount, jid); ok && name != "" && (given == "" || !strings.HasPrefix(name, "~")) {
 			return name
 		}
 	}
 	return firstNonEmpty(given, phoneOf(jid))
 }
 
-func (a *App) waPerson(jid, pushName string) string {
-	if name, _, ok := a.Store.User(store.WhatsAppAccount, jid); ok && name != "" {
+// waPerson names a message's sender: your contact name; in a one-to-one
+// chat the chat's own name (it is them); else the name they gave
+// themselves, else their number.
+func (a *App) waPerson(chat, jid, pushName string) string {
+	name, _, _ := a.Store.User(store.WhatsAppAccount, jid)
+	if name != "" && !strings.HasPrefix(name, "~") {
 		return name
 	}
-	return firstNonEmpty(pushName, phoneOf(jid), jid)
+	if jid == chat {
+		if sp, err := a.Store.Space(store.WhatsAppAccount, chat); err == nil && sp.DisplayName != "" && !strings.HasPrefix(sp.DisplayName, "+") {
+			return sp.DisplayName
+		}
+	}
+	if pushName != "" {
+		return "~" + pushName
+	}
+	return firstNonEmpty(name, phoneOf(jid), jid)
 }
 
 // markWhatsAppRead sends read receipts for a chat's unread messages
