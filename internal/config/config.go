@@ -58,6 +58,10 @@ const (
 	PolicyConfirm       = "confirm"        // every agent send waits for your OK
 	PolicyKnownContacts = "known-contacts" // replies to people you've written to go straight out
 	PolicyAllow         = "allow"          // agent sends to known people go straight out
+	// PolicyTrust: agents send without asking, unless you told them to
+	// ask first (they pass ask_first); each send still waits
+	// agent_undo_seconds with a notification that can cancel it
+	PolicyTrust = "trust"
 )
 
 type Section struct {
@@ -87,6 +91,10 @@ type Colors struct {
 type Config struct {
 	SendPolicy  string `toml:"send_policy"`
 	UndoSeconds int    `toml:"undo_seconds"`
+	// AgentUndoSeconds: the least an agent's send waits before going out
+	// when it didn't ask you (chat included), so its notification can
+	// cancel it
+	AgentUndoSeconds int `toml:"agent_undo_seconds"`
 	// ChatUndoSeconds is the undo window for chat messages: none by
 	// default, chat should feel instant
 	ChatUndoSeconds int      `toml:"chat_undo_seconds"`
@@ -130,18 +138,19 @@ func (d duration) MarshalText() ([]byte, error) { return []byte(d.String()), nil
 
 func Default() Config {
 	return Config{
-		SendPolicy:      PolicyConfirm,
-		UndoSeconds:     10,
-		MailInterval:    duration{60 * time.Second},
-		ChatInterval:    duration{30 * time.Second},
-		InitialDays:     30,
-		Keep:            "none",
-		OlderPage:       10,
-		NerdFont:        true,
-		MaxThreads:      150,
-		Notify:          true,
-		AICommand:       []string{"claude", "-p"},
-		WhatsAppPerHour: 30,
+		SendPolicy:       PolicyConfirm,
+		UndoSeconds:      10,
+		AgentUndoSeconds: 10,
+		MailInterval:     duration{60 * time.Second},
+		ChatInterval:     duration{30 * time.Second},
+		InitialDays:      30,
+		Keep:             "none",
+		OlderPage:        10,
+		NerdFont:         true,
+		MaxThreads:       150,
+		Notify:           true,
+		AICommand:        []string{"claude", "-p"},
+		WhatsAppPerHour:  30,
 		Sections: []Section{
 			{Name: "Inbox", Label: "INBOX"},
 			{Name: "Today", Label: "INBOX", Today: true},
@@ -183,9 +192,12 @@ func Load(p Paths) (Config, error) {
 		}
 	}
 	switch c.SendPolicy {
-	case PolicyConfirm, PolicyKnownContacts, PolicyAllow:
+	case PolicyConfirm, PolicyKnownContacts, PolicyAllow, PolicyTrust:
 	default:
-		return c, fmt.Errorf("send_policy %q: use confirm, known-contacts or allow", c.SendPolicy)
+		return c, fmt.Errorf("send_policy %q: use confirm, known-contacts, allow or trust", c.SendPolicy)
+	}
+	if c.AgentUndoSeconds < 0 {
+		c.AgentUndoSeconds = 0
 	}
 	if c.ChatUndoSeconds < 0 {
 		c.ChatUndoSeconds = 0
@@ -242,8 +254,11 @@ const Example = `# ~/.config/sandesh/config.toml -- every line is optional.
 #   "confirm"        every send waits for your OK (default)
 #   "known-contacts" replies to people you've written to go straight out
 #   "allow"          sends to people you've written to go straight out
-# A recipient you've never written to always asks, whatever the policy.
+#   "trust"          agents send without asking, unless you told them to
+#                    ask you first; you get a notification with Cancel
+# Except with "trust", a recipient you've never written to always asks.
 send_policy = "confirm"
+agent_undo_seconds = 10  # an agent's send that didn't ask waits at least this long
 
 undo_seconds  = 10     # every mail waits this long; z (or Ctrl+c) cancels
 chat_undo_seconds = 0  # the same for chat messages (default: sent at once)

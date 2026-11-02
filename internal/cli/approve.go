@@ -15,6 +15,10 @@ import (
 
 // approve shows each send waiting for approval and asks y/e/n. It is what
 // the tmux popup runs when an agent wants to send.
+// ApproveScreen, when set (by main: the screen's package), shows the
+// sends waiting for approval; the plain prompt below is the fallback.
+var ApproveScreen func(*app.App, []store.OutboxItem) error
+
 func approve(a *app.App, args []string) error {
 	fs := flags("sandesh approve", "sandesh approve [id]\n\nAnswer the sends an agent asked for: y sends (after the undo window), e edits\nin your editor first, n declines, q leaves it waiting.")
 	pos, err := parse(fs, args)
@@ -44,6 +48,20 @@ func approve(a *app.App, args []string) error {
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return usageError("approve needs a terminal")
+	}
+	if ApproveScreen != nil {
+		var waiting []store.OutboxItem
+		for _, it := range items {
+			if it.Status == store.StatusApproval {
+				waiting = append(waiting, it)
+			} else {
+				fmt.Printf("#%d is %s, nothing to approve\n", it.ID, it.Status)
+			}
+		}
+		if len(waiting) == 0 {
+			return nil
+		}
+		return ApproveScreen(a, waiting)
 	}
 	for _, it := range items {
 		if it.Status != store.StatusApproval {

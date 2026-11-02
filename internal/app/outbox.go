@@ -83,6 +83,10 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 	if it.Status == "" {
 		it.Status = store.StatusQueued
 		it.SendAt = a.sendAt(kind, out)
+		if origin == OriginAgent {
+			// nobody looked at it: a moment to take it back
+			it.SendAt = max(it.SendAt, time.Now().Add(time.Duration(a.Config.AgentUndoSeconds)*time.Second).UnixMilli())
+		}
 	}
 	id, err := a.Store.AddOutbox(it)
 	if err != nil {
@@ -90,6 +94,9 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 	}
 	if origin == OriginAgent {
 		a.LogAgent("queue #%d %s %s status=%s %s", id, kind, describe(kind, out), it.Status, it.Reason)
+		if it.Status == store.StatusQueued {
+			go a.notifySending(id, kind, out, time.UnixMilli(it.SendAt))
+		}
 	}
 	return a.Store.OutboxItem(id)
 }
@@ -157,8 +164,14 @@ func firstNonEmpty(s ...string) string {
 // may go out). Recipients you have never written to always ask.
 func (a *App) needsApproval(account, kind string, out store.Outgoing) string {
 	policy := a.Config.SendPolicy
+	if out.AskFirst {
+		return "you asked to see it first"
+	}
+	if policy == config.PolicyTrust {
+		return ""
+	}
 	if kind == "whatsapp" {
-		return "WhatsApp messages from agents always ask"
+		return "WhatsApp messages from agents ask (send_policy trust lets them through)"
 	}
 	if policy == config.PolicyConfirm {
 		return "send_policy is confirm"
@@ -447,4 +460,37 @@ func Notify(title, body string) {
 		return
 	}
 	_ = exec.Command("notify-send", "-a", "sandesh", "-i", "mail-unread", title, body).Start()
+}
+
+// notifySending tells you an agent's send is about to go, with a Cancel
+// button (when notify-send can show one) good until it goes.
+func (a *App) notifySending(id int64, kind string, out store.Outgoing, at time.Time) {
+	if _, err := exec.LookPath("notify-send"); err != nil || os.Getenv("SANDESH_GOOGLE_URL") != "" { // none from tests and the demo
+		return
+	}
+	what := map[string]string{"mail": "a mail", "chat": "a chat message", "whatsapp": "a WhatsApp message"}[kind]
+	body := describe(kind, out)
+	if b := strings.TrimSpace(out.Body); b != "" {
+		r := []rune(strings.Join(strings.Fields(b), " "))
+		if len(r) > 140 {
+			r = append(r[:139], '…')
+		}
+		body += "\n" + string(r)
+	}
+	wait := max(time.Until(at), time.Second)
+	if out.ScheduledFor > 0 {
+		Notify("sandesh: an agent scheduled "+what, body+"\n"+fmt.Sprintf("Goes %s; sandesh outbox cancel %d stops it.", at.Format("Mon 15:04"), id))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "notify-send", "-a", "sandesh", "-i", "mail-send", "-t", fmt.Sprint(wait.Milliseconds()),
+		"-A", "cancel=Cancel", fmt.Sprintf("sandesh: sending %s in %ds", what, int(wait.Seconds()+0.5)), body)
+	b, _ := cmd.Output()
+	if strings.TrimSpace(string(b)) == "cancel" {
+		if err := a.Cancel(id); err == nil {
+			a.LogAgent("cancelled #%d from the notification", id)
+			Notify("sandesh: cancelled", "Nothing was sent.")
+		}
+	}
 }

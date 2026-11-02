@@ -232,3 +232,30 @@ func TestWhatsAppLinkKeepsHistoryAndLogoutFrees(t *testing.T) {
 		t.Fatalf("retry after logout: %q (lock still held?)", wa.LastError)
 	}
 }
+
+// send_policy trust: an agent's send goes without asking (after a
+// moment to cancel it), unless it was told to ask first.
+func TestTrustPolicy(t *testing.T) {
+	a, _ := setup(t)
+	a.Config.SendPolicy = "trust"
+	a.Config.AgentUndoSeconds = 5
+	a.Config.ChatUndoSeconds = 0
+	out := store.Outgoing{To: []string{"stranger@example.org"}, Subject: "hi", Body: "hello"}
+	it, err := a.Queue("work", "mail", out, OriginAgent)
+	if err != nil || it.Status != store.StatusQueued {
+		t.Fatalf("trusted agent mail to a stranger: %+v %v", it, err)
+	}
+	chat, _ := a.Queue("work", "chat", store.Outgoing{Space: "spaces/x", Body: "yo"}, OriginAgent)
+	if wait := time.Until(time.UnixMilli(chat.SendAt)); chat.Status != store.StatusQueued || wait < 4*time.Second {
+		t.Fatalf("an agent's chat message waits agent_undo_seconds: %s %v", chat.Status, wait)
+	}
+	out.AskFirst = true
+	if it, _ := a.Queue("work", "mail", out, OriginAgent); it.Status != store.StatusApproval || !strings.Contains(it.Reason, "asked") {
+		t.Fatalf("ask_first: %+v", it)
+	}
+	// yours are as before: no extra wait
+	mine, _ := a.Queue("work", "chat", store.Outgoing{Space: "spaces/x", Body: "yo"}, OriginYou)
+	if time.Until(time.UnixMilli(mine.SendAt)) > time.Second {
+		t.Fatal("your chat message waits")
+	}
+}
