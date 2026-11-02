@@ -73,18 +73,21 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 		}
 		row := gutter + fit(l, w+2)
 		if sel {
+			row = " " + fit(l, w+2) // the border takes the gutter's place
 			// keep each part's own colours (name capsules, badges) on a
 			// tint of the tab's colour
 			on := lipgloss.NewStyle().Background(lipgloss.Color(m.selFill()))
 			seq := strings.TrimSuffix(on.Render(" "), " \x1b[0m")
-			row = seq + strings.ReplaceAll(row, "\x1b[0m", "\x1b[0m"+seq) + on.Render(strings.Repeat(" ", max(0, w+3-ansi.StringWidth(row)))) + "\x1b[0m" // no bleed into the pane
+			row = seq + strings.ReplaceAll(row, "\x1b[0m", "\x1b[0m"+seq) + on.Render(strings.Repeat(" ", max(0, w+2-ansi.StringWidth(row)))) + "\x1b[0m" // no bleed into the pane
+			edge := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
+			row = edge.Render("│") + row + edge.Render("│")
 		}
 		out = append(out, row)
 	}
-	if sel && s.nerd {
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selFill()))
-		rw := ansi.StringWidth(out[0])                                          // as wide as the filled rows
-		return append(out, c.Render("▝"+strings.Repeat("▀", max(0, rw-2))+"▘")) // its rounded bottom
+	if sel {
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
+		rw := ansi.StringWidth(out[0])
+		return append(out, c.Render("╰"+strings.Repeat("─", max(0, rw-2))+"╯")) // the card's rounded bottom
 	}
 	return append(out, m.hairline(w))
 }
@@ -96,12 +99,27 @@ func (m Model) appendItem(out, lines []string, w int, border string, sel, dot bo
 	for _, l := range m.listItem(lines, w, border, sel, dot) {
 		out = append(out, " "+l)
 	}
-	if sel && m.panelList() && m.styles.nerd && start > 0 && out[start-1] == " "+m.hairline(w) {
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selFill()))
+	if sel && m.panelList() && start > 0 && (out[start-1] == " "+m.hairline(w) || strings.TrimSpace(ansi.Strip(out[start-1])) == "") {
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
 		rw := ansi.StringWidth(out[start]) - 1
-		out[start-1] = " " + c.Render("▗"+strings.Repeat("▄", max(0, rw-2))+"▖")
+		out[start-1] = " " + c.Render("╭"+strings.Repeat("─", max(0, rw-2))+"╮") // the card's rounded top
+	} else if sel && m.panelList() {
+		// first in the list or under a label: the top goes in a row of its own
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
+		rw := ansi.StringWidth(out[start]) - 1
+		top := " " + c.Render("╭"+strings.Repeat("─", max(0, rw-2))+"╮")
+		out = append(out[:start], append([]string{top}, out[start:]...)...)
 	}
 	return out
+}
+
+// selEdge is the picked card's border: the tab's colour, muted when the
+// focus is on the preview.
+func (m Model) selEdge() string {
+	if m.focus != 0 {
+		return m.styles.c.Muted
+	}
+	return m.partColor()
 }
 
 // selFill is the picked list row's background: a dark tint of the tab's
@@ -354,19 +372,18 @@ func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel 
 	return out
 }
 
-// rounded gives a filled block of width w round ends: a pill (Nerd Font
-// caps) when it's one line, else half-cell rounded corners above and below.
+// rounded frames a filled block of width w with a rounded border in its
+// colour (╭ ╮ ╰ ╯: the only corners a terminal draws round).
 func (m Model) rounded(block []string, bg string, w int) []string {
-	if !m.styles.nerd || len(block) == 0 {
+	if len(block) == 0 {
 		return block
 	}
 	c := lipgloss.NewStyle().Foreground(lipgloss.Color(bg))
-	if len(block) == 1 {
-		return []string{c.Render("\ue0b6") + block[0] + c.Render("\ue0b4")}
+	out := []string{c.Render("╭" + strings.Repeat("─", w) + "╮")}
+	for _, l := range block {
+		out = append(out, c.Render("│")+l+c.Render("│"))
 	}
-	top := c.Render("▗" + strings.Repeat("▄", max(0, w-2)) + "▖")
-	bottom := c.Render("▝" + strings.Repeat("▀", max(0, w-2)) + "▘")
-	return append(append([]string{top}, block...), bottom)
+	return append(out, c.Render("╰"+strings.Repeat("─", w)+"╯"))
 }
 
 // blend mixes two "#rrggbb" colours, t of the first.

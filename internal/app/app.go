@@ -20,7 +20,7 @@ import (
 	"github.com/Theyashsawarkar/sandesh/internal/store"
 )
 
-const Version = "0.4.1"
+const Version = "0.4.2"
 
 type App struct {
 	Paths  config.Paths

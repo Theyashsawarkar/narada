@@ -2,6 +2,12 @@
 
 Newest first.
 
+## v0.4.2 -- 2026-11-02
+
+- **Really rounded**: bubbles and the picked list row get rounded borders
+  (╭ ╮ ╰ ╯) in their colour; the half-block corners of v0.4.1 were too
+  small to read as round.
+
 ## v0.4.1 -- 2026-11-02
 
 - **Fixed: sending files on WhatsApp**: `U` said "files isn't on WhatsApp
