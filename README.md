@@ -307,10 +307,19 @@ right side previews the highlighted file: text with line numbers, an
 image's size (the picture itself with `chafa` installed), a PDF's first
 page (with `pdftotext`). `Tab` picks several, `Enter` adds them.
 
-**The conversation** is drawn as bubbles: theirs on the left under their
-name, yours on the right in the accent colour, a reply's quote inside its
-bubble, files (`v` opens one) and numbered links (`o` opens one) inside too, reactions as
-chips underneath and "(edited)" where a message was changed. A red **new**
+**The conversation** is drawn as filled bubbles, as on a phone: theirs on
+the left on the surface colour, their name once per run of messages, yours
+on the right in the accent colour, each with its time (and your ticks) at
+the bottom right inside it. A reply's quote sits inside its bubble, files
+(`v` opens one) and numbered links (`o` opens one) inside too, reactions as
+chips underneath and "(edited)" where a message was changed.
+
+**The lists** (mail, chat, WhatsApp) are rows on one panel, divided by
+hairlines, the picked one filled in the tab's colour; `list_style = "cards"`
+draws a box around each instead. **In a mail thread** read messages fold to
+one line each, and a run of four or more to a single "⋯ N earlier messages"
+line (`Enter` opens them all). **The message box** holds what you're
+replying to and the files you're sending inside its frame, above the text. A red **new**
 line marks where what you haven't read starts, and the chat opens there.
 The top line lists who's in it. The chat list is grouped (pinned, today,
 earlier); a chat that mentions you shows a peach `@N` badge.
@@ -610,7 +619,10 @@ is written by strangers. So:
   `trust` lifts all of that, unknown recipients and local files included:
   agents send without asking unless you told them to ask (`ask_first` on
   the tool, which they pass when you say "ask me first" or when they're
-  unsure). Each send still waits out a short undo window, with a
+  unsure). Agents also pass `why`, what you asked for in your words, and
+  the approval reads as one sentence: "Claude Code wants to send a mail to
+  priya@…", why it asks as a badge, your words quoted, and `y send in 10s`.
+  Each send still waits out a short undo window, with a
   notification that can cancel it. Mail an agent reads could try to talk it
   into sending, and under `trust` nothing stops that but the undo window,
   so choose it knowingly.
@@ -695,7 +707,7 @@ chat_interval = "30s"       # and Google Chat
 initial_days  = 30          # how far back the first sync goes
 max_threads   = 150         # at most this many threads on the first sync (older mail: search)
 notify        = true        # desktop notifications for new mail and DMs
-chat_list     = "compact" # chats in the list: compact (two rows each) or cards (a box each)
+list_style    = "panel"  # the lists: panel (rows, the picked one filled) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
 ai_command    = ["claude", "-p"]   # what @, S, D and T run

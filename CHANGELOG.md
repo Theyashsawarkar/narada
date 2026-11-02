@@ -2,6 +2,20 @@
 
 Newest first.
 
+## Unreleased
+
+- **Filled bubbles**: chat and WhatsApp messages are filled blocks, yours
+  in the accent colour, with the time and ticks inside; one name per run.
+- **One panel for the lists**: mail, chat and WhatsApp rows divided by
+  hairlines, the picked one filled in the tab's colour (`list_style`,
+  replacing `chat_list`; `chat_list = "cards"` still works).
+- **Mail threads fold**: read messages to one line, a long run to one line
+  in all.
+- **One frame for the message box**: the reply and the files go inside it.
+- **A clearer approval**: "Claude Code wants to send a mail to …", the
+  reason as a badge, the agent's own `why` (new on `mail_send`, `chat_send`
+  and `whatsapp_send`) and `y send in 10s`.
+
 ## v0.3.0 -- 2026-11-02
 
 - **Screenshots** in the README and on the website (from `sandesh demo`).

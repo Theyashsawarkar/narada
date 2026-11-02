@@ -113,8 +113,10 @@ type Config struct {
 	// where the terminal speaks them, else coloured blocks), "kitty",
 	// "blocks" or "off"
 	Images string `toml:"images"`
-	// ChatList: how the Chat and WhatsApp lists draw a chat: "compact"
-	// (two rows, many at once) or "cards" (a box each)
+	// ListStyle: how the lists draw an item: "panel" (rows on one panel,
+	// the picked one filled in the tab's colour) or "cards" (a box each)
+	ListStyle string `toml:"list_style"`
+	// ChatList: the old name, from v0.3.0 ("cards" still means cards)
 	ChatList string `toml:"chat_list"`
 	// NerdFont draws round avatars and icons with Nerd Font glyphs
 	NerdFont   bool `toml:"nerd_font"`
@@ -214,8 +216,11 @@ func Load(p Paths) (Config, error) {
 	if c.OlderPage <= 0 {
 		c.OlderPage = 10
 	}
-	if c.ChatList != "cards" {
-		c.ChatList = "compact"
+	if c.ListStyle == "" && c.ChatList == "cards" {
+		c.ListStyle = "cards"
+	}
+	if c.ListStyle != "cards" {
+		c.ListStyle = "panel"
 	}
 	if c.UndoSeconds < 0 {
 		c.UndoSeconds = 0
@@ -282,7 +287,7 @@ nerd_font     = true   # round avatars (needs a Nerd Font, as most terminal setu
 older_page    = 10     # how many older threads j at the end of a list loads (+ / - change it there)
 max_threads   = 150    # at most this many threads on the first sync (older mail: search)
 notify        = true   # desktop notification for new mail and DMs
-chat_list     = "compact" # chats in the list: compact (two rows each) or cards (a box each)
+list_style    = "panel"  # the lists: panel (rows, the picked one filled) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30 # at most this many WhatsApp sends an hour (a linked device that sends a lot risks the account)
 ai_command    = ["claude", "-p"]   # what @, S, D and T run

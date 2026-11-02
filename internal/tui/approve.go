@@ -154,16 +154,28 @@ func (m approver) View() string {
 	if !s.nerd {
 		icon = ""
 	}
-	pill := s.round(s.pill.Background(lipgloss.Color(color)), strings.TrimSpace(icon+" "+"An agent wants to send a "+name))
+	// one sentence: who wants to send what to whom, and why it asks
+	who := firstNonEmpty(out.Agent, "An agent")
+	to := firstNonEmpty(out.SpaceName, out.Space)
+	if !chatKind(it.Kind) {
+		to = strings.Join(out.To, ", ")
+	}
+	pill := s.round(s.pill.Background(lipgloss.Color(color)), strings.TrimSpace(icon+" "+name))
 	count := ""
 	if len(m.items) > 1 {
 		count = s.muted.Render(fmt.Sprintf("  %d of %d", m.i+1, len(m.items)))
 	}
 	head := pill + count
 	head += strings.Repeat(" ", max(1, w-lipgloss.Width(head)-6)) + s.muted.Render(fmt.Sprintf("#%d", it.ID))
-	lines := []string{head, ""}
+	sentence := lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true).Render(who) + s.text.Render(" wants to send a "+name+" to ") +
+		s.bold.Render(ansi.Truncate(to, max(10, w-lipgloss.Width(who)-len(name)-24), "…"))
+	lines := []string{head, "", sentence}
 	if it.Reason != "" {
-		lines = append(lines, s.muted.Render("asking because ")+s.peach.Render(it.Reason))
+		badge := lipgloss.NewStyle().Background(lipgloss.Color(s.c.Peach)).Foreground(lipgloss.Color(s.c.Base))
+		lines = append(lines, s.round(badge, it.Reason))
+	}
+	if out.Why != "" {
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render("▍")+s.sub.Italic(true).Render(" “"+ansi.Truncate(out.Why, w-8, "…")+"”"))
 	}
 	if m.out != nil {
 		lines = append(lines, s.yellow.Render("✎ edited by you: y sends your version"))
@@ -234,7 +246,11 @@ func (m approver) View() string {
 	case m.err != "":
 		lines = append(lines, "  "+s.red.Render("! "+m.err))
 	default:
-		keys := [][2]string{{"y", "send"}, {"e", "edit first"}, {"n", "decline"}, {"q", "later"}}
+		send := "send"
+		if u := int(m.a.UndoWindow(it.Kind).Seconds()); u > 0 && out.ScheduledFor == 0 {
+			send = fmt.Sprintf("send in %ds (z undoes)", u)
+		}
+		keys := [][2]string{{"y", send}, {"e", "edit first"}, {"n", "decline"}, {"q", "later"}}
 		if len(m.items) > 1 {
 			keys = append(keys, [2]string{"s", "skip"})
 		}

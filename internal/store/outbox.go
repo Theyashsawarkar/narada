@@ -43,6 +43,10 @@ type Outgoing struct {
 	ScheduledFor int64 `json:"scheduled_for,omitempty"`
 	// AskFirst: an agent's send the user said to show them first
 	AskFirst bool `json:"ask_first,omitempty"`
+	// an agent's send: who it is (its MCP client name) and what the user
+	// asked for, in their words; the approval shows both
+	Agent string `json:"agent,omitempty"`
+	Why   string `json:"why,omitempty"`
 }
 
 // File is an attachment to send: a private copy made when it was queued

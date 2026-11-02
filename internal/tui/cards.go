@@ -30,34 +30,63 @@ func (m Model) cardRows() int {
 	if m.tab == tabMail {
 		return mailCardRows
 	}
-	if m.compactChats() {
-		return 2
+	if m.panelList() {
+		if m.tab == tabMail {
+			return 4 // three lines and a hairline
+		}
+		return 3
 	}
 	return chatCardRows
 }
 
-// compactChats: the chat list draws each chat as two rows, not a box.
-func (m Model) compactChats() bool { return m.tab == tabChat && m.a.Config.ChatList != "cards" }
+// panelList: the lists draw items as rows on the pane (one panel), not a
+// box each.
+func (m Model) panelList() bool { return m.a.Config.ListStyle != "cards" }
 
-// listItem draws one entry of the list: a card (and the gap after it),
-// or, in the compact chat list, two rows with a bar by the selected one.
+// listLabels is how many rows the chat list's pinned / today / earlier
+// labels can take.
+func (m Model) listLabels() int {
+	if m.tab == tabChat {
+		return 3
+	}
+	return 0
+}
+
+// hairline divides the rows of the panel list.
+func (m Model) hairline(w int) string {
+	return " " + m.styles.muted.Faint(true).Render(strings.Repeat("─", w+3))
+}
+
+// listItem draws one entry of the list: a card (and the gap after it), or
+// on the panel, its rows and a hairline; the picked one is filled in the
+// tab's colour (dimmer while the focus is on the preview).
 func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []string {
-	if !m.compactChats() {
+	if !m.panelList() {
 		return append(m.cardBox(lines, w, border, sel, dot), "")
 	}
 	s := m.styles
 	var out []string
 	for i, l := range lines {
 		gutter := "  "
-		switch {
-		case sel:
-			gutter = fg(border).Bold(true).Render("▌") + " "
-		case dot && i == 0:
+		if dot && i == 0 {
 			gutter = s.accent.Bold(true).Render("●") + " "
 		}
-		out = append(out, gutter+fit(l, w+2))
+		row := gutter + fit(l, w+2)
+		if sel {
+			bg, fgc := m.partColor(), s.c.Base
+			if m.focus != 0 {
+				bg, fgc = s.c.Surface, s.c.Text
+			}
+			st := lipgloss.NewStyle().Background(lipgloss.Color(bg)).Foreground(lipgloss.Color(fgc))
+			if i == 0 {
+				st = st.Bold(true)
+			}
+			plain := ansi.Strip(row)
+			row = st.Render(plain + strings.Repeat(" ", max(0, w+4-ansi.StringWidth(plain))))
+		}
+		out = append(out, row)
 	}
-	return out
+	return append(out, m.hairline(w))
 }
 
 func fg(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(c)) }
@@ -218,6 +247,89 @@ func intersperse(xs []string, sep string) []string {
 	return out
 }
 
+// tickText is ticks as plain text, for inside a filled bubble.
+func (m Model) tickText(level int) string {
+	return map[int]string{1: " ✓", 2: " ✓✓", 3: " ✓✓"}[level]
+}
+
+// fillBubble draws a message as a filled block: yours in the accent colour
+// with dark text, theirs on the surface colour; the time (and your ticks)
+// sit at the bottom right inside it. raw lines (pictures) keep their own
+// colours. read colours your ticks blue, as on the phone.
+func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel bool, stamp string, read bool) []string {
+	s := m.styles
+	bg, fgc := s.c.Surface, s.c.Text
+	if mine {
+		bg, fgc = s.c.Accent2, s.c.Base
+	}
+	if sel {
+		bg, fgc = s.c.Accent, s.c.Base
+	}
+	iw := 0
+	for _, l := range lines {
+		iw = max(iw, ansi.StringWidth(l))
+	}
+	iw = max(iw, ansi.StringWidth(stamp))
+	if last := len(lines) - 1; !raw[last] {
+		// room for the time beside the last line, as on the phone
+		iw = max(iw, ansi.StringWidth(lines[last])+2+ansi.StringWidth(stamp))
+	}
+	iw = min(iw, maxW-2)
+	on := lipgloss.NewStyle().Background(lipgloss.Color(bg))
+	text := on.Foreground(lipgloss.Color(fgc))
+	dim := on.Foreground(lipgloss.Color(fgc)).Faint(true)
+	if !mine && !sel {
+		dim = on.Foreground(lipgloss.Color(s.c.Muted))
+	}
+	tickStyle := dim
+	if read {
+		tickStyle = on.Foreground(lipgloss.Color(s.c.Blue)).Bold(true)
+	}
+	// keep the background under styled text: every reset puts it back
+	bgSeq := strings.TrimSuffix(on.Render("x"), "x\x1b[0m")
+	if i := strings.Index(bgSeq, "x"); i >= 0 {
+		bgSeq = bgSeq[:i]
+	}
+	keep := func(l string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(l, "\x1b[0m", "\x1b[0m"+bgSeq), "\x1b[m", "\x1b[m"+bgSeq)
+	}
+	cell := func(l string, i int) string {
+		switch {
+		case raw[i]:
+		case mine || sel:
+			l = text.Render(ansi.Strip(l)) // dark on the accent: one colour reads best
+		default:
+			l = keep(l)
+		}
+		l = ansi.Truncate(l, iw, "…")
+		return on.Render(" ") + bgSeq + l + on.Render(strings.Repeat(" ", max(0, iw-ansi.StringWidth(l))+1))
+	}
+	stampCell := func(left int) string {
+		t := strings.TrimRight(stamp, " ✓")
+		ticks := strings.TrimPrefix(stamp, t)
+		return dim.Render(strings.Repeat(" ", max(0, left))+t) + tickStyle.Render(ticks)
+	}
+	var out []string
+	for i, l := range lines {
+		out = append(out, cell(l, i))
+	}
+	// the time on the last line if it fits there, else on its own line
+	sw := ansi.StringWidth(stamp)
+	last := len(lines) - 1
+	if lw := ansi.StringWidth(lines[last]); !raw[last] && lw+2+sw <= iw {
+		l := lines[last]
+		if mine || sel {
+			l = text.Render(ansi.Strip(l))
+		} else {
+			l = keep(l)
+		}
+		out[last] = on.Render(" ") + bgSeq + l + stampCell(iw-lw-sw) + on.Render(" ")
+	} else {
+		out = append(out, on.Render(" ")+stampCell(iw-sw)+on.Render(" "))
+	}
+	return out
+}
+
 // ticks is WhatsApp's mark for how far your message got: ✓ sent,
 // ✓✓ delivered, blue ✓✓ read.
 func (m Model) ticks(level int) string {
@@ -299,10 +411,7 @@ func (m *Model) listView(w, h int) string {
 	}
 	cw := w - 6 // card inner width: margins, borders and padding on both sides
 	var out []string
-	visible := max(1, (h-1)/m.cardRows())
-	if m.compactChats() {
-		visible = max(1, (h-4)/2) // room for the pinned / today / earlier labels
-	}
+	visible := max(1, (h-1-m.listLabels())/m.cardRows())
 	group := func(i int) string { // chat list: pinned, today, earlier
 		if m.tab != tabChat || i >= len(m.spaces) || strings.HasPrefix(m.spaces[i].Name, outboxPrefix) {
 			return ""
@@ -319,8 +428,8 @@ func (m *Model) listView(w, h int) string {
 	for i := m.offset; i < min(m.count(), m.offset+visible); i++ {
 		if g := group(i); g != "" && (i == m.offset || g != group(i-1)) {
 			label := " " + s.muted.Bold(true).Render(strings.ToUpper(g))
-			if len(out) > 0 && out[len(out)-1] == "" {
-				out[len(out)-1] = label // in the gap above the card
+			if n := len(out); n > 0 && (out[n-1] == "" || out[n-1] == m.hairline(cw)) {
+				out[n-1] = label // in the gap (or on the hairline) above it
 			} else {
 				out = append(out, label)
 			}
@@ -547,9 +656,12 @@ func (m *Model) mailLines(t store.Thread, w int) []string {
 
 	inner := w - 4
 	rs := m.renderStyles()
+	isOpen := func(i int) bool {
+		msg := m.msgs[i]
+		return i == len(m.msgs)-1 || m.expanded[msg.ID] || m.expandAll || has(msg.Labels, "UNREAD")
+	}
 	for i, msg := range m.msgs {
-		last := i == len(m.msgs)-1
-		open := last || m.expanded[msg.ID] || m.expandAll || has(msg.Labels, "UNREAD")
+		open := isOpen(i)
 		from := msg.FromName
 		if from == "" {
 			from = msg.FromAddr
@@ -558,10 +670,30 @@ func (m *Model) mailLines(t store.Thread, w int) []string {
 		head := row(m.avatar(from)+" "+s.bold.Render(from)+s.muted.Render(" <"+msg.FromAddr+">"), s.muted.Render(date), inner)
 		border := s.c.Border
 		if !open {
-			lines := []string{head, m.indent() + ansi.Truncate(s.muted.Render(oneLine(msg.Body)), inner-lipgloss.Width(m.indent()), "…")}
-			out = append(out, m.cardBox(lines, inner, border, false, false)...)
-			out = append(out, "")
+			// read messages fold to one line each; a long run of them to one
+			// line in all, as Gmail does (Enter opens every message)
+			start := i
+			for start > 0 && !isOpen(start-1) {
+				start--
+			}
+			end := i
+			for end+1 < len(m.msgs) && !isOpen(end+1) {
+				end++
+			}
+			if end-start >= 3 && i > start && i < end {
+				if i == start+1 {
+					out = append(out, s.muted.Render(fmt.Sprintf("   ⋯ %d earlier messages · Enter opens them", end-start-1)))
+				}
+				continue
+			}
+			short := time.UnixMilli(msg.Date).Format("02 Jan")
+			who := m.avatar(from) + " " + s.bold.Render(from) + "  "
+			snip := ansi.Truncate(s.muted.Render(oneLine(msg.Body)), max(8, inner-ansi.StringWidth(who)-ansi.StringWidth(short)-4), "…")
+			out = append(out, m.cardBox([]string{row(who+snip, s.muted.Render(short), inner)}, inner, border, false, false)...)
 			continue
+		}
+		if i > 0 && !isOpen(i-1) {
+			out = append(out, "")
 		}
 		var lines []string
 		lines = append(lines, head)
@@ -757,15 +889,14 @@ func (m *Model) chatLines(w int) []string {
 		ac := s.avatarColors()
 		color := ac[hash(name)%len(ac)]
 		out = append(out, "")
-		if c.Mine {
-			out = append(out, padLeft(s.muted.Render("You · "+t.Format("15:04"))+m.ticks(m.chatMsgs[j-1].Ticks), w))
-		} else {
-			out = append(out, m.avatar(name)+" "+fg(color).Bold(true).Render(name)+s.muted.Render(" · "+t.Format("15:04")))
+		if !c.Mine {
+			out = append(out, m.avatar(name)+" "+fg(color).Bold(true).Render(name))
 		}
 		for k, g := range m.chatMsgs[i:j] {
 			m.chatMsgLine[g.Name] = len(out)
 			sel := picking && i+k == m.chatSel
 			var lines []string
+			raw := map[int]bool{} // image lines: drawn as they are (their colour is the image)
 			if g.Quoted != "" {
 				who, what := "", "a message"
 				if q, ok := byName[g.Quoted]; ok {
@@ -781,7 +912,10 @@ func (m *Model) chatLines(w int) []string {
 			shown := map[int]bool{}
 			for fi, f := range g.Files {
 				if img := m.mediaLines(g.Account, g.Name, fi, f, bw-4); img != nil {
-					lines = append(lines, img...)
+					for _, l := range img {
+						raw[len(lines)] = true
+						lines = append(lines, l)
+					}
 					shown[fi] = true
 				}
 			}
@@ -818,14 +952,11 @@ func (m *Model) chatLines(w int) []string {
 			if len(lines) == 0 {
 				lines = []string{s.muted.Render("…")}
 			}
-			border := s.c.Border
+			stamp := time.UnixMilli(g.Created).Format("15:04")
 			if g.Mine {
-				border = s.c.Accent2
+				stamp += m.tickText(g.Ticks)
 			}
-			if sel || g.Name == m.flashMsg {
-				border = s.c.Accent
-			}
-			box := bubble(lines, bw, border, sel)
+			box := m.fillBubble(lines, raw, bw, g.Mine, sel || g.Name == m.flashMsg, stamp, g.Mine && g.Ticks == 3)
 			for _, l := range box {
 				if g.Mine {
 					out = append(out, padLeft(l, w))
@@ -1007,26 +1138,25 @@ func (m Model) previewBox(w, h int) string {
 	if sp, ok := m.curSpace(); ok {
 		rows := max(1, min(8, (h-2)/3))
 		if m.mode == modeChatMsg {
-			// the keys are in the bar below: no second hint here
-			bottom = m.chatBoxLines(inner, rows, true, "Message "+cli.SpaceTitle(sp)+"…", "")
-			var chips []string
-			if m.editingMsg != "" {
-				chips = append(chips, s.peach.Render("✎ editing your message")+s.muted.Render(" · enter saves · esc"))
-			}
-			if len(chips) > 0 {
-				bottom = append([]string{ansi.Truncate(strings.Join(chips, "  "), inner, "…")}, bottom...)
-			}
-			if len(m.chatFiles) > 0 {
-				bottom = append(m.attachedLines(inner), bottom...)
-			}
+			// one frame: what it replies to, the files, then the text (the
+			// keys are in the bar below: no second hint here)
+			var top []string
+			tw := m.chatBoxWidth(inner)
 			if r := m.replyTo; r != nil {
 				who := r.SenderName
 				if r.Mine {
 					who = "your message"
 				}
-				line := s.accent.Render("↩ replying to ") + s.bold.Render(who) + s.muted.Render(": "+oneLine(r.Text))
-				bottom = append([]string{ansi.Truncate(line, inner-12, "…") + s.muted.Render("  esc drops")}, bottom...)
+				line := s.accent.Render("▍↩ replying to ") + s.bold.Render(who) + s.muted.Render(": "+oneLine(r.Text))
+				top = append(top, ansi.Truncate(line, tw-10, "…")+s.muted.Render("  esc drops"))
 			}
+			if m.editingMsg != "" {
+				top = append(top, s.peach.Render("✎ editing your message")+s.muted.Render(" · enter saves · esc"))
+			}
+			if len(m.chatFiles) > 0 {
+				top = append(top, m.attachedLines(tw)...)
+			}
+			bottom = m.chatBoxLines(inner, rows, true, "Message "+cli.SpaceTitle(sp)+"…", "", top...)
 		} else {
 			hint := ""
 			if m.a.ChatAppMissing.Load() && !m.wa {

@@ -1072,10 +1072,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // fixView keeps the list offset and the preview scroll in range and
 // re-renders the preview, so what View draws and what the keys move agree.
 func (m *Model) fixView() {
-	visible := max(1, (m.bodyHeight()-3)/m.cardRows())
-	if m.compactChats() {
-		visible = max(1, (m.bodyHeight()-2-4)/2) // as the list draws it
-	}
+	visible := max(1, (m.bodyHeight()-3-m.listLabels())/m.cardRows()) // as the list draws it
 	if m.sel < m.offset {
 		m.offset = m.sel
 	}

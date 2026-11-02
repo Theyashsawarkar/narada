@@ -166,8 +166,10 @@ func (m *Model) moveLine(width, d int) bool {
 func (m Model) chatBoxWidth(inner int) int { return max(8, inner-4) }
 
 // chatBoxLines draws the message box: a rounded frame around the wrapped
-// text with the cursor, its placeholder when empty, and the hint line.
-func (m Model) chatBoxLines(inner, maxRows int, focused bool, placeholder, hint string) []string {
+// text with the cursor, its placeholder when empty, and the hint line;
+// top lines (a reply, files) go inside its frame above the text, divided
+// from it by a hairline.
+func (m Model) chatBoxLines(inner, maxRows int, focused bool, placeholder, hint string, top ...string) []string {
 	s := m.styles
 	tw := m.chatBoxWidth(inner)
 	border := s.muted
@@ -218,6 +220,9 @@ func (m Model) chatBoxLines(inner, maxRows int, focused bool, placeholder, hint 
 			}
 			hint = s.muted.Render(more+" ") + hint
 		}
+	}
+	if len(top) > 0 {
+		rows = append(append(top, s.muted.Faint(true).Render(strings.Repeat("╌", tw))), rows...)
 	}
 	out := []string{border.Render("╭" + strings.Repeat("─", tw+2) + "╮")}
 	for _, r := range rows {
