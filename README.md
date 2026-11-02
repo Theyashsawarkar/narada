@@ -173,8 +173,8 @@ sandesh doctor                         # checks all of it
 ## The screen
 
 <p align="center">
-  <img alt="A Google Chat conversation: your messages on the right, theirs on the left with a quoted reply and a reaction, and the message box at the bottom" src="assets/screenshots/chat.png" width="49%">
-  <img alt="The WhatsApp tab: the compact chat list, a photo shown inside the conversation, and blue read ticks on your message" src="assets/screenshots/whatsapp.png" width="49%">
+  <img alt="A Google Chat conversation in filled bubbles: yours on the right in the accent colour, theirs on the left with a quoted reply, a reaction and the time inside" src="assets/screenshots/chat.png" width="49%">
+  <img alt="The WhatsApp tab: the chat list on one panel with the picked chat filled green, filled message bubbles with a photo inside, and read ticks on your message" src="assets/screenshots/whatsapp.png" width="49%">
 </p>
 <p align="center"><sub>All screenshots use <code>sandesh demo</code>: made-up mail, chats and people.</sub></p>
 

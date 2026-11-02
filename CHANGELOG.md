@@ -2,7 +2,7 @@
 
 Newest first.
 
-## Unreleased
+## v0.4.0 -- 2026-11-02
 
 - **Filled bubbles**: chat and WhatsApp messages are filled blocks, yours
   in the accent colour, with the time and ticks inside; one name per run.

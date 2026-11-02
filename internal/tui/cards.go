@@ -258,7 +258,7 @@ func (m Model) tickText(level int) string {
 // colours. read colours your ticks blue, as on the phone.
 func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel bool, stamp string, read bool) []string {
 	s := m.styles
-	bg, fgc := s.c.Surface, s.c.Text
+	bg, fgc := s.c.Border, s.c.Text // the surface colour is too close to the background
 	if mine {
 		bg, fgc = s.c.Accent2, s.c.Base
 	}
@@ -277,9 +277,9 @@ func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel 
 	iw = min(iw, maxW-2)
 	on := lipgloss.NewStyle().Background(lipgloss.Color(bg))
 	text := on.Foreground(lipgloss.Color(fgc))
-	dim := on.Foreground(lipgloss.Color(fgc)).Faint(true)
+	dim := on.Foreground(lipgloss.Color(fgc)) // on the accent: the dark text colour reads best
 	if !mine && !sel {
-		dim = on.Foreground(lipgloss.Color(s.c.Muted))
+		dim = on.Foreground(lipgloss.Color(s.c.Subtle))
 	}
 	tickStyle := dim
 	if read {
