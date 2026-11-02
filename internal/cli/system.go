@@ -179,7 +179,9 @@ func daemon(a *app.App, args []string) error {
 			for _, sent := range a.DeliverDue(ctx) {
 				if sent.Status == store.StatusFailed {
 					log.Printf("send #%d failed: %s", sent.ID, sent.Error)
-					app.Notify("narada: send failed", sent.Error)
+					if a.Config.Notify {
+						app.Notify("narada: send failed", sent.Error)
+					}
 				}
 			}
 			select {

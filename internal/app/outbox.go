@@ -295,7 +295,7 @@ func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 			a.dropFiles(it.Out.Files)
 			if s := it.Out.ScheduledFor; s > 0 && time.Since(time.UnixMilli(s)) > 5*time.Minute {
 				// the computer was off (or asleep) at the time
-				Notify("narada: a scheduled message went out late",
+				a.notify("narada: a scheduled message went out late",
 					fmt.Sprintf("%s was due %s; sent now.", describe(it.Kind, it.Out), time.UnixMilli(s).Format("Mon 02 Jan 15:04")))
 			}
 		}
@@ -435,12 +435,13 @@ func (a *App) WaitFor(ctx context.Context, id int64, deliver bool, statuses ...s
 // AskApproval shows the approval prompt: a tmux popup when there is a
 // tmux server to show it on, and a desktop notification either way.
 func (a *App) AskApproval(it store.OutboxItem) {
-	what := describe(it.Kind, it.Out)
-	Notify("narada: approve a send?", "An agent wants to send "+it.Kind+" "+what+". Open narada (or run narada approve) to answer.")
+	if a.Config.Notify {
+		Notify("narada: approve a send?", "An agent wants to send "+it.Kind+" "+describe(it.Kind, it.Out)+". Open narada (or run narada approve) to answer.")
+	}
 	if os.Getenv("TMUX") == "" {
 		return
 	}
-	args := []string{"display-popup", "-E", "-w", "84%", "-h", "80%", "-T", " narada: approve send ",
+	args := []string{"display-popup", "-E", "-B", "-w", "84%", "-h", "80%",
 		fmt.Sprintf("%s approve %d", shellQuote(Executable()), it.ID)}
 	if pane := os.Getenv("TMUX_PANE"); pane != "" {
 		args = append(args[:1], append([]string{"-t", pane}, args[1:]...)...)
@@ -451,6 +452,13 @@ func (a *App) AskApproval(it store.OutboxItem) {
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// notify is Notify when you turned notifications on (notify = true).
+func (a *App) notify(title, body string) {
+	if a.Config.Notify {
+		Notify(title, body)
+	}
+}
 
 // Notify sends a desktop notification when notify-send exists.
 func Notify(title, body string) {
@@ -463,7 +471,7 @@ func Notify(title, body string) {
 // notifySending tells you an agent's send is about to go, with a Cancel
 // button (when notify-send can show one) good until it goes.
 func (a *App) notifySending(id int64, kind string, out store.Outgoing, at time.Time) {
-	if _, err := exec.LookPath("notify-send"); err != nil || os.Getenv("NARADA_GOOGLE_URL") != "" { // none from tests and the demo
+	if _, err := exec.LookPath("notify-send"); err != nil || !a.Config.Notify || os.Getenv("NARADA_GOOGLE_URL") != "" { // none from tests and the demo
 		return
 	}
 	what := map[string]string{"mail": "a mail", "chat": "a chat message", "whatsapp": "a WhatsApp message"}[kind]

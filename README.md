@@ -206,8 +206,9 @@ the right, keys at the bottom.
 - **Search**: `/` filters what's on screen as you type; `s` runs a Gmail
   search on the server and shows the result as a temporary section, `W`
   keeps it, `X` removes a kept one.
-- **Approvals**: when an agent wants to send, a banner says so; `A` shows
-  the message with `y` / `e` / `n`.
+- **AI requests**: an agent's sends queue in an "AI requests" section of Mail,
+  Chat and WhatsApp, counted on each place; `y`, `e` or `n` answer the one
+  you picked, on a card showing exactly what would go out. `A` goes there.
 
 ## Keys
 
@@ -280,7 +281,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `V` | Save the attachments to ~/Downloads/narada without opening them |
 | `U` | Send a file into this chat (Google Chat or WhatsApp; file picker with preview) |
 | `z` | Cancel the last change, or a send in its undo window (undo) |
-| `A` | Show the sends an agent is waiting on you to approve |
+| `A` | Go to the AI requests waiting for your approval |
 | `R` | Reload mail and chat from Google now (sync) |
 | `b` | Open the thread or space in the browser |
 | `y` | Copy the link to the thread or space |
@@ -424,7 +425,15 @@ whole mail there and back, or set `compose = "editor"`.
 | `-` | Remove the last file added to the message | |
 | `d` | Save the message as a Gmail draft instead of sending | |
 | `n` | Delete the message you wrote (discard) | Cancel the agent's message (decline; nothing is sent) |
+| `u` | | Undo your edit of the agent's message |
+| `s` | | Skip to the next message waiting (leaves this one waiting) |
+| `J` / `K` | | Scroll the details of the agent's message |
 | `q` | | Leave the agent's message waiting and go back |
+
+| `d` | | Toggle the changes marked in your edit of the agent's message |
+
+`Enter` never answers on the approve screen, and for the first moment after the popup opens `y` and
+`n` do nothing, so what you were typing can't answer it.
 
 ## Sending later
 
@@ -624,10 +633,13 @@ is written by strangers. So:
   agents send without asking unless you told them to ask (`ask_first` on
   the tool, which they pass when you say "ask me first" or when they're
   unsure). Agents also pass `why`, what you asked for in your words, and
-  the approval reads as one sentence: "Claude Code wants to send a mail to
-  priya@…", why it asks as a badge, your words quoted, and `y send in 10s`.
-  Each send still waits out a short undo window, with a
-  notification that can cancel it. Mail an agent reads could try to talk it
+  the approval reads as one sentence: "Claude Code wants to email Priya and
+  1 other", your words, then labels for what you mustn't miss (people outside
+  your company, a group, who's tagged, attachments). The details sit beside
+  the message exactly as it will arrive, tables included; an edit shows what
+  changed; the border turns orange when it reaches past your company.
+  Each send still waits out a short undo window (`narada outbox cancel`
+  or `z` stops it; with `notify = true`, a notification can too). Mail an agent reads could try to talk it
   into sending, and under `trust` nothing stops that but the undo window,
   so choose it knowingly.
 - **WhatsApp is capped**: at most `whatsapp_per_hour` (30) sends an hour,

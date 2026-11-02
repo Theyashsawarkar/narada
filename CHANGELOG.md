@@ -2,6 +2,33 @@
 
 Newest first.
 
+## v0.6.0 -- 2026-11-02
+
+- **A new approval screen.** One sentence says who wants to send what to
+  whom, then your own words, then labels for what you mustn't miss: people
+  outside your company (from your account's domain), a WhatsApp group, who's
+  tagged, attachments. Details on the left, the message on the right exactly
+  as it will arrive (an HTML mail's tables included). The border turns orange
+  when it reaches past your company. Small terminals stack the panes.
+- **After you edit**: your changes are marked line by line (`d` hides them),
+  `u` undoes the edit, and the action says "Send my version".
+- **Harder to answer by accident**: `Enter` no longer approves, and `y` and
+  `n` wait a moment after the popup opens, so what you were typing elsewhere
+  can't answer it.
+- Long recipient lists can be read in full (`J`/`K`), and the screen says so.
+- **AI requests**: an agent's sends now queue in their own section of Mail,
+  Chat and WhatsApp, each place counting its own ("Mail · 2 AI"). Pick one and
+  `y`, `e` or `n` answer it right there, on the same card; `A` goes to them.
+  This replaces the banner across the top of the screen.
+- **No notifications unless you ask**: `notify = false` (the default) now means
+  none at all. Before, it only silenced new mail: an agent's send, its cancel
+  button and failed sends still notified. Stop a send in its undo window with
+  `z` or `narada outbox cancel`.
+- Fixed: the mail list stopped at a few rows with space left below; it counted
+  rows for the old card style. It now fills the height.
+- Fixed: editing an agent's mail that had an HTML version sent the old HTML
+  beside your new text. An edited body now drops the HTML.
+
 ## v0.5.1 -- 2026-11-02
 
 - **Tag people on WhatsApp**: an `@` followed by a phone number with its

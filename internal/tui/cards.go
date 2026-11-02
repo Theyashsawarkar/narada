@@ -27,7 +27,7 @@ const (
 )
 
 func (m Model) cardRows() int {
-	if m.tab == tabMail {
+	if !m.panelList() && m.tab == tabMail {
 		return mailCardRows
 	}
 	if m.panelList() {
@@ -390,6 +390,8 @@ func (m *Model) listView(w, h int) string {
 		switch {
 		case m.tab == tabMail && m.currentSection().Label == "SCHEDULED":
 			msg = "Nothing scheduled. Ctrl+t in a mail sends it later."
+		case m.inAISection():
+			msg = "No AI requests waiting. When an agent asks to send, it queues here."
 		case m.tab == tabChat && chatSections[m.sec%len(chatSections)] == "Scheduled":
 			msg = "Nothing scheduled. Ctrl+t while typing a message (i) sends it later."
 		}
@@ -457,7 +459,7 @@ func (m *Model) listView(w, h int) string {
 					to = "→ # " + it.Out.SpaceName
 				}
 				hint := map[string]string{store.StatusQueued: "z cancels", store.StatusFailed: "R sends it again · ⏎ edits",
-					store.StatusApproval: "A answers it", store.StatusSending: "…"}[it.Status]
+					store.StatusApproval: "y send · e edit · n decline", store.StatusSending: "…"}[it.Status]
 				if it.Status == store.StatusQueued && it.Out.ScheduledFor > 0 {
 					hint = "t moves · ⏎ edits · z cancels"
 				}
@@ -535,7 +537,7 @@ func (m *Model) listView(w, h int) string {
 		out = m.appendItem(out, lines, cw, border, sel, dot)
 	}
 	// the end of a mail list: older mail comes from Gmail on demand
-	if m.tab == tabMail && m.offset+visible >= m.count() && !m.currentSection().Today && m.currentSection().Label != "SCHEDULED" {
+	if m.tab == tabMail && m.offset+visible >= m.count() && !m.currentSection().Today && m.currentSection().Label != "SCHEDULED" && !m.inAISection() {
 		sec := m.currentSection().Name
 		var hint string
 		switch {
@@ -570,8 +572,9 @@ func userLabels(labels []string) []string {
 
 // ---------------------------------------------------------------- preview
 
-func (m Model) renderStyles() render.Styles {
-	s := m.styles
+func (m Model) renderStyles() render.Styles { return renderStylesOf(m.styles) }
+
+func renderStylesOf(s styles) render.Styles {
 	return render.Styles{
 		Text: s.text, Bold: s.bold, Italic: s.text.Italic(true), Heading: fg(s.c.Accent).Bold(true),
 		Link: fg(s.c.Blue).Underline(true), Quote: s.muted, Muted: s.muted, Button: fg(s.c.Accent).Bold(true),

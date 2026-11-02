@@ -233,8 +233,14 @@ func (m Model) approveKey(s string) (tea.Model, tea.Cmd) {
 		m.mode = modeNormal
 		return m, nil
 	}
-	it := m.waiting[0]
+	it, _ := m.curWaiting()
 	switch s {
+	case "j", "down":
+		m.apScroll++
+		return m, nil
+	case "k", "up":
+		m.apScroll = max(0, m.apScroll-1)
+		return m, nil
 	case "y":
 		if err := m.a.Approve(it.ID, nil); err != nil {
 			m.err = err.Error()
@@ -265,7 +271,8 @@ func (m Model) approveKey(s string) (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
-	m.waiting, _ = m.a.Store.Outbox(store.StatusApproval)
+	m.apScroll = 0
+	m.reload()
 	if len(m.waiting) == 0 {
 		m.mode = modeNormal
 	}

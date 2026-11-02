@@ -264,7 +264,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			}
 		case "logged-out", "replaced", "banned":
 			_ = a.Store.SetError(acc, "WhatsApp: "+e.Err.Error())
-			Notify("narada: WhatsApp went offline", e.Err.Error())
+			a.notify("narada: WhatsApp went offline", e.Err.Error())
 			go a.StopWhatsApp()
 		}
 	case e.Contacts != nil:

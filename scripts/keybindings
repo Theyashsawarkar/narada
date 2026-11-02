@@ -58,7 +58,7 @@
 # keybind: Tmux/narada | V | Save the attachments to ~/Downloads/narada without opening them
 # keybind: Tmux/narada | U | Send a file into this chat (Google Chat or WhatsApp; file picker with preview)
 # keybind: Tmux/narada | z | Cancel the last change, or a send in its undo window (undo)
-# keybind: Tmux/narada | A | Show the sends an agent is waiting on you to approve
+# keybind: Tmux/narada | A | Go to the AI requests waiting for your approval
 # keybind: Tmux/narada | R | Reload mail and chat from Google now (sync)
 # keybind: Tmux/narada | b | Open the thread or space in the browser
 # keybind: Tmux/narada | y | Copy the link to the thread or space
@@ -98,6 +98,10 @@
 # keybind: Tmux/narada review | n | Delete the message you wrote (discard)
 # keybind: Tmux/narada approve | y | Send the message an agent wrote (after the undo window)
 # keybind: Tmux/narada approve | e | Edit the agent's message in your editor first
+# keybind: Tmux/narada approve | u | Undo your edit of the agent's message
+# keybind: Tmux/narada approve | d | Toggle the changes marked in your edit of the agent's message
+# keybind: Tmux/narada approve | s | Skip to the next message waiting (leaves this one waiting)
+# keybind: Tmux/narada approve | J / K | Scroll the details of the agent's message
 # keybind: Tmux/narada approve | n | Cancel the agent's message (decline; nothing is sent)
 # keybind: Tmux/narada approve | q | Leave the agent's message waiting and go back
 # keybind: Tmux/narada setup | Tab | Switch to the next path completion (Enter on a folder opens it)

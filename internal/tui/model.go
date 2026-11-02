@@ -50,7 +50,73 @@ const (
 	tabChat
 )
 
-var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled"}
+var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled", aiSection}
+
+// aiSection is where an agent's sends wait for your answer, in mail, chat
+// and WhatsApp alike.
+const (
+	aiSection = "AI requests"
+	aiLabel   = "AGENT" // not a Gmail label: narada's outbox
+)
+
+// sectionsWithAI: your mail sections, then the AI requests.
+func sectionsWithAI(secs []config.Section) []config.Section {
+	return append(secs, config.Section{Name: aiSection, Label: aiLabel})
+}
+
+// inAISection: the list is the AI requests of this place.
+func (m Model) inAISection() bool {
+	if m.tab == tabMail {
+		return m.search == nil && m.currentSection().Label == aiLabel
+	}
+	return chatSections[m.sec%len(chatSections)] == aiSection
+}
+
+// aiKind is what the current place's AI requests are.
+func (m Model) aiKind() string {
+	switch {
+	case m.tab == tabMail:
+		return "mail"
+	case m.wa:
+		return "whatsapp"
+	}
+	return "chat"
+}
+
+// waitingOf: the AI requests of one kind, oldest first.
+func (m Model) waitingOf(kind string) []store.OutboxItem {
+	var out []store.OutboxItem
+	for _, it := range m.waiting {
+		if it.Kind == kind {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// curWaiting is the request being answered: the one you picked, else the
+// oldest. By id, so a refresh can't swap it for another under your eyes.
+func (m Model) curWaiting() (store.OutboxItem, bool) {
+	for _, it := range m.waiting {
+		if it.ID == m.apID {
+			return it, true
+		}
+	}
+	if len(m.waiting) > 0 {
+		return m.waiting[0], true
+	}
+	return store.OutboxItem{}, false
+}
+
+// aiCard draws a request with the approval screen's card.
+func (m Model) aiCard(it store.OutboxItem, w, h int) string {
+	same := m.waitingOf(it.Kind)
+	i := slices.IndexFunc(same, func(x store.OutboxItem) bool { return x.ID == it.ID })
+	if i < 0 {
+		same, i = []store.OutboxItem{it}, 0
+	}
+	return approver{a: m.a, styles: m.styles, items: same, i: i, w: w, h: h, diff: true, scroll: m.apScroll, inline: true}.View()
+}
 
 type undo struct {
 	what     string // archive, trash, read, unread, star, unstar, send
@@ -84,6 +150,8 @@ type Model struct {
 	spaces    []store.Space
 	counts    map[string]int // unread per mail section
 	chatN     int
+	apID      int64 // the AI request being answered
+	apScroll  int
 	waN       int     // WhatsApp chats with unread messages
 	waLinked  bool    // WhatsApp is linked (else its tab is the link panel)
 	waLinking *waLink // linking WhatsApp, from its tab
@@ -162,7 +230,7 @@ type Model struct {
 func New(a *app.App, launch string) Model {
 	m := Model{a: a, launch: launch, styles: newStyles(a.Config.Colors, a.Config.NerdFont), acct: -1, selected: map[string]bool{}, counts: map[string]int{}, noOlder: map[string]bool{}, olderN: a.Config.OlderPage,
 		expanded: map[string]bool{}}
-	m.sections = a.Sections()
+	m.sections = sectionsWithAI(a.Sections())
 	m.accounts = a.AccountNames()
 	// narada --tab chat (a status bar's chat capsule) opens on chat
 	_, m.waLinked = a.Store.WhatsApp()
@@ -277,6 +345,7 @@ func (m *Model) currentSection() config.Section {
 func (m *Model) reload() {
 	keep := m.curKey
 	accs := m.accountFilter()
+	m.waiting, _ = m.a.Store.Outbox(store.StatusApproval)
 	if m.search == nil {
 		for _, s := range m.sections {
 			ts, _ := m.a.SectionThreads(s, accs)
@@ -289,6 +358,9 @@ func (m *Model) reload() {
 			m.counts[s.Name] = n
 			if s.Label == "SCHEDULED" {
 				m.counts[s.Name] = len(m.outboxItems(accs, "mail", true))
+			}
+			if s.Label == aiLabel {
+				m.counts[s.Name] = len(m.waitingOf("mail"))
 			}
 		}
 	}
@@ -326,6 +398,9 @@ func (m *Model) reload() {
 		if m.search == nil && m.currentSection().Label == "SCHEDULED" {
 			ts = m.outboxThreads(m.outboxItems(accs, "mail", true))
 		}
+		if m.inAISection() {
+			ts = m.outboxThreads(m.waitingOf("mail"))
+		}
 		if m.search == nil && m.currentSection().Label == "SENT" {
 			ts = append(m.outboxThreads(m.outboxItems(accs, "mail", false)), ts...)
 			m.sentStat = map[string]store.SentStatus{}
@@ -340,14 +415,18 @@ func (m *Model) reload() {
 			}
 		}
 		m.threads = ts
-	} else if chatSections[m.sec%len(chatSections)] == "Scheduled" {
+	} else if name := chatSections[m.sec%len(chatSections)]; name == "Scheduled" || name == aiSection {
+		items := m.outboxItems(m.spaceAccounts(), "chat", true)
+		if name == aiSection {
+			items = m.waitingOf(m.aiKind())
+		}
 		m.outboxRows = map[string]store.OutboxItem{}
 		types := map[string]string{}
 		for _, s := range sps {
 			types[s.Account+"/"+s.Name] = s.Type
 		}
 		var out []store.Space
-		for _, it := range m.outboxItems(m.spaceAccounts(), "chat", true) {
+		for _, it := range items {
 			id := fmt.Sprintf("%s%d", outboxPrefix, it.ID)
 			m.outboxRows[id] = it
 			out = append(out, store.Space{Account: it.Account, Name: id, DisplayName: it.Out.SpaceName, Type: types[it.Account+"/"+it.Out.Space],
@@ -478,7 +557,7 @@ type olderMsg struct {
 // loadOlderCmd fetches the next older batch of the section from Gmail.
 func (m *Model) loadOlderCmd() tea.Cmd {
 	sec := m.currentSection()
-	if m.loadingOlder || m.noOlder[sec.Name] || sec.Today || sec.Label == "SCHEDULED" {
+	if m.loadingOlder || m.noOlder[sec.Name] || sec.Today || sec.Label == "SCHEDULED" || sec.Label == aiLabel {
 		return nil
 	}
 	oldest := map[string]int64{}
@@ -1248,7 +1327,7 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.err = err.Error()
 					return m, nil
 				}
-				m.sections = m.a.Sections()
+				m.sections = sectionsWithAI(m.a.Sections())
 				m.sec = len(m.sections) - 1
 				m.search = nil
 				m.say("saved as " + text)
@@ -1375,8 +1454,27 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// goToAI opens the AI requests of a kind in its place.
+func (m *Model) goToAI(kind string) {
+	m.tab, m.wa, m.sel, m.offset, m.focus = tabChat, kind == "whatsapp", 0, 0, 0
+	m.sec = slices.Index(chatSections, aiSection)
+	if kind == "mail" {
+		m.tab, m.search = tabMail, nil
+		m.sec = slices.IndexFunc(m.sections, func(s config.Section) bool { return s.Label == aiLabel })
+	}
+	m.reload()
+}
+
 func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 	page := max(1, m.previewHeight()/2)
+	// on an AI request, the approval keys answer it
+	if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() {
+		switch s {
+		case "y", "n", "e":
+			m.apID = it.ID
+			return m.approveKey(s)
+		}
+	}
 	if m.tab == tabChat && m.wa && !m.waLinked {
 		if mm, cmd, ok := m.linkKey(s); ok {
 			return mm, cmd
@@ -1523,7 +1621,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 			// a mail or message still waiting: open it to change it
 			switch it.Status {
 			case store.StatusApproval:
-				m.mode = modeApprove
+				m.apID, m.apScroll, m.mode = it.ID, 0, modeApprove
 				return m, nil
 			case store.StatusQueued, store.StatusFailed:
 				if chatKind(it.Kind) {
@@ -1568,7 +1666,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		if m.tab == tabMail && m.search == nil {
 			name := m.currentSection().Name
 			if m.a.RemoveSearch(name) {
-				m.sections = m.a.Sections()
+				m.sections = sectionsWithAI(m.a.Sections())
 				m.sec = 0
 				m.say("removed section " + name)
 				m.reload()
@@ -1812,9 +1910,9 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		return m, m.pickFiles("chat")
 	case "A":
 		if len(m.waiting) > 0 {
-			m.mode = modeApprove
+			m.goToAI(m.waiting[0].Kind)
 		} else {
-			m.say("nothing waiting for approval")
+			m.say("no AI requests waiting")
 		}
 	case "b":
 		if u := m.link(); u != "" {

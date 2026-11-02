@@ -74,9 +74,6 @@ func (m Model) listWidth() int { return max(30, m.w*42/100) }
 
 func (m Model) bodyHeight() int {
 	h := m.h - 2 // tabs + footer
-	if len(m.waiting) > 0 && m.mode != modeApprove {
-		h--
-	}
 	if m.err != "" {
 		h--
 	}
@@ -121,8 +118,16 @@ func (m Model) View() string {
 	case modeReview:
 		right = m.box(pw, bh, "review: y send · e edit · + file · d draft · n discard", m.reviewView(pw-4, bh-2), true, m.styles.c.Accent2)
 	case modeApprove:
-		right = m.box(pw, bh, "an agent wants to send: y send · e edit · n decline · q later", m.approveView(pw-4, bh-2), true, m.styles.c.Peach)
+		if it, ok := m.curWaiting(); ok {
+			right = m.aiCard(it, pw, bh)
+		} else {
+			right = m.previewBox(pw, bh)
+		}
 	default:
+		if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() {
+			right = m.aiCard(it, pw, bh)
+			break
+		}
 		right = m.previewBox(pw, bh)
 	}
 	if m.mode == modeView && m.viewer != nil {
@@ -153,9 +158,6 @@ func (m Model) View() string {
 		box := m.pickerPopup()
 		rows[len(rows)-1] = overlayAt(rows[len(rows)-1], box, m.w, max(0, (bh-len(box))/2))
 	}
-	if len(m.waiting) > 0 && m.mode != modeApprove {
-		rows = append(rows, m.styles.round(m.styles.banner, fmt.Sprintf("󰀦 %d send(s) from an agent wait for your approval · press A", len(m.waiting))))
-	}
 	if m.err != "" {
 		e := m.styles.red.Render("● " + m.err)
 		rows = append(rows, " "+ansi.Truncate(e, m.w-14, "…")+m.styles.muted.Render("  esc hides"))
@@ -181,14 +183,14 @@ func (m Model) tabsView() string {
 	// then that place's sections, the current one underlined
 	type place struct {
 		name, icon, color string
-		n                 int
+		n, ai             int
 		on                bool
 	}
 	places := []place{
-		{"Mail", "󰇮", s.c.Accent, m.counts[m.sections[0].Name], m.tab == tabMail},
-		{"Chat", "󰭹", s.c.Accent2, m.chatN, m.tab == tabChat && !m.wa},
+		{"Mail", "󰇮", s.c.Accent, m.counts[m.sections[0].Name], len(m.waitingOf("mail")), m.tab == tabMail},
+		{"Chat", "󰭹", s.c.Accent2, m.chatN, len(m.waitingOf("chat")), m.tab == tabChat && !m.wa},
 	}
-	places = append(places, place{"WhatsApp", "󰖣", s.c.Green, m.waN, m.wa})
+	places = append(places, place{"WhatsApp", "󰖣", s.c.Green, m.waN, len(m.waitingOf("whatsapp")), m.wa})
 	var parts []string
 	for _, p := range places {
 		label := p.name
@@ -197,6 +199,9 @@ func (m Model) tabsView() string {
 		}
 		if p.n > 0 {
 			label += fmt.Sprintf(" %d", p.n)
+		}
+		if p.ai > 0 {
+			label += fmt.Sprintf(" · %d AI", p.ai)
 		}
 		if p.on {
 			pill := s.tabOn.Background(lipgloss.Color(p.color))
@@ -244,6 +249,10 @@ func (m Model) tabsView() string {
 				label = "Groups"
 			case name == "Scheduled" && m.chatScheduled > 0:
 				label += fmt.Sprintf(" %d", m.chatScheduled)
+			case name == aiSection:
+				if n := len(m.waitingOf(m.aiKind())); n > 0 {
+					label += fmt.Sprintf(" %d", n)
+				}
 			}
 			section(label, i == m.sec)
 		}
@@ -366,18 +375,6 @@ func (m Model) reviewView(w, h int) string {
 		return ""
 	}
 	return m.outgoingView(r.kind, r.out, "", w)
-}
-
-func (m Model) approveView(w, h int) string {
-	if len(m.waiting) == 0 {
-		return ""
-	}
-	it := m.waiting[0]
-	head := ""
-	if len(m.waiting) > 1 {
-		head = fmt.Sprintf("1 of %d · ", len(m.waiting))
-	}
-	return m.outgoingView(it.Kind, it.Out, head+"asked because "+it.Reason, w)
 }
 
 func (m Model) outgoingView(kind string, out store.Outgoing, note string, w int) string {
