@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"github.com/Theyashsawarkar/sandesh/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/app"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,10 +14,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
-	"github.com/Theyashsawarkar/sandesh/internal/cli"
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
-	"github.com/Theyashsawarkar/sandesh/internal/render"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/cli"
+	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/render"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // Card heights: a mail card is 5 rows, a chat card 4, plus a blank row.
@@ -1144,7 +1144,7 @@ func (m Model) previewBox(w, h int) string {
 		} else {
 			hint := ""
 			if m.a.ChatAppMissing.Load() && !m.wa {
-				hint = s.yellow.Render("! ") + s.muted.Render("read and unread stay on this machine until Chat API → Configuration is filled in (sandesh doctor)")
+				hint = s.yellow.Render("! ") + s.muted.Render("read and unread stay on this machine until Chat API → Configuration is filled in (narada doctor)")
 			}
 			bottom = m.chatBoxLines(inner, 1, false, "Message "+cli.SpaceTitle(sp)+"…  (i)", hint)
 		}

@@ -10,11 +10,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/cli"
-	"github.com/Theyashsawarkar/sandesh/internal/fake"
-	"github.com/Theyashsawarkar/sandesh/internal/mcpserver"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/cli"
+	"github.com/Theyashsawarkar/narada/internal/fake"
+	"github.com/Theyashsawarkar/narada/internal/mcpserver"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 func session(t *testing.T) (*app.App, *fake.Server, *mcp.ClientSession) {
@@ -23,8 +23,8 @@ func session(t *testing.T) (*app.App, *fake.Server, *mcp.ClientSession) {
 	g.Seed()
 	srv := httptest.NewServer(g)
 	t.Cleanup(srv.Close)
-	t.Setenv("SANDESH_GOOGLE_URL", srv.URL)
-	t.Setenv("SANDESH_HOME", t.TempDir())
+	t.Setenv("NARADA_GOOGLE_URL", srv.URL)
+	t.Setenv("NARADA_HOME", t.TempDir())
 	t.Setenv("TMUX", "") // no popups from tests
 	a, err := app.Open()
 	if err != nil {
@@ -100,7 +100,7 @@ func TestTools(t *testing.T) {
 	}
 	// downloads land only inside the downloads folder, whatever is asked
 	dl := t.TempDir()
-	t.Setenv("SANDESH_DOWNLOADS", dl)
+	t.Setenv("NARADA_DOWNLOADS", dl)
 	out = call(t, cs, "attachment_save", map[string]any{"thread_id": "t-hr", "subfolder": "../../etc"})
 	if !strings.Contains(out, filepath.Join(dl, "etc", "holidays-2027.csv")) || !strings.Contains(out, "untrusted") {
 		t.Fatalf("attachment_save: %s", out)

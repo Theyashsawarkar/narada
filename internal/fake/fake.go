@@ -1,6 +1,6 @@
 // Package fake is a small in-memory Google: just enough Gmail, Chat and
-// People API for the tests and for `sandesh demo`. Point sandesh at it
-// with SANDESH_GOOGLE_URL.
+// People API for the tests and for `narada demo`. Point narada at it
+// with NARADA_GOOGLE_URL.
 package fake
 
 import (
@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/mime"
 )
 
 type Message struct {
@@ -735,7 +735,7 @@ func without(l []string, x string) []string {
 }
 
 // Seed fills the server with the example mail and chat used by the tests
-// and `sandesh demo`. The people are made up.
+// and `narada demo`. The people are made up.
 func (s *Server) Seed() {
 	now := time.Now()
 	// today's examples at their clock times once the day is past 10:00;

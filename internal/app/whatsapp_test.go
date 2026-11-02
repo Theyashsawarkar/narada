@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/fake"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
-	"github.com/Theyashsawarkar/sandesh/internal/whatsapp"
+	"github.com/Theyashsawarkar/narada/internal/fake"
+	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 func setupWhatsApp(t *testing.T) (*App, *fake.WhatsApp) {
@@ -21,7 +21,7 @@ func setupWhatsApp(t *testing.T) (*App, *fake.WhatsApp) {
 	w := fake.NewWhatsApp()
 	w.SeedWhatsApp()
 	c, _ := w.Conn(context.Background())
-	_ = c.Logout(context.Background()) // seeded linked; link it through sandesh
+	_ = c.Logout(context.Background()) // seeded linked; link it through narada
 	a.DialWhatsApp = func(ctx context.Context) (WhatsAppConn, error) { return w.Conn(ctx) }
 	var shown string
 	if err := a.LinkWhatsApp(context.Background(), "", func(qr, code string) { shown = qr }, nil); err != nil {

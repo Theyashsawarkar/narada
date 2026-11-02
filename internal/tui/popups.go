@@ -22,7 +22,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/app"
 )
 
 // Floating windows over the screen: every key (?) and the file picker.

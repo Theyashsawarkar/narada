@@ -18,10 +18,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/cli"
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/cli"
+	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // The compose screen. A new mail takes the whole width; a reply keeps the

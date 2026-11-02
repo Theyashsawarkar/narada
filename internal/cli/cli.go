@@ -1,4 +1,4 @@
-// Package cli is the `sandesh` command line: every subcommand, its
+// Package cli is the `narada` command line: every subcommand, its
 // --help, and the plain and --json output.
 package cli
 
@@ -18,40 +18,40 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/config"
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
-const usage = `sandesh -- Gmail, Google Chat and WhatsApp in the terminal
+const usage = `narada -- Gmail, Google Chat and WhatsApp in the terminal
 
 Usage:
-  sandesh                          open the screen (--tab chat|whatsapp: on that tab)
-  sandesh mail list [flags]        threads (--today --unread --section NAME --json)
-  sandesh mail read <thread>       a whole thread as text (--json, --mark-read)
-  sandesh mail search <query>      Gmail search (--local: the local copy only)
-  sandesh mail send [flags]        send mail (--to --cc --subject --reply THREAD; body on stdin or $EDITOR)
-  sandesh mail archive|unarchive|trash|untrash|mark-read|unread|star|unstar <thread>...
-  sandesh chat list                spaces and DMs with unread counts (--json)
-  sandesh chat read <space>        a space's recent messages (--json, --mark-read)
-  sandesh chat send <space> <text> post in a space or DM (--thread T)
-  sandesh whatsapp link            link your WhatsApp to this machine (QR code, or --phone N)
-  sandesh whatsapp list|read <chat> WhatsApp chats and messages (--json, --mark-read)
-  sandesh whatsapp send <to> <text> send on WhatsApp (--link: open click-to-chat instead)
-  sandesh status                   unread counts (--json, --tmux)
-  sandesh sync                     sync every account now
-  sandesh outbox                   sends of the last week (cancel <id> stops one)
-  sandesh approve [id]             answer an agent's send that waits for you
-  sandesh auth setup <client.json> install the OAuth client from the Cloud console
-  sandesh auth add <name>          sign in a Google account (--no-chat for a personal Gmail)
-  sandesh auth list|remove <name>  the accounts
-  sandesh mcp                      the MCP server for Claude Code and other agents
-  sandesh daemon                   the background sync (sandesh service install runs it)
-  sandesh service install|remove|status
-  sandesh config                   print an example config file
-  sandesh demo                     try the screen on example mail, no Google needed
-  sandesh doctor                   check sign-in, sync, the service and the tmux plugin
+  narada                          open the screen (--tab chat|whatsapp: on that tab)
+  narada mail list [flags]        threads (--today --unread --section NAME --json)
+  narada mail read <thread>       a whole thread as text (--json, --mark-read)
+  narada mail search <query>      Gmail search (--local: the local copy only)
+  narada mail send [flags]        send mail (--to --cc --subject --reply THREAD; body on stdin or $EDITOR)
+  narada mail archive|unarchive|trash|untrash|mark-read|unread|star|unstar <thread>...
+  narada chat list                spaces and DMs with unread counts (--json)
+  narada chat read <space>        a space's recent messages (--json, --mark-read)
+  narada chat send <space> <text> post in a space or DM (--thread T)
+  narada whatsapp link            link your WhatsApp to this machine (QR code, or --phone N)
+  narada whatsapp list|read <chat> WhatsApp chats and messages (--json, --mark-read)
+  narada whatsapp send <to> <text> send on WhatsApp (--link: open click-to-chat instead)
+  narada status                   unread counts (--json, --tmux)
+  narada sync                     sync every account now
+  narada outbox                   sends of the last week (cancel <id> stops one)
+  narada approve [id]             answer an agent's send that waits for you
+  narada auth setup <client.json> install the OAuth client from the Cloud console
+  narada auth add <name>          sign in a Google account (--no-chat for a personal Gmail)
+  narada auth list|remove <name>  the accounts
+  narada mcp                      the MCP server for Claude Code and other agents
+  narada daemon                   the background sync (narada service install runs it)
+  narada service install|remove|status
+  narada config                   print an example config file
+  narada demo                     try the screen on example mail, no Google needed
+  narada doctor                   check sign-in, sync, the service and the tmux plugin
 
 Every command has --help. Account: --account NAME (default: the first).
 `
@@ -81,7 +81,7 @@ func Run(args []string, tui func(*app.App, string) error) int {
 			if t := args[i+1]; t != "mail" && t != "chat" && t != "whatsapp" {
 				return check(usageError("--tab is mail, chat or whatsapp, not %q", t))
 			}
-			os.Setenv("SANDESH_TAB", args[i+1])
+			os.Setenv("NARADA_TAB", args[i+1])
 			args = append(args[:i:i], args[i+2:]...)
 			break
 		}
@@ -95,7 +95,7 @@ func Run(args []string, tui func(*app.App, string) error) int {
 		fmt.Print(usage)
 		return 0
 	case "-V", "--version", "version":
-		fmt.Println("sandesh", app.Version)
+		fmt.Println("narada", app.Version)
 		return 0
 	case "--popup":
 		// the tmux plugin: same screen, opened in a popup
@@ -133,7 +133,7 @@ func Run(args []string, tui func(*app.App, string) error) int {
 		case "doctor", "check":
 			return doctor(a, rest)
 		}
-		return usageError("unknown command %q (sandesh --help)", cmd)
+		return usageError("unknown command %q (narada --help)", cmd)
 	})
 }
 
@@ -162,11 +162,11 @@ func check(err error) int {
 	var e exitError
 	if errors.As(err, &e) {
 		if e.msg != "" {
-			fmt.Fprintln(os.Stderr, "sandesh:", e.msg)
+			fmt.Fprintln(os.Stderr, "narada:", e.msg)
 		}
 		return e.code
 	}
-	fmt.Fprintln(os.Stderr, "sandesh:", err)
+	fmt.Fprintln(os.Stderr, "narada:", err)
 	return 1
 }
 
@@ -235,7 +235,7 @@ func When(ms int64) string {
 
 func mail(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("mail what? list, read, search, send, save, archive, trash, read, unread, star (sandesh --help)")
+		return usageError("mail what? list, read, search, send, save, archive, trash, read, unread, star (narada --help)")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -300,7 +300,7 @@ func accountsFlag(a *app.App, name string) ([]string, error) {
 }
 
 func mailList(a *app.App, args []string) error {
-	fs := flags("sandesh mail list", "sandesh mail list [--today] [--unread] [--section NAME] [--account A] [--limit N] [--json]\n\nThreads from the local copy, newest first. Default: the first section (Inbox).")
+	fs := flags("narada mail list", "narada mail list [--today] [--unread] [--section NAME] [--account A] [--limit N] [--json]\n\nThreads from the local copy, newest first. Default: the first section (Inbox).")
 	today := fs.Bool("today", false, "only threads with mail from today")
 	unread := fs.Bool("unread", false, "only unread threads")
 	section := fs.String("section", "", "a section by name (see the tabs in the screen)")
@@ -361,7 +361,7 @@ func listThreads(a *app.App, accounts []string, section string, today, unread bo
 }
 
 func mailRead(a *app.App, args []string) error {
-	fs := flags("sandesh mail read", "sandesh mail read <thread> [--json] [--mark-read]\n\nA whole thread as text, oldest message first.")
+	fs := flags("narada mail read", "narada mail read <thread> [--json] [--mark-read]\n\nA whole thread as text, oldest message first.")
 	asJSON := fs.Bool("json", false, "JSON output")
 	mark := fs.Bool("mark-read", false, "also mark it read")
 	pos, err := parse(fs, args)
@@ -369,7 +369,7 @@ func mailRead(a *app.App, args []string) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return usageError("mail read needs one thread id (sandesh mail list shows them)")
+		return usageError("mail read needs one thread id (narada mail list shows them)")
 	}
 	t, err := a.Store.FindThread(pos[0])
 	if err != nil {
@@ -436,7 +436,7 @@ func humanSize(n int) string {
 }
 
 func mailSearch(a *app.App, args []string) error {
-	fs := flags("sandesh mail search", "sandesh mail search <query> [--local] [--account A] [--limit N] [--json]\n\nGmail's search syntax (from:priya newer_than:7d has:attachment), run on the\nserver; --local searches words in the local copy instead (works offline).")
+	fs := flags("narada mail search", "narada mail search <query> [--local] [--account A] [--limit N] [--json]\n\nGmail's search syntax (from:priya newer_than:7d has:attachment), run on the\nserver; --local searches words in the local copy instead (works offline).")
 	local := fs.Bool("local", false, "search the local copy only")
 	account := fs.String("account", "", "the account")
 	limit := fs.Int("limit", 30, "at most this many")
@@ -468,7 +468,7 @@ func search(a *app.App, account, q string, local bool, limit int) ([]store.Threa
 		if err == nil {
 			return ts, nil
 		}
-		fmt.Fprintf(os.Stderr, "sandesh: server search failed (%v); searching the local copy\n", err)
+		fmt.Fprintf(os.Stderr, "narada: server search failed (%v); searching the local copy\n", err)
 	}
 	return a.Store.Threads(store.ThreadQuery{Accounts: []string{acc.Name}, Text: q, Limit: limit})
 }
@@ -522,7 +522,7 @@ func splitAddrs(s string) []string {
 }
 
 func mailSend(a *app.App, args []string) error {
-	fs := flags("sandesh mail send", `sandesh mail send --to A[,B] [--cc C] [--subject S] [--attach FILE]... [--html FILE] [--at WHEN] [--reply THREAD] [--all] [--account A] [--now]
+	fs := flags("narada mail send", `narada mail send --to A[,B] [--cc C] [--subject S] [--attach FILE]... [--html FILE] [--at WHEN] [--reply THREAD] [--all] [--account A] [--now]
 
 The body comes from stdin, or $EDITOR when stdin is a terminal. --html adds
 an HTML version from FILE (a table, say), sent beside the plain text. --reply
@@ -579,7 +579,7 @@ all). The send waits undo_seconds (default 10) first: Ctrl+c cancels.`)
 			return err
 		}
 		if edited == nil {
-			fmt.Fprintln(os.Stderr, "sandesh: empty message, not sent")
+			fmt.Fprintln(os.Stderr, "narada: empty message, not sent")
 			return nil
 		}
 		out = *edited
@@ -619,9 +619,9 @@ all). The send waits undo_seconds (default 10) first: Ctrl+c cancels.`)
 func waitSend(a *app.App, it store.OutboxItem) error {
 	if it.Out.ScheduledFor > 0 && it.Status == store.StatusQueued {
 		t := time.UnixMilli(it.Out.ScheduledFor)
-		fmt.Printf("sandesh: scheduled for %s (#%d) · sandesh outbox cancel %d stops it\n", t.Format("Mon 02 Jan 15:04"), it.ID, it.ID)
+		fmt.Printf("narada: scheduled for %s (#%d) · narada outbox cancel %d stops it\n", t.Format("Mon 02 Jan 15:04"), it.ID, it.ID)
 		if !a.DaemonRunning() {
-			fmt.Fprintln(os.Stderr, "sandesh: the background service isn't running: it sends scheduled mail. Start it with `sandesh service install`.")
+			fmt.Fprintln(os.Stderr, "narada: the background service isn't running: it sends scheduled mail. Start it with `narada service install`.")
 		}
 		return nil
 	}
@@ -633,14 +633,14 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 		if left <= 0 {
 			break
 		}
-		fmt.Fprintf(os.Stderr, "\rsandesh: sending in %ds, Ctrl+c cancels ", int(left.Seconds()+0.99))
+		fmt.Fprintf(os.Stderr, "\rnarada: sending in %ds, Ctrl+c cancels ", int(left.Seconds()+0.99))
 		select {
 		case <-sig:
 			fmt.Fprintln(os.Stderr)
 			if err := a.Cancel(it.ID); err != nil {
 				return err
 			}
-			fmt.Fprintln(os.Stderr, "sandesh: cancelled, nothing was sent")
+			fmt.Fprintln(os.Stderr, "narada: cancelled, nothing was sent")
 			return nil
 		case <-time.After(min(left, time.Second)):
 		}
@@ -655,7 +655,7 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 	}
 	switch got.Status {
 	case store.StatusSent:
-		fmt.Fprintln(os.Stderr, "sandesh: sent")
+		fmt.Fprintln(os.Stderr, "narada: sent")
 		return nil
 	case store.StatusFailed:
 		return fmt.Errorf("not sent: %s", got.Error)
@@ -668,7 +668,7 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 	if got.Status != store.StatusSent {
 		return fmt.Errorf("not sent: %s %s", got.Status, got.Error)
 	}
-	fmt.Fprintln(os.Stderr, "sandesh: sent")
+	fmt.Fprintln(os.Stderr, "narada: sent")
 	return nil
 }
 
@@ -730,7 +730,7 @@ func chat(a *app.App, args []string) error {
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "list", "ls":
-		fs := flags("sandesh chat list", "sandesh chat list [--unread] [--account A] [--json]\n\nSpaces and DMs, most recently active first.")
+		fs := flags("narada chat list", "narada chat list [--unread] [--account A] [--json]\n\nSpaces and DMs, most recently active first.")
 		unread := fs.Bool("unread", false, "only spaces with unread messages")
 		account := fs.String("account", "", "one account")
 		asJSON := fs.Bool("json", false, "JSON output")
@@ -766,7 +766,7 @@ func chat(a *app.App, args []string) error {
 		}
 		return nil
 	case "read", "show":
-		fs := flags("sandesh chat read", "sandesh chat read <space> [--limit N] [--mark-read] [--json]\n\nA space's recent messages, oldest first. <space> is its id (spaces/...) or name.")
+		fs := flags("narada chat read", "narada chat read <space> [--limit N] [--mark-read] [--json]\n\nA space's recent messages, oldest first. <space> is its id (spaces/...) or name.")
 		limit := fs.Int("limit", 50, "at most this many")
 		mark := fs.Bool("mark-read", false, "also mark the space read")
 		asJSON := fs.Bool("json", false, "JSON output")
@@ -806,7 +806,7 @@ func chat(a *app.App, args []string) error {
 			}
 			fmt.Printf("%s  %s\n%s\n", who, When(m.Created), m.Text)
 			if len(m.Files) > 0 {
-				fmt.Printf("  ↳ sandesh chat save %s\n", m.Name)
+				fmt.Printf("  ↳ narada chat save %s\n", m.Name)
 			}
 			fmt.Println()
 		}
@@ -814,7 +814,7 @@ func chat(a *app.App, args []string) error {
 	case "save", "download":
 		return chatSave(a, rest)
 	case "send", "post":
-		fs := flags("sandesh chat send", "sandesh chat send <space> <text...> [--attach FILE]... [--at WHEN] [--thread T] [--now]\n\nPost in a space or DM (text from stdin when not given). Waits undo_seconds first.")
+		fs := flags("narada chat send", "narada chat send <space> <text...> [--attach FILE]... [--at WHEN] [--thread T] [--now]\n\nPost in a space or DM (text from stdin when not given). Waits undo_seconds first.")
 		thread := fs.String("thread", "", "reply in this thread (spaces/x/threads/y)")
 		nowFlag := fs.Bool("now", false, "skip the undo window")
 		var attach listFlag
@@ -866,10 +866,10 @@ func (l listFlag) files() []store.File {
 }
 
 func mailSave(a *app.App, args []string) error {
-	fs := flags("sandesh mail save", `sandesh mail save <thread-id> [N|all] [--dir DIR]
+	fs := flags("narada mail save", `narada mail save <thread-id> [N|all] [--dir DIR]
 
 Downloads the thread's attachments (numbered as mail read shows them; all
-by default) into DIR, default ~/Downloads/sandesh. Never overwrites.`)
+by default) into DIR, default ~/Downloads/narada. Never overwrites.`)
 	dir := fs.String("dir", "", "where to save")
 	pos, err := parse(fs, args)
 	if err != nil {
@@ -894,10 +894,10 @@ by default) into DIR, default ~/Downloads/sandesh. Never overwrites.`)
 }
 
 func chatSave(a *app.App, args []string) error {
-	fs := flags("sandesh chat save", `sandesh chat save <message-id> [N|all] [--dir DIR]
+	fs := flags("narada chat save", `narada chat save <message-id> [N|all] [--dir DIR]
 
 Downloads a chat message's files (chat read --json shows the ids) into
-DIR, default ~/Downloads/sandesh. Drive files open in the browser instead.`)
+DIR, default ~/Downloads/narada. Drive files open in the browser instead.`)
 	dir := fs.String("dir", "", "where to save")
 	pos, err := parse(fs, args)
 	if err != nil {
@@ -940,7 +940,7 @@ func FindSpace(a *app.App, key string) (store.Space, error) {
 	case 1:
 		return matches[0], nil
 	case 0:
-		return store.Space{}, fmt.Errorf("no space matches %q (sandesh chat list)", key)
+		return store.Space{}, fmt.Errorf("no space matches %q (narada chat list)", key)
 	}
 	var names []string
 	for _, m := range matches {
@@ -1024,7 +1024,7 @@ func GetCounts(a *app.App) Counts {
 }
 
 func status(a *app.App, args []string) error {
-	fs := flags("sandesh status", "sandesh status [--json | --tmux]\n\nUnread mail threads in the inbox, and chat spaces and WhatsApp chats with\nunread messages.\n--tmux prints a status-line segment (empty when there is nothing).")
+	fs := flags("narada status", "narada status [--json | --tmux]\n\nUnread mail threads in the inbox, and chat spaces and WhatsApp chats with\nunread messages.\n--tmux prints a status-line segment (empty when there is nothing).")
 	asJSON := fs.Bool("json", false, "JSON output")
 	tmux := fs.Bool("tmux", false, "a tmux status-line segment")
 	if _, err := parse(fs, args); err != nil {
@@ -1059,7 +1059,7 @@ func status(a *app.App, args []string) error {
 		fmt.Printf("whatsapp: %d chats unread\n", c.WhatsApp)
 	}
 	if c.Waiting > 0 {
-		fmt.Printf("waiting for your approval: %d (sandesh approve)\n", c.Waiting)
+		fmt.Printf("waiting for your approval: %d (narada approve)\n", c.Waiting)
 	}
 	for acc, e := range c.Errors {
 		fmt.Printf("%s: %s\n", acc, e)
@@ -1068,7 +1068,7 @@ func status(a *app.App, args []string) error {
 }
 
 func syncCmd(a *app.App, args []string) error {
-	fs := flags("sandesh sync", "sandesh sync [--account A]\n\nSync mail and chat now.")
+	fs := flags("narada sync", "narada sync [--account A]\n\nSync mail and chat now.")
 	account := fs.String("account", "", "one account")
 	if _, err := parse(fs, args); err != nil {
 		return err
@@ -1084,7 +1084,7 @@ func syncCmd(a *app.App, args []string) error {
 		names = []string{acc.Name}
 	}
 	if len(names) == 0 {
-		return errors.New("no account yet: run `sandesh auth add work`")
+		return errors.New("no account yet: run `narada auth add work`")
 	}
 	var failed bool
 	for _, n := range names {
@@ -1155,7 +1155,7 @@ func outbox(a *app.App, args []string) error {
 		fmt.Println("cancelled")
 		return nil
 	}
-	fs := flags("sandesh outbox", "sandesh outbox [--json]\nsandesh outbox cancel <id>\nsandesh outbox reschedule <id> <when>\n\nSends of the last week and scheduled ones: waiting for approval, scheduled, in the undo window, sent, failed.")
+	fs := flags("narada outbox", "narada outbox [--json]\nnarada outbox cancel <id>\nnarada outbox reschedule <id> <when>\n\nSends of the last week and scheduled ones: waiting for approval, scheduled, in the undo window, sent, failed.")
 	asJSON := fs.Bool("json", false, "JSON output")
 	if _, err := parse(fs, args); err != nil {
 		return err

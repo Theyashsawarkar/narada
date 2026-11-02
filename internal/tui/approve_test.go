@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 func TestApproveCard(t *testing.T) {

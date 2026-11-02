@@ -13,11 +13,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
-// Starting a conversation (N in chat): pick people, then sandesh opens the
+// Starting a conversation (N in chat): pick people, then narada opens the
 // DM you already have with them (earlier messages and all) or starts one;
 // several people make a group chat.
 
@@ -370,8 +370,8 @@ func (m Model) convoPopup() []string {
 		}
 		lines = append(lines, "")
 	case c.signIn:
-		lines = append(lines, "", s.peach.Render(" Google wants one more permission before sandesh can start chats"),
-			s.muted.Render(" (your sign-in is from before sandesh asked for it)."), "",
+		lines = append(lines, "", s.peach.Render(" Google wants one more permission before narada can start chats"),
+			s.muted.Render(" (your sign-in is from before narada asked for it)."), "",
 			s.text.Render(" Enter signs in again in your browser; then this chat opens."), "")
 	case c.busy:
 		lines = append(lines, "", s.accent.Render(" ⟳ opening the conversation…"), "")

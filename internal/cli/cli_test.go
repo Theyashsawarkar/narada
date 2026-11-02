@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/fake"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/fake"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 func TestMailTemplateRoundTrip(t *testing.T) {
@@ -57,8 +57,8 @@ func TestForwardKeepsAttachments(t *testing.T) {
 	g.Seed()
 	srv := httptest.NewServer(g)
 	t.Cleanup(srv.Close)
-	t.Setenv("SANDESH_GOOGLE_URL", srv.URL)
-	t.Setenv("SANDESH_HOME", t.TempDir())
+	t.Setenv("NARADA_GOOGLE_URL", srv.URL)
+	t.Setenv("NARADA_HOME", t.TempDir())
 	a, err := app.Open()
 	if err != nil {
 		t.Fatal(err)

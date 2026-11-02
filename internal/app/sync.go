@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/google"
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/google"
+	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // News is what a sync found that deserves a notification.
@@ -38,7 +38,7 @@ func (a *App) SyncMail(ctx context.Context, account string) ([]News, error) {
 	}
 	unlock, ok := a.lock("mail-" + account)
 	if !ok {
-		return nil, nil // another sandesh is syncing this account right now
+		return nil, nil // another narada is syncing this account right now
 	}
 	defer unlock()
 	news, err := a.syncMail(ctx, c, acc)

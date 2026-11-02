@@ -12,9 +12,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/fake"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/fake"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 var update = flag.Bool("update", false, "rewrite scripts/keybindings")
@@ -54,8 +54,8 @@ func model(t *testing.T) Model {
 	lastFake = g
 	srv := httptest.NewServer(g)
 	t.Cleanup(srv.Close)
-	t.Setenv("SANDESH_GOOGLE_URL", srv.URL)
-	t.Setenv("SANDESH_HOME", t.TempDir())
+	t.Setenv("NARADA_GOOGLE_URL", srv.URL)
+	t.Setenv("NARADA_HOME", t.TempDir())
 	a, err := app.Open()
 	if err != nil {
 		t.Fatal(err)

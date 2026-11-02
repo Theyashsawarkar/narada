@@ -1,4 +1,4 @@
-module github.com/Theyashsawarkar/sandesh
+module github.com/Theyashsawarkar/narada
 
 go 1.26.0
 

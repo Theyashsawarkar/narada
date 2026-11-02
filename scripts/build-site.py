@@ -26,7 +26,7 @@ FAMILY = [
     ("Desktop", [("vayu", "वायु", "the keyboard-driven Wayland desktop", "https://theyashsawarkar.github.io/vayu/")]),
     ("Apps", [("kosha", "कोश", "package manager"), ("nada", "नाद", "music player"),
               ("drishya", "दृश्य", "video player"), ("sangam", "संगम", "pull requests in the terminal"),
-              ("sandesh", "संदेश", "mail and chat in the terminal"), ("pattan", "पत्तन", "ports and tunnels"),
+              ("narada", "नारद", "mail and chat in the terminal"), ("pattan", "पत्तन", "ports and tunnels"),
               ("nauka", "नौका", "Docker in the terminal"), ("prasar", "प्रसार", "posts to X and LinkedIn"),
               ("anumati", "अनुमति", "commands for AI agents, approved"), ("pramana", "प्रमाण", "password prompts"),
               ("vesha", "वेष", "Claude Code accounts"), ("kaushal", "कौशल", "skills for every AI agent"),

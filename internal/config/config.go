@@ -1,5 +1,5 @@
-// Package config holds sandesh's paths and its settings file
-// (~/.config/sandesh/config.toml). Every setting has a default, so a
+// Package config holds narada's paths and its settings file
+// (~/.config/narada/config.toml). Every setting has a default, so a
 // missing file is a valid configuration.
 package config
 
@@ -13,8 +13,8 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Paths, following the XDG base directories. SANDESH_HOME, when set, puts
-// all of them under one folder (tests and `sandesh demo` use it).
+// Paths, following the XDG base directories. NARADA_HOME, when set, puts
+// all of them under one folder (tests and `narada demo` use it).
 type Paths struct {
 	Config string // config.toml, client.json
 	Data   string // cache.db
@@ -23,7 +23,7 @@ type Paths struct {
 }
 
 func DefaultPaths() Paths {
-	if h := os.Getenv("SANDESH_HOME"); h != "" {
+	if h := os.Getenv("NARADA_HOME"); h != "" {
 		return Paths{Config: filepath.Join(h, "config"), Data: filepath.Join(h, "data"), State: filepath.Join(h, "state"), Cache: filepath.Join(h, "cache")}
 	}
 	home, _ := os.UserHomeDir()
@@ -34,10 +34,10 @@ func DefaultPaths() Paths {
 		return filepath.Join(home, def)
 	}
 	return Paths{
-		Config: filepath.Join(env("XDG_CONFIG_HOME", ".config"), "sandesh"),
-		Data:   filepath.Join(env("XDG_DATA_HOME", ".local/share"), "sandesh"),
-		State:  filepath.Join(env("XDG_STATE_HOME", ".local/state"), "sandesh"),
-		Cache:  filepath.Join(env("XDG_CACHE_HOME", ".cache"), "sandesh"),
+		Config: filepath.Join(env("XDG_CONFIG_HOME", ".config"), "narada"),
+		Data:   filepath.Join(env("XDG_DATA_HOME", ".local/share"), "narada"),
+		State:  filepath.Join(env("XDG_STATE_HOME", ".local/state"), "narada"),
+		Cache:  filepath.Join(env("XDG_CACHE_HOME", ".cache"), "narada"),
 	}
 }
 
@@ -133,7 +133,7 @@ type Config struct {
 	Sections []Section `toml:"section"`
 	Colors   Colors    `toml:"colors"`
 	// Include is a theme file read after this one (varna writes
-	// ~/.local/state/varna/sandesh.toml); its [colors] win.
+	// ~/.local/state/varna/narada.toml); its [colors] win.
 	Include string `toml:"include"`
 }
 
@@ -159,7 +159,7 @@ func Default() Config {
 		OlderPage:        10,
 		NerdFont:         true,
 		MaxThreads:       150,
-		Notify:           true,
+		Notify:           false,
 		AICommand:        []string{"claude", "-p"},
 		WhatsAppPerHour:  30,
 		Sections: []Section{
@@ -168,7 +168,7 @@ func Default() Config {
 			{Name: "Unread", Label: "UNREAD"},
 			{Name: "Starred", Label: "STARRED"},
 			{Name: "Sent", Label: "SENT"},
-			{Name: "Scheduled", Label: "SCHEDULED"}, // waiting in sandesh's outbox, not a Gmail label
+			{Name: "Scheduled", Label: "SCHEDULED"}, // waiting in narada's outbox, not a Gmail label
 		},
 		// Catppuccin Mocha, the fallback when no theme is included.
 		Colors: Colors{
@@ -264,8 +264,8 @@ func expand(p string) string {
 	return os.ExpandEnv(p)
 }
 
-// Example is what `sandesh config` prints and what the README shows.
-const Example = `# ~/.config/sandesh/config.toml -- every line is optional.
+// Example is what `narada config` prints and what the README shows.
+const Example = `# ~/.config/narada/config.toml -- every line is optional.
 
 # What happens when an AI agent asks to send:
 #   "confirm"        every send waits for your OK (default)
@@ -286,7 +286,7 @@ keep          = "none" # download older mail in the background too: "all", "1y",
 nerd_font     = true   # round avatars (needs a Nerd Font, as most terminal setups have)
 older_page    = 10     # how many older threads j at the end of a list loads (+ / - change it there)
 max_threads   = 150    # at most this many threads on the first sync (older mail: search)
-notify        = true   # desktop notification for new mail and DMs
+notify        = false  # desktop notification for new mail and DMs (off: the tmux capsule shows what came)
 list_style    = "panel"  # the lists: panel (rows, the picked one a card) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30 # at most this many WhatsApp sends an hour (a linked device that sends a lot risks the account)
@@ -299,7 +299,7 @@ ai_command    = ["claude", "-p"]   # what @, S, D and T run
 # theme file read after this one (its [colors] win).
 # [colors]
 # accent = "#74c7ec"
-# include = "~/.config/sandesh/theme.toml"
+# include = "~/.config/narada/theme.toml"
 
 # Sections are the tabs on top. label is a Gmail label id, query a Gmail
 # search run on the server, today keeps only threads with mail from today.

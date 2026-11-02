@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/store"
-	"github.com/Theyashsawarkar/sandesh/internal/whatsapp"
+	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 // WhatsAppConn is a WhatsApp account linked as a device: whatsapp.Client,
@@ -70,7 +70,7 @@ var linkQuiet = 15 * time.Second
 func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code string), progress func(chats, messages, percent int)) error {
 	unlock, ok := a.lock("whatsapp")
 	if !ok {
-		return errors.New("WhatsApp is in use by another sandesh (the daemon?); stop it, or unlink first")
+		return errors.New("WhatsApp is in use by another narada (the daemon?); stop it, or unlink first")
 	}
 	defer unlock()
 	c, err := a.dialWhatsApp(ctx)
@@ -82,7 +82,7 @@ func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code
 		if _, ok := a.Store.WhatsApp(); !ok {
 			_ = a.Store.AddWhatsApp(phone, c.Me())
 		}
-		return errors.New("already linked (sandesh whatsapp unlink first)")
+		return errors.New("already linked (narada whatsapp unlink first)")
 	}
 	var (
 		mu               sync.Mutex
@@ -172,7 +172,7 @@ func (a *App) UnlinkWhatsApp(ctx context.Context) error {
 	a.StopWhatsApp()
 	unlock, ok := a.lock("whatsapp")
 	if !ok {
-		return errors.New("WhatsApp is in use by another sandesh (the daemon?); stop it first")
+		return errors.New("WhatsApp is in use by another narada (the daemon?); stop it first")
 	}
 	defer unlock()
 	if c, err := a.dialWhatsApp(ctx); err == nil {
@@ -187,7 +187,7 @@ func (a *App) UnlinkWhatsApp(ctx context.Context) error {
 	return a.Store.RemoveAccount(store.WhatsAppAccount)
 }
 
-// StartWhatsApp goes online when WhatsApp is linked and no other sandesh
+// StartWhatsApp goes online when WhatsApp is linked and no other narada
 // process is: the daemon calls it, and the screen and MCP server when no
 // daemon runs. It stays online until ctx ends. ok tells whether this
 // process now holds the connection.
@@ -210,7 +210,7 @@ func (a *App) StartWhatsApp(ctx context.Context) (ok bool, err error) {
 	if !c.Linked() {
 		c.Close()
 		unlock()
-		_ = a.Store.SetError(store.WhatsAppAccount, "not linked: run `sandesh whatsapp link`")
+		_ = a.Store.SetError(store.WhatsAppAccount, "not linked: run `narada whatsapp link`")
 		return false, nil
 	}
 	a.waMu.Lock()
@@ -264,7 +264,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			}
 		case "logged-out", "replaced", "banned":
 			_ = a.Store.SetError(acc, "WhatsApp: "+e.Err.Error())
-			Notify("sandesh: WhatsApp went offline", e.Err.Error())
+			Notify("narada: WhatsApp went offline", e.Err.Error())
 			go a.StopWhatsApp()
 		}
 	case e.Contacts != nil:
@@ -541,7 +541,7 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 func (a *App) WhatsAppChat(ctx context.Context, to string) (store.Space, error) {
 	const acc = store.WhatsAppAccount
 	if _, ok := a.Store.WhatsApp(); !ok {
-		return store.Space{}, errors.New("WhatsApp is not linked: run `sandesh whatsapp link`")
+		return store.Space{}, errors.New("WhatsApp is not linked: run `narada whatsapp link`")
 	}
 	to = strings.TrimSpace(to)
 	if to == "" {

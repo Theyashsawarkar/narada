@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="sandesh" src="assets/logo.svg" width="120">
+  <img alt="narada" src="assets/logo.svg" width="120">
 </p>
 
 <p align="center">
@@ -8,18 +8,18 @@
 </p>
 
 <p align="center">
-  <img alt="sandesh's mail tab: the inbox as cards on the left, the open thread on the right with its formatting, a table and numbered links" src="assets/screenshots/mail.png" width="100%">
+  <img alt="narada's mail tab: the inbox as cards on the left, the open thread on the right with its formatting, a table and numbered links" src="assets/screenshots/mail.png" width="100%">
 </p>
 
-> *Sandesh* (संदेश) is Sanskrit for "message": the thing carried from one
+> *Narada* (नारद) is Sanskrit for "message": the thing carried from one
 > person to another, whichever road it took.
 
 Checking mail and Google Chat usually means a browser tab: a context
 switch, a mouse, and a page that pulls you into everything else.
-**sandesh** keeps a local copy of both, puts the unread counts in your
+**narada** keeps a local copy of both, puts the unread counts in your
 tmux status line and opens the full screen with `prefix e`, laid out like
 [sangam](https://github.com/Theyashsawarkar/sangam). It runs like lazygit:
-type `sandesh` in any terminal. And because it ships an MCP server, you can
+type `narada` in any terminal. And because it ships an MCP server, you can
 tell Claude "read today's mails" or "mail Priya that Thursday is fine".
 
 ## Contents
@@ -87,21 +87,21 @@ for the AI keys.
 With [kosha](https://github.com/Theyashsawarkar/kosha):
 
 ```sh
-kosha install sandesh
+kosha install narada
 ```
 
 Or with the installer, which downloads the release binary into
-`~/.local/share/sandesh` (or builds it with Go) and links
-`~/.local/bin/sandesh`:
+`~/.local/share/narada` (or builds it with Go) and links
+`~/.local/bin/narada`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Theyashsawarkar/sandesh/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Theyashsawarkar/narada/main/install.sh | bash
 ```
 
 Or from source (Go 1.26+):
 
 ```sh
-git clone https://github.com/Theyashsawarkar/sandesh && cd sandesh
+git clone https://github.com/Theyashsawarkar/narada && cd narada
 make && sudo make install          # or: make install PREFIX=~/.local
 ```
 
@@ -114,14 +114,14 @@ Update by running the installer again; `install.sh --uninstall` removes it.
 Try it first on made-up mail, no Google needed:
 
 ```sh
-sandesh demo
+narada demo
 ```
 
-Then just run `sandesh` (or press `prefix e` in tmux). With no
+Then just run `narada` (or press `prefix e` in tmux). With no
 credentials yet it opens a setup screen in three steps. **1, the OAuth
 client**: it asks where your client file is (`Tab` completes the path,
 `Enter` on a folder opens it), checks it, and copies it into
-`~/.config/sandesh/client.json`, so the download can be deleted; a pasted
+`~/.config/narada/client.json`, so the download can be deleted; a pasted
 JSON or a typed client ID and secret work too. **2, sign in**: `Enter`
 opens Google's sign-in in your browser (`Tab` switches between a work
 account and a personal Gmail). **3, the first sync**, with a progress bar,
@@ -139,7 +139,7 @@ and then the inbox.
 | `c` | Pick a different OAuth client file |
 | `y` | Copy the sign-in link |
 
-To use your own mail, sandesh needs an OAuth client of your own (Google
+To use your own mail, narada needs an OAuth client of your own (Google
 doesn't hand out one for everyone's terminal tools). This takes about five
 minutes, once:
 
@@ -152,23 +152,23 @@ minutes, once:
    **Publish** it, or Google signs you out every 7 days.
 3. **Google Chat API → Configuration**: fill in an app name, an avatar URL
    and a description, and turn off "interactive features". Chat's API
-   wants this even though sandesh only acts as you.
+   wants this even though narada only acts as you.
 4. **Credentials → Create credentials → OAuth client ID → Desktop app**,
    and download the JSON.
 
-Then either run `sandesh` and follow the setup screen, or do the same from
+Then either run `narada` and follow the setup screen, or do the same from
 the command line:
 
 ```sh
-sandesh auth setup ~/Downloads/client_secret_*.json
-sandesh auth add work                  # opens Google's sign-in page
-sandesh auth add personal --no-chat    # a personal Gmail: mail only
-sandesh service install                # background sync and notifications
-claude mcp add --scope user sandesh -- sandesh mcp
-sandesh doctor                         # checks all of it
+narada auth setup ~/Downloads/client_secret_*.json
+narada auth add work                  # opens Google's sign-in page
+narada auth add personal --no-chat    # a personal Gmail: mail only
+narada service install                # background sync and notifications
+claude mcp add --scope user narada -- narada mcp
+narada doctor                         # checks all of it
 ```
 
-`sandesh` opens the screen.
+`narada` opens the screen.
 
 ## The screen
 
@@ -176,7 +176,7 @@ sandesh doctor                         # checks all of it
   <img alt="A Google Chat conversation in rounded bubbles: yours on the right outlined in the accent colour, theirs on the left with a quoted reply, a reaction and the time inside" src="assets/screenshots/chat.png" width="49%">
   <img alt="The WhatsApp tab: the chat list on one panel with the picked chat in a green rounded card, rounded message bubbles with a photo inside, and read ticks on your message" src="assets/screenshots/whatsapp.png" width="49%">
 </p>
-<p align="center"><sub>All screenshots use <code>sandesh demo</code>: made-up mail, chats and people.</sub></p>
+<p align="center"><sub>All screenshots use <code>narada demo</code>: made-up mail, chats and people.</sub></p>
 
 Sections on top, the list on the left, the selected thread or space on
 the right, keys at the bottom.
@@ -275,8 +275,8 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `t` | Move a scheduled send to another time (in Scheduled; Enter edits it) |
 | `n` | Rename the chat (spaces and groups on Google Chat; a DM only here) |
 | `N` | Start a conversation (opens the one you have with them, earlier messages and all) |
-| `v` | Open the attachments in their apps (kept in ~/Downloads/sandesh; picker when several) |
-| `V` | Save the attachments to ~/Downloads/sandesh without opening them |
+| `v` | Open the attachments in their apps (kept in ~/Downloads/narada; picker when several) |
+| `V` | Save the attachments to ~/Downloads/narada without opening them |
 | `U` | Send a file into this chat (Google Chat or WhatsApp; file picker with preview) |
 | `z` | Cancel the last change, or a send in its undo window (undo) |
 | `A` | Show the sends an agent is waiting on you to approve |
@@ -344,7 +344,7 @@ directory); `Tab` adds another for a group. With two or more, Enter first
 asks for a name: with one the group is a named space everyone sees, without
 one a group chat (name it later with `n`). If your sign-in predates the
 permission starting chats needs, the window says so and Enter signs you in
-again in the browser, then carries on. sandesh opens the DM you
+again in the browser, then carries on. narada opens the DM you
 already have with them, fetching the earlier messages if this machine
 hasn't seen them, or starts a new one, and puts you in the message box.
 The chat search (`/`) finds conversations and people by name too, not just
@@ -354,8 +354,8 @@ a space.
 
 **Renaming a chat** (`n`): a space is renamed on Google Chat, so everyone
 sees the new name; a group chat gets its name on Google Chat too (that makes
-it a space, with the same people and messages) (Google lets only its managers do it; sandesh asks for the
-permission when you sign in, so an older sign-in needs `sandesh auth add
+it a space, with the same people and messages) (Google lets only its managers do it; narada asks for the
+permission when you sign in, so an older sign-in needs `narada auth add
 <account>` once). DMs and unnamed group chats can't be named on Google;
 the name you give them stays on this machine. An empty name goes back to
 the default.
@@ -432,14 +432,14 @@ chat message (`i`) asks *when*: pick one (in an hour, this evening,
 tomorrow morning or afternoon, Monday morning) or type it the way you'd say
 it: `tomorrow 9am`, `fri 6pm`, `in 2h`, `3 nov 10:30`, `03/11 9am`,
 `2026-12-01 18:00`. It shows what it understood before you confirm. The
-message waits in sandesh's outbox and the background service sends it then
+message waits in narada's outbox and the background service sends it then
 (Gmail's API has no scheduled send of its own), so this computer must be on
 at that time: if it wasn't, the message goes out as soon as it is, and a
 notification says it went out late. Scheduled mail is listed in its own
 **Scheduled** tab (next to Sent) and scheduled chat messages in the chat's
 **Scheduled** tab, soonest first, with their time: `t` moves one, Enter
 edits it, `z` cancels it. From the shell: `--at "tomorrow 9am"` on `mail send` and `chat send`;
-`sandesh outbox reschedule <id> <when>`. Agents can schedule too
+`narada outbox reschedule <id> <when>`. Agents can schedule too
 (`send_at`), still after your approval.
 
 ## Sent mail
@@ -464,11 +464,11 @@ threads a minute, with a progress bar in the top bar.
 
 - **Open and download**: `v` opens a mail's attachments or a chat's files
   in the app your desktop uses for them (they're kept in
-  `~/Downloads/sandesh`; `SANDESH_DOWNLOADS` moves it); with several, a
+  `~/Downloads/narada`; `NARADA_DOWNLOADS` moves it); with several, a
   picker opens (Tab picks more, Ctrl+a all). `V` only saves them. It
   never overwrites: a second copy is `name (2).ext`. Chat files kept in
-  Drive open in the browser instead (`b`). From the shell: `sandesh mail
-  save THREAD [N|all]`, `sandesh chat save MESSAGE [N|all]`.
+  Drive open in the browser instead (`b`). From the shell: `narada mail
+  save THREAD [N|all]`, `narada chat save MESSAGE [N|all]`.
 - **Upload**: in the mail editor, `Attach: ~/report.pdf, ~/notes.txt`; or `+`
   on the review screen to pick files. In chat, `U` picks files to post in the
   space. From the shell: `--attach FILE` (repeatable) on `mail send` and
@@ -480,7 +480,7 @@ threads a minute, with a progress bar in the top bar.
 
 ## WhatsApp
 
-sandesh links to your WhatsApp the way WhatsApp Web does: as a linked
+narada links to your WhatsApp the way WhatsApp Web does: as a linked
 device of your phone's account. Open the WhatsApp tab (`Tab` twice) and
 press `L`: the QR code shows right there; scan it from WhatsApp → Settings
 → Linked devices. `P` links with your phone number instead (you type a code
@@ -488,8 +488,8 @@ on the phone). A progress bar follows while the phone sends your recent
 chats. From a terminal it's the same:
 
 ```sh
-sandesh whatsapp link                  # scan the QR code
-sandesh whatsapp link --phone +9198…   # or type a code on the phone instead
+narada whatsapp link                  # scan the QR code
+narada whatsapp link --phone +9198…   # or type a code on the phone instead
 ```
 
 Keep it open after scanning: it waits until the phone has logged the new
@@ -500,21 +500,21 @@ Scheduled; `i` types a message, `r` on a picked message replies quoting it,
 and opening a chat marks it read (the sender sees blue ticks). The status
 line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
 notify like chat DMs. The background service keeps WhatsApp online; without
-it, whichever sandesh is open (the screen, `sandesh mcp`) holds the
+it, whichever narada is open (the screen, `narada mcp`) holds the
 connection.
 
 **Know the risk.** WhatsApp doesn't allow programs other than its own to
 link to an account. This works the same way WhatsApp Web does (through
 [whatsmeow](https://github.com/tulir/whatsmeow)), and normal one-to-one use
 looks like WhatsApp Web, but an account that sends a lot from such a device,
-especially to strangers or the same text to many, can be banned. So sandesh:
+especially to strangers or the same text to many, can be banned. So narada:
 
 - caps WhatsApp sends at `whatsapp_per_hour` (30), yours included;
 - sends one message to one chat at a time: there is no broadcast;
 - asks you before an agent's WhatsApp message goes out, unless you set
   `send_policy = "trust"` (see [Sending safely](#sending-safely)).
 
-**Don't want to link?** `sandesh whatsapp send +9198… "text"` (and the
+**Don't want to link?** `narada whatsapp send +9198… "text"` (and the
 `whatsapp_send` tool) then opens WhatsApp's own click-to-chat page with the
 message typed in, and you press Send there. `--link` does that even when
 linked.
@@ -525,7 +525,7 @@ tmux and its popups too (needs `set -g allow-passthrough on`); GIFs and
 video previews play, and elsewhere you get coloured blocks. `images` in the
 config chooses (`auto`, `kitty`, `blocks`, `off`). New photos, stickers and
 GIFs up to 8 MB download as they arrive and larger files when you open
-them, into `~/.cache/sandesh/media`. Pick a message and press `Space` (or
+them, into `~/.cache/narada/media`. Pick a message and press `Space` (or
 `Enter`) to see a picture as big as the screen allows; `h`/`l` go through
 the chat's pictures. To send one, press `Ctrl+o` while typing (or `U` in
 the chat), or `Ctrl+v` to paste a copied image such as a screenshot (needs
@@ -534,7 +534,7 @@ what you type becomes the first file's caption, and each file goes as its
 own message.
 
 **Ticks** beside your messages show how far they got, as on the phone:
-✓ sent, ✓✓ delivered, blue ✓✓ read. In a group sandesh shows at most
+✓ sent, ✓✓ delivered, blue ✓✓ read. In a group narada shows at most
 delivered, as blue ticks need every member to have read it. A message
 still in its undo window shows under the conversation, counting down
 (`z` cancels it), and so does one waiting for your approval. GIFs and video previews
@@ -545,18 +545,18 @@ Photos from before this feature carry no download details, so they stay a
 when you link anew.
 
 Not yet: reactions, editing and deleting, starting groups.
-`sandesh whatsapp unlink` logs this machine out and forgets the chats.
+`narada whatsapp unlink` logs this machine out and forgets the chats.
 WhatsApp unlinks devices whose phone has been offline for about two weeks;
 link again then.
 
 ## Claude and other agents
 
-sandesh doesn't embed a model. It offers tools over MCP, and whichever
+narada doesn't embed a model. It offers tools over MCP, and whichever
 agent you use calls them. Add it once and every Claude Code session can
 use it:
 
 ```sh
-claude mcp add --scope user sandesh -- sandesh mcp
+claude mcp add --scope user narada -- narada mcp
 ```
 
 Then ask in plain words:
@@ -592,7 +592,7 @@ claude  → contacts_find → mail_send
 
 The `@`, `S`, `D` and `T` keys in the screen run `claude -p` (your
 `ai_command`) with the same server, so they use your Claude login. No API
-key. Any other MCP client works the same way: the server is `sandesh mcp`
+key. Any other MCP client works the same way: the server is `narada mcp`
 on stdio.
 
 ## Sending safely
@@ -604,10 +604,10 @@ is written by strangers. So:
   for you. Inside tmux a popup opens on the pane the agent runs in, with
   the exact recipients and text: `y` sends, `e` edits it in your editor
   first, `n` declines. Outside tmux you get a notification; answer with
-  `sandesh approve` or `A` in the screen. The agent is told what happened
+  `narada approve` or `A` in the screen. The agent is told what happened
   (sent, declined, cancelled) and nothing else.
 - **Every mail waits** `undo_seconds` (10) in the outbox, yours included,
-  so `z` (or `sandesh outbox cancel <id>`, or Ctrl+c on the command line)
+  so `z` (or `narada outbox cancel <id>`, or Ctrl+c on the command line)
   stops it. Chat messages go out at once (`chat_undo_seconds`, default 0)
   and show in the conversation straight away; agents' chat messages still
   wait for your approval.
@@ -631,7 +631,7 @@ is written by strangers. So:
   so choose it knowingly.
 - **WhatsApp is capped**: at most `whatsapp_per_hour` (30) sends an hour,
   one chat at a time (see [WhatsApp](#whatsapp)).
-- **A log of every agent action** in `~/.local/state/sandesh/agent.log`.
+- **A log of every agent action** in `~/.local/state/narada/agent.log`.
 
 ## Command line
 
@@ -639,57 +639,57 @@ Every command has `--help`; the read commands take `--json`.
 
 | Command | Does |
 |---|---|
-| `sandesh` | The screen |
-| `sandesh --tab chat\|whatsapp` | The screen, opened on that tab (`--tab mail` is the default); also with `--popup` |
-| `sandesh mail list [--today] [--unread] [--section S]` | Threads (`ls`) |
-| `sandesh mail read <thread> [--mark-read]` | A whole thread as text |
-| `sandesh mail search <query> [--local]` | Gmail search syntax; `--local` searches the local copy |
-| `sandesh mail send --to A --subject S [--reply THREAD [--all]]` | Send; the body from stdin or `$EDITOR`; waits the undo window (Ctrl+c cancels) |
-| `sandesh mail archive\|unarchive\|trash\|untrash\|mark-read\|unread\|star\|unstar <thread>...` | Change threads |
-| `sandesh chat list [--unread]` | Spaces and DMs |
-| `sandesh chat read <space> [--mark-read]` | A space's recent messages (`<space>` is its id or part of its name) |
-| `sandesh chat send <space> <text> [--thread T]` | Post in a space or DM |
-| `sandesh whatsapp link [--phone N]` | Link your WhatsApp (QR code, or a code to type on the phone) |
-| `sandesh whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
-| `sandesh whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
-| `sandesh whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
-| `sandesh whatsapp send <to> <text> [--at WHEN] [--link]` | Send one message (`--link`: open click-to-chat instead) |
-| `sandesh status [--json\|--tmux]` | Unread counts |
-| `sandesh sync` | Sync every account now |
-| `sandesh outbox` / `outbox cancel <id>` | Sends of the last week; stop one in its undo window |
-| `sandesh approve [id]` | Answer an agent's send that waits for you |
-| `sandesh auth setup <client.json>` | Install your OAuth client |
-| `sandesh auth add <name> [--email E] [--no-chat]` | Sign in a Google account |
-| `sandesh auth list` / `auth remove <name>` | The accounts |
-| `sandesh mcp` | The MCP server (stdio) |
-| `sandesh daemon` | The background sync, in the foreground |
-| `sandesh service install\|remove\|status` | The background sync as a systemd user unit |
-| `sandesh config` | Print an example config file |
-| `sandesh demo` | The screen on example mail, with a fake Google inside the process |
-| `sandesh doctor` | Check the setup |
+| `narada` | The screen |
+| `narada --tab chat\|whatsapp` | The screen, opened on that tab (`--tab mail` is the default); also with `--popup` |
+| `narada mail list [--today] [--unread] [--section S]` | Threads (`ls`) |
+| `narada mail read <thread> [--mark-read]` | A whole thread as text |
+| `narada mail search <query> [--local]` | Gmail search syntax; `--local` searches the local copy |
+| `narada mail send --to A --subject S [--reply THREAD [--all]]` | Send; the body from stdin or `$EDITOR`; waits the undo window (Ctrl+c cancels) |
+| `narada mail archive\|unarchive\|trash\|untrash\|mark-read\|unread\|star\|unstar <thread>...` | Change threads |
+| `narada chat list [--unread]` | Spaces and DMs |
+| `narada chat read <space> [--mark-read]` | A space's recent messages (`<space>` is its id or part of its name) |
+| `narada chat send <space> <text> [--thread T]` | Post in a space or DM |
+| `narada whatsapp link [--phone N]` | Link your WhatsApp (QR code, or a code to type on the phone) |
+| `narada whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
+| `narada whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
+| `narada whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
+| `narada whatsapp send <to> <text> [--at WHEN] [--link]` | Send one message (`--link`: open click-to-chat instead) |
+| `narada status [--json\|--tmux]` | Unread counts |
+| `narada sync` | Sync every account now |
+| `narada outbox` / `outbox cancel <id>` | Sends of the last week; stop one in its undo window |
+| `narada approve [id]` | Answer an agent's send that waits for you |
+| `narada auth setup <client.json>` | Install your OAuth client |
+| `narada auth add <name> [--email E] [--no-chat]` | Sign in a Google account |
+| `narada auth list` / `auth remove <name>` | The accounts |
+| `narada mcp` | The MCP server (stdio) |
+| `narada daemon` | The background sync, in the foreground |
+| `narada service install\|remove\|status` | The background sync as a systemd user unit |
+| `narada config` | Print an example config file |
+| `narada demo` | The screen on example mail, with a fake Google inside the process |
+| `narada doctor` | Check the setup |
 
 Options: `--account NAME` on most commands (default: the first account),
 `-h`, `-V`.
 
 ## Using it inside tmux
 
-sandesh is a command first; the tmux plugin adds a key and a status
+narada is a command first; the tmux plugin adds a key and a status
 segment. With [TPM](https://github.com/tmux-plugins/tpm):
 
 ```tmux
-set -g @plugin 'Theyashsawarkar/sandesh'
-set -g status-right '#{sandesh_status} %H:%M'   # 󰇮 3  󰭹 2  󰖣 1
+set -g @plugin 'Theyashsawarkar/narada'
+set -g status-right '#{narada_status} %H:%M'   # 󰇮 3  󰭹 2  󰖣 1
 ```
 
-`prefix e` opens sandesh in a popup. If `sandesh` isn't on your `PATH`, the
+`prefix e` opens narada in a popup. If `narada` isn't on your `PATH`, the
 plugin builds its own copy with Go the first time.
 
 | Option | Default | |
 |---|---|---|
-| `@sandesh-key` | `e` | Key after the prefix; `none` binds nothing |
-| `@sandesh-width` / `@sandesh-height` | `96%` / `94%` | Popup size |
-| `@sandesh-title` | ` sandesh ` | Popup title |
-| `@sandesh-launcher` | | Your own popup command, run with display-popup's arguments appended (e.g. `"~/.tmux/scripts/popup.sh '#{client_name}'"`) |
+| `@narada-key` | `e` | Key after the prefix; `none` binds nothing |
+| `@narada-width` / `@narada-height` | `96%` / `94%` | Popup size |
+| `@narada-title` | ` narada ` | Popup title |
+| `@narada-launcher` | | Your own popup command, run with display-popup's arguments appended (e.g. `"~/.tmux/scripts/popup.sh '#{client_name}'"`) |
 
 The key carries a `bind -N` note, and `scripts/keybindings` lists the keys
 inside the screen as `# keybind:` lines, so both show up in tmux's
@@ -697,7 +697,7 @@ inside the screen as `# keybind:` lines, so both show up in tmux's
 
 ## Configuration
 
-`~/.config/sandesh/config.toml`; every line is optional. `sandesh config`
+`~/.config/narada/config.toml`; every line is optional. `narada config`
 prints this:
 
 ```toml
@@ -716,7 +716,7 @@ whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
 ai_command    = ["claude", "-p"]   # what @, S, D and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed
 # compose     = "editor"           # write mail in the editor instead of the compose screen
-# include     = "~/.local/state/varna/sandesh.toml"   # a theme file; its [colors] win
+# include     = "~/.local/state/varna/narada.toml"   # a theme file; its [colors] win
 
 # Sections are the tabs on top. label: a Gmail label id (INBOX, STARRED,
 # UNREAD, or a label's id), query: a Gmail search run on the server,
@@ -745,22 +745,22 @@ file it writes and the screen follows your theme.
 
 | Path | |
 |---|---|
-| `~/.config/sandesh/config.toml` | Settings |
-| `~/.config/sandesh/client.json` | Your OAuth client (`auth setup`) |
-| keyring, service `sandesh` | Sign-in tokens (`secret-tool search service sandesh`); without a keyring, `~/.config/sandesh/tokens/` (mode 600) |
-| `~/.local/share/sandesh/cache.db` | The local copy (SQLite) |
-| `~/.local/share/sandesh/whatsapp.db` | This device's WhatsApp keys (mode 600; `whatsapp unlink` logs out) |
-| `~/.local/state/sandesh/agent.log` | What agents did |
-| `~/.local/state/sandesh/sections.json` | Searches saved with `W` |
-| `~/.config/systemd/user/sandesh.service` | The background sync (`service install`) |
+| `~/.config/narada/config.toml` | Settings |
+| `~/.config/narada/client.json` | Your OAuth client (`auth setup`) |
+| keyring, service `narada` | Sign-in tokens (`secret-tool search service narada`); without a keyring, `~/.config/narada/tokens/` (mode 600) |
+| `~/.local/share/narada/cache.db` | The local copy (SQLite) |
+| `~/.local/share/narada/whatsapp.db` | This device's WhatsApp keys (mode 600; `whatsapp unlink` logs out) |
+| `~/.local/state/narada/agent.log` | What agents did |
+| `~/.local/state/narada/sections.json` | Searches saved with `W` |
+| `~/.config/systemd/user/narada.service` | The background sync (`service install`) |
 
-`SANDESH_HOME` puts all of sandesh's files under one folder (tests and
-`demo` use it). `SANDESH_GOOGLE_URL` sends every API call to a fake Google
+`NARADA_HOME` puts all of narada's files under one folder (tests and
+`demo` use it). `NARADA_GOOGLE_URL` sends every API call to a fake Google
 (the test suite's). The usual `XDG_*` variables are respected.
 
 ## How it works
 
-- **One local copy, many front ends.** `sandesh daemon` (the systemd user
+- **One local copy, many front ends.** `narada daemon` (the systemd user
   unit) follows Gmail's change feed (`history.list`) every minute and
   checks Google Chat spaces with new activity every 30 seconds, storing
   everything in SQLite with full-text search. The screen, the CLI and the
@@ -781,7 +781,7 @@ file it writes and the screen follows your theme.
   senders) and `profile`.
 - **WhatsApp as a linked device**: WhatsApp is a live connection, not
   something to poll, so one process holds it (the daemon, else whichever
-  sandesh is open) and delivers WhatsApp sends; its chats live in the same
+  narada is open) and delivers WhatsApp sends; its chats live in the same
   local copy as Google Chat's.
 - **Written in Go**: one static binary, Bubble Tea for the screen, the
   official MCP Go SDK, pure-Go SQLite.
@@ -790,14 +790,14 @@ Design decisions are recorded in [docs/adr](docs/adr).
 
 ## Troubleshooting
 
-- **`sandesh doctor`** checks the OAuth client, each account's sign-in and
+- **`narada doctor`** checks the OAuth client, each account's sign-in and
   last sync, the background service, the tmux key and the Claude Code MCP
   server.
 - **"Google said no: … has not been used in project"**: enable that API
   (Gmail, Chat or People) in the Cloud console for your project.
 - **Chat fails, mail works**: Google Chat's API needs a Workspace account
   and the Chat API's Configuration page filled in. For a personal Gmail:
-  `sandesh auth remove personal && sandesh auth add personal --no-chat`.
+  `narada auth remove personal && narada auth add personal --no-chat`.
 - **"access blocked" or "admin_policy_enforced"** on sign-in: your
   Workspace admin has to allow the app (Admin console → Security → API
   controls).
@@ -805,10 +805,10 @@ Design decisions are recorded in [docs/adr](docs/adr).
   Testing; publish it.
 - **WhatsApp says "the phone unlinked this device"**: the phone was offline
   for about two weeks, or the device was removed there; run
-  `sandesh whatsapp link` again.
-- **"WhatsApp is in use by another sandesh"**: the daemon (or an open
+  `narada whatsapp link` again.
+- **"WhatsApp is in use by another narada"**: the daemon (or an open
   screen) holds the connection; stop it to link or unlink.
-- **Logs**: `journalctl --user -u sandesh -f`.
+- **Logs**: `journalctl --user -u narada -f`.
 
 ## Contributing
 
@@ -822,7 +822,7 @@ update the tables above. Every change gets a CHANGELOG entry.
 
 - Attachments: save and open.
 - Gmail and Chat push (Pub/Sub, Workspace Events) instead of polling.
-- A Vyom glance panel and a waybar module reading `sandesh status --json`.
+- A Vyom glance panel and a waybar module reading `narada status --json`.
 - Calendar invites: accept and decline from the preview.
 
 ## License

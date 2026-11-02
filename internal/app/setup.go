@@ -6,8 +6,8 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/Theyashsawarkar/sandesh/internal/google"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/google"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 var validName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
@@ -49,7 +49,7 @@ func (a *App) SignIn(ctx context.Context, name, email string, chat bool, say fun
 			return err
 		}
 		if tok.RefreshToken == "" {
-			return errors.New("google gave no refresh token; remove sandesh from https://myaccount.google.com/permissions and try again")
+			return errors.New("google gave no refresh token; remove narada from https://myaccount.google.com/permissions and try again")
 		}
 		if err := a.Tokens.Save(name, tok); err != nil {
 			return err

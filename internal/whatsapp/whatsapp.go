@@ -1,4 +1,4 @@
-// Package whatsapp links sandesh to a WhatsApp account as a companion
+// Package whatsapp links narada to a WhatsApp account as a companion
 // device, the way WhatsApp Web is linked, through whatsmeow. It turns
 // WhatsApp's events into plain chats and messages for the app layer and
 // sends text; it keeps nothing itself except whatsmeow's device keys
@@ -25,7 +25,7 @@ import (
 	_ "modernc.org/sqlite" // the keys' database, like the local copy's
 )
 
-// Message is one WhatsApp message, as sandesh keeps it. Chat and Sender
+// Message is one WhatsApp message, as narada keeps it. Chat and Sender
 // are JIDs ("919876543210@s.whatsapp.net", "1203…@g.us").
 type Message struct {
 	ID         string
@@ -90,7 +90,7 @@ type Client struct {
 
 func init() {
 	// what the phone shows under Linked devices
-	store.SetOSInfo("sandesh", [3]uint32{0, 3, 0})
+	store.SetOSInfo("narada", [3]uint32{0, 3, 0})
 }
 
 // Open opens the device keys in path (made 0600), linked or not.
@@ -213,7 +213,7 @@ func (cl *Client) Link(ctx context.Context, phone string, show func(qr, code str
 // Connect goes online and hands every event to handler, until Close.
 func (cl *Client) Connect(handler func(Event)) error {
 	if !cl.Linked() {
-		return errors.New("WhatsApp is not linked: run `sandesh whatsapp link`")
+		return errors.New("WhatsApp is not linked: run `narada whatsapp link`")
 	}
 	cl.mu.Lock()
 	cl.handler = handler
@@ -360,7 +360,7 @@ func (cl *Client) event(evt any) {
 	case *events.Disconnected:
 		cl.emit(Event{State: "disconnected"})
 	case *events.LoggedOut:
-		cl.emit(Event{State: "logged-out", Err: errors.New("the phone unlinked this device: run `sandesh whatsapp link` again")})
+		cl.emit(Event{State: "logged-out", Err: errors.New("the phone unlinked this device: run `narada whatsapp link` again")})
 	case *events.StreamReplaced:
 		cl.emit(Event{State: "replaced", Err: errors.New("another program connected with these keys")})
 	case *events.TemporaryBan:
@@ -400,7 +400,7 @@ func (cl *Client) event(evt any) {
 // chatJID: a person's phone-number JID when WhatsApp addressed them by
 // their hidden id (LID), so one person is one chat.
 // receiptTicks is the ticks a receipt from someone else means. In a group
-// each member sends their own, and blue ticks need them all, which sandesh
+// each member sends their own, and blue ticks need them all, which narada
 // doesn't count: a group message shows at most delivered.
 func receiptTicks(t types.ReceiptType, group bool) int {
 	level := 0
@@ -489,7 +489,7 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 }
 
 // convert turns a whatsmeow message into ours; ok is false for what
-// sandesh doesn't show (status updates, key exchanges, reactions).
+// narada doesn't show (status updates, key exchanges, reactions).
 func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool) {
 	info := e.Info
 	if Hidden(info.Chat.String()) || info.Chat.Server == types.BroadcastServer || info.Chat.Server == types.NewsletterServer {

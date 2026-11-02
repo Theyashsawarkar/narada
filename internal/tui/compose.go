@@ -14,9 +14,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/cli"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/cli"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
@@ -71,7 +71,7 @@ func (m *Model) editChat(account string, out store.Outgoing, approveID int64) te
 func (m Model) afterEdit(msg editedMsg) (tea.Model, tea.Cmd) {
 	defer os.Remove(msg.path)
 	if msg.err != nil {
-		m.setErr(fmt.Sprintf("the editor (%s) failed: %v · set editor = \"...\" in ~/.config/sandesh/config.toml", cli.EditorName(m.a), msg.err))
+		m.setErr(fmt.Sprintf("the editor (%s) failed: %v · set editor = \"...\" in ~/.config/narada/config.toml", cli.EditorName(m.a), msg.err))
 		return m, nil
 	}
 	b, err := os.ReadFile(msg.path)
@@ -341,7 +341,7 @@ func (m *Model) runAI(title, prompt, stdin string, tools bool, draftFor *review)
 	}
 	isClaude := strings.HasSuffix(argv[0], "claude")
 	if isClaude && tools {
-		argv = append(argv, "--allowedTools", "mcp__sandesh")
+		argv = append(argv, "--allowedTools", "mcp__narada")
 	}
 	if isClaude {
 		// --allowedTools takes many values: without "--" it eats the prompt too
@@ -375,9 +375,9 @@ func (m *Model) runAI(title, prompt, stdin string, tools bool, draftFor *review)
 	}
 }
 
-// aiPath is PATH plus the folders sandesh and claude usually live in.
+// aiPath is PATH plus the folders narada and claude usually live in.
 // From a tmux popup PATH often lacks ~/.local/bin, and then claude can't
-// start `sandesh mcp` (its MCP config names plain "sandesh").
+// start `narada mcp` (its MCP config names plain "narada").
 func aiPath() string {
 	dirs := filepath.SplitList(os.Getenv("PATH"))
 	home, _ := os.UserHomeDir()
@@ -421,8 +421,8 @@ func (m *Model) context() string {
 }
 
 func (m *Model) ask(q string) tea.Cmd {
-	prompt := "You are helping the user with their mail and Google Chat through sandesh's MCP tools (mcp__sandesh__*). " +
-		m.context() + " Sending needs the user's approval in sandesh; say so if you queue one." + style + "\n\nThe user asks: " + q
+	prompt := "You are helping the user with their mail and Google Chat through narada's MCP tools (mcp__narada__*). " +
+		m.context() + " Sending needs the user's approval in narada; say so if you queue one." + style + "\n\nThe user asks: " + q
 	return m.runAI("claude: "+q, prompt, "", true, nil)
 }
 

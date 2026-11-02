@@ -246,11 +246,11 @@ func (m Model) linkPanel(w, h int) string {
 		}
 		center("", "", logo, "",
 			s.text.Render("Link your WhatsApp to read and send your chats here, like WhatsApp Web."),
-			s.sub.Render("Your phone stays the main device; sandesh shows up under Linked devices."), "",
+			s.sub.Render("Your phone stays the main device; narada shows up under Linked devices."), "",
 			keys([2]string{"L", "link with a QR code"}, [2]string{"P", "link with your phone number"}), "", "",
 			s.peach.Render("Know the risk"),
 			s.muted.Render("WhatsApp doesn't allow programs other than its own to link. Normal use looks like"),
-			s.muted.Render("WhatsApp Web, but an account that sends a lot from one can be banned: sandesh caps"),
+			s.muted.Render("WhatsApp Web, but an account that sends a lot from one can be banned: narada caps"),
 			s.muted.Render(fmt.Sprintf("sends at %d an hour and sends one chat at a time.", m.a.Config.WhatsAppPerHour)))
 	}
 	return strings.Join(lines, "\n")

@@ -15,14 +15,14 @@ func UnitPath() string {
 		home, _ := os.UserHomeDir()
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "systemd", "user", "sandesh.service")
+	return filepath.Join(dir, "systemd", "user", "narada.service")
 }
 
-// Unit is the systemd user unit that runs `sandesh daemon`.
+// Unit is the systemd user unit that runs `narada daemon`.
 func Unit(bin string) string {
 	return fmt.Sprintf(`[Unit]
-Description=sandesh: Gmail and Google Chat sync
-Documentation=https://github.com/Theyashsawarkar/sandesh
+Description=narada: Gmail and Google Chat sync
+Documentation=https://github.com/Theyashsawarkar/narada
 After=network-online.target
 StartLimitIntervalSec=0
 
@@ -38,10 +38,10 @@ WantedBy=default.target
 `, bin)
 }
 
-// serviceBinary prefers the sandesh on PATH (it survives rebuilds and
+// serviceBinary prefers the narada on PATH (it survives rebuilds and
 // updates), else this binary.
 func serviceBinary() string {
-	if p, err := exec.LookPath("sandesh"); err == nil {
+	if p, err := exec.LookPath("narada"); err == nil {
 		if abs, err := filepath.Abs(p); err == nil {
 			return abs
 		}
@@ -52,7 +52,7 @@ func serviceBinary() string {
 // InstallService writes, enables and (re)starts the background sync.
 func InstallService() error {
 	if _, err := exec.LookPath("systemctl"); err != nil {
-		return fmt.Errorf("no systemd here: run `sandesh daemon` from your session startup instead")
+		return fmt.Errorf("no systemd here: run `narada daemon` from your session startup instead")
 	}
 	if err := os.MkdirAll(filepath.Dir(UnitPath()), 0o755); err != nil {
 		return err
@@ -60,7 +60,7 @@ func InstallService() error {
 	if err := os.WriteFile(UnitPath(), []byte(Unit(serviceBinary())), 0o644); err != nil {
 		return err
 	}
-	for _, args := range [][]string{{"daemon-reload"}, {"enable", "sandesh.service"}, {"restart", "sandesh.service"}} {
+	for _, args := range [][]string{{"daemon-reload"}, {"enable", "narada.service"}, {"restart", "narada.service"}} {
 		if out, err := exec.Command("systemctl", append([]string{"--user"}, args...)...).CombinedOutput(); err != nil {
 			return fmt.Errorf("systemctl --user %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
 		}

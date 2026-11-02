@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/whatsapp"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
-// WhatsApp is an in-memory WhatsApp account for the tests and `sandesh
+// WhatsApp is an in-memory WhatsApp account for the tests and `narada
 // demo`: it links at once, answers sends, and lets a test play messages
 // arriving.
 type WhatsApp struct {
@@ -30,11 +30,11 @@ type WhatsApp struct {
 	handler func(whatsapp.Event)
 	nextID  int
 
-	Sent   []whatsapp.Message // what sandesh sent, in order
-	Read   []string           // chats sandesh sent read receipts for
+	Sent   []whatsapp.Message // what narada sent, in order
+	Read   []string           // chats narada sent read receipts for
 	Groups map[string]string  // group JID → name
 	People map[string]string  // JID → contact name
-	// History is played when sandesh connects for the first time.
+	// History is played when narada connects for the first time.
 	History []whatsapp.Message
 	Chats   []whatsapp.Chat
 	played  bool
@@ -112,7 +112,7 @@ func (c *WhatsAppConn) Link(ctx context.Context, phone string, show func(qr, cod
 	if phone != "" {
 		show("", "K7QD9WXA")
 	} else {
-		show("2@sandesh-demo,not-a-real-code,"+strings.Repeat("x", 120), "")
+		show("2@narada-demo,not-a-real-code,"+strings.Repeat("x", 120), "")
 	}
 	select {
 	case <-time.After(c.w.LinkDelay):

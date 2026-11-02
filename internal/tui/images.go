@@ -25,8 +25,8 @@ import (
 	xdraw "golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // Photos, stickers and GIFs show inside the conversation. On kitty (and
@@ -120,7 +120,7 @@ func (st *imageStore) kittyWrite(cmds ...string) {
 	_, _ = f.WriteString(strings.Join(cmds, ""))
 }
 
-// forget takes sandesh's images out of the terminal (when the screen quits).
+// forget takes narada's images out of the terminal (when the screen quits).
 func (st *imageStore) forget() {
 	st.mu.Lock()
 	defer st.mu.Unlock()

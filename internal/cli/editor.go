@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 const marker = "-- Write below this line (Attach: takes file paths, comma separated). Save and quit to review; an empty message is not sent. --"
@@ -114,7 +114,7 @@ func EditorCmd(a *app.App, path string) *exec.Cmd {
 	return exec.Command("sh", "-c", ed+` "$1"`, "sh", path)
 }
 
-// EditorName is the editor sandesh will run.
+// EditorName is the editor narada will run.
 func EditorName(a *app.App) string {
 	for _, e := range []string{a.Config.Editor, os.Getenv("VISUAL"), os.Getenv("EDITOR")} {
 		if e != "" {

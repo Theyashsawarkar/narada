@@ -4,6 +4,7 @@
 package google
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -34,12 +35,12 @@ var (
 	}
 )
 
-// FakeURL, when set (SANDESH_GOOGLE_URL), sends every API call to one
+// FakeURL, when set (NARADA_GOOGLE_URL), sends every API call to one
 // local server and skips OAuth: the test suite's fake Google.
 // Only a local address is accepted, so a stray variable can never send
 // your mail or skip sign-in against a remote server.
 func FakeURL() string {
-	u := os.Getenv("SANDESH_GOOGLE_URL")
+	u := os.Getenv("NARADA_GOOGLE_URL")
 	if u == "" {
 		return ""
 	}
@@ -48,7 +49,7 @@ func FakeURL() string {
 			return u
 		}
 	}
-	fmt.Fprintln(os.Stderr, "sandesh: ignoring SANDESH_GOOGLE_URL: only a local address (http://127.0.0.1:PORT) is allowed")
+	fmt.Fprintln(os.Stderr, "narada: ignoring NARADA_GOOGLE_URL: only a local address (http://127.0.0.1:PORT) is allowed")
 	return ""
 }
 
@@ -68,7 +69,7 @@ func LoadClient(path string, scopes []string) (*oauth2.Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("no OAuth client at %s: download a Desktop app client from the Cloud console and run `sandesh auth setup <file.json>`", path)
+			return nil, fmt.Errorf("no OAuth client at %s: download a Desktop app client from the Cloud console and run `narada auth setup <file.json>`", path)
 		}
 		return nil, err
 	}
@@ -168,9 +169,9 @@ func SignIn(ctx context.Context, conf *oauth2.Config, hint string, say func(stri
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if res.err != nil {
-			fmt.Fprintf(w, "<p style='font:16px sans-serif'>sandesh: %s</p>", html.EscapeString(res.err.Error()))
+			fmt.Fprintf(w, "<p style='font:16px sans-serif'>narada: %s</p>", html.EscapeString(res.err.Error()))
 		} else {
-			fmt.Fprint(w, "<p style='font:16px sans-serif'>sandesh is signed in. You can close this tab.</p>")
+			fmt.Fprint(w, "<p style='font:16px sans-serif'>narada is signed in. You can close this tab.</p>")
 		}
 		once.Do(func() { got <- res })
 	})}
@@ -215,13 +216,13 @@ func (ts TokenStore) file(account string) string {
 func (ts TokenStore) Save(account string, tok *oauth2.Token) error {
 	b, _ := json.Marshal(tok)
 	if keyringOK() {
-		cmd := exec.Command("secret-tool", "store", "--label=sandesh: "+account, "service", "sandesh", "account", account)
+		cmd := exec.Command("secret-tool", "store", "--label=narada: "+account, "service", "narada", "account", account)
 		cmd.Stdin = strings.NewReader(string(b))
 		if out, err := cmd.CombinedOutput(); err == nil {
 			_ = os.Remove(ts.file(account))
 			return nil
 		} else if len(out) > 0 {
-			fmt.Fprintf(os.Stderr, "sandesh: keyring: %s (keeping the token in a private file instead)\n", strings.TrimSpace(string(out)))
+			fmt.Fprintf(os.Stderr, "narada: keyring: %s (keeping the token in a private file instead)\n", strings.TrimSpace(string(out)))
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(ts.file(account)), 0o700); err != nil {
@@ -233,14 +234,14 @@ func (ts TokenStore) Save(account string, tok *oauth2.Token) error {
 func (ts TokenStore) Load(account string) (*oauth2.Token, error) {
 	var b []byte
 	if keyringOK() {
-		if out, err := exec.Command("secret-tool", "lookup", "service", "sandesh", "account", account).Output(); err == nil && len(out) > 0 {
+		if out, err := lookupSecret(account); err == nil && len(out) > 0 {
 			b = out
 		}
 	}
 	if b == nil {
 		f, err := os.ReadFile(ts.file(account))
 		if err != nil {
-			return nil, fmt.Errorf("account %q is not signed in (sandesh auth add %s)", account, account)
+			return nil, fmt.Errorf("account %q is not signed in (narada auth add %s)", account, account)
 		}
 		b = f
 	}
@@ -254,7 +255,7 @@ func (ts TokenStore) Load(account string) (*oauth2.Token, error) {
 // Where tells doctor where an account's token lives.
 func (ts TokenStore) Where(account string) string {
 	if keyringOK() {
-		if out, err := exec.Command("secret-tool", "lookup", "service", "sandesh", "account", account).Output(); err == nil && len(out) > 0 {
+		if out, err := lookupSecret(account); err == nil && len(out) > 0 {
 			return "keyring"
 		}
 	}
@@ -266,7 +267,7 @@ func (ts TokenStore) Where(account string) string {
 
 func (ts TokenStore) Delete(account string) {
 	if keyringOK() {
-		_ = exec.Command("secret-tool", "clear", "service", "sandesh", "account", account).Run()
+		_ = exec.Command("secret-tool", "clear", "service", "narada", "account", account).Run()
 	}
 	_ = os.Remove(ts.file(account))
 }
@@ -311,4 +312,22 @@ func HTTPClient(ctx context.Context, clientPath string, store TokenStore, accoun
 	c := oauth2.NewClient(ctx, oauth2.ReuseTokenSource(tok, src))
 	c.Timeout = 60 * time.Second
 	return c, nil
+}
+
+// lookupSecret reads a stored secret. Up to its rename narada was called sandesh:
+// a secret still kept under the old name moves to the new one on first read.
+func lookupSecret(account string) ([]byte, error) {
+	if out, err := exec.Command("secret-tool", "lookup", "service", "narada", "account", account).Output(); err == nil && len(out) > 0 {
+		return out, nil
+	}
+	out, err := exec.Command("secret-tool", "lookup", "service", "sandesh", "account", account).Output()
+	if err != nil || len(out) == 0 {
+		return nil, errors.New("no secret")
+	}
+	cmd := exec.Command("secret-tool", "store", "--label=narada: "+account, "service", "narada", "account", account)
+	cmd.Stdin = bytes.NewReader(out)
+	if cmd.Run() == nil {
+		_ = exec.Command("secret-tool", "clear", "service", "sandesh", "account", account).Run()
+	}
+	return out, nil
 }

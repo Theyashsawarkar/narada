@@ -16,11 +16,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/fake"
-	"github.com/Theyashsawarkar/sandesh/internal/google"
-	"github.com/Theyashsawarkar/sandesh/internal/mcpserver"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/fake"
+	"github.com/Theyashsawarkar/narada/internal/google"
+	"github.com/Theyashsawarkar/narada/internal/mcpserver"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // ------------------------------------------------------------------- auth
@@ -41,10 +41,10 @@ func auth(a *app.App, args []string) error {
 		if err := a.InstallClient(b); err != nil {
 			return fmt.Errorf("%s: %w", args[1], err)
 		}
-		fmt.Printf("OAuth client saved to %s.\nNext: sandesh auth add work\n", a.Paths.ClientFile())
+		fmt.Printf("OAuth client saved to %s.\nNext: narada auth add work\n", a.Paths.ClientFile())
 		return nil
 	case "add", "login":
-		fs := flags("sandesh auth add", "sandesh auth add <name> [--email you@company.com] [--no-chat]\n\nSigns in a Google account in your browser. --no-chat for a personal Gmail\n(Google Chat's API needs a Workspace account).")
+		fs := flags("narada auth add", "narada auth add <name> [--email you@company.com] [--no-chat]\n\nSigns in a Google account in your browser. --no-chat for a personal Gmail\n(Google Chat's API needs a Workspace account).")
 		email := fs.String("email", "", "prefill the account on Google's page")
 		noChat := fs.Bool("no-chat", false, "mail only")
 		pos, err := parse(fs, args[1:])
@@ -56,7 +56,7 @@ func auth(a *app.App, args []string) error {
 		}
 		name := pos[0]
 		if name == store.WhatsAppAccount {
-			return usageError("%q is WhatsApp's: sandesh whatsapp link links WhatsApp", name)
+			return usageError("%q is WhatsApp's: narada whatsapp link links WhatsApp", name)
 		}
 		chat := !*noChat
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -75,11 +75,11 @@ func auth(a *app.App, args []string) error {
 		}
 		if chat {
 			if _, err := a.SyncChat(sctx, name); err != nil {
-				fmt.Fprintf(os.Stderr, "sandesh: mail works; chat failed: %v\n  (a personal Gmail has no Chat API: sandesh auth add %s --no-chat)\n", err, name)
+				fmt.Fprintf(os.Stderr, "narada: mail works; chat failed: %v\n  (a personal Gmail has no Chat API: narada auth add %s --no-chat)\n", err, name)
 			}
 		}
 		acc, _ := a.Store.Account(name)
-		fmt.Printf("Done: %s. Open it with `sandesh`.\n", acc.Email)
+		fmt.Printf("Done: %s. Open it with `narada`.\n", acc.Email)
 		return nil
 	case "list", "ls":
 		accs, err := a.Store.Accounts()
@@ -87,7 +87,7 @@ func auth(a *app.App, args []string) error {
 			return err
 		}
 		if len(accs) == 0 {
-			fmt.Println("no accounts: sandesh auth add work")
+			fmt.Println("no accounts: narada auth add work")
 		}
 		for _, x := range accs {
 			chat := "mail+chat"
@@ -121,7 +121,7 @@ func auth(a *app.App, args []string) error {
 // ----------------------------------------------------------------- daemon
 
 func daemon(a *app.App, args []string) error {
-	fs := flags("sandesh daemon", "sandesh daemon\n\nThe background sync: mail every mail_interval, chat every chat_interval,\nsends the outbox, notifies about new mail and DMs. Logs to stderr.")
+	fs := flags("narada daemon", "narada daemon\n\nThe background sync: mail every mail_interval, chat every chat_interval,\nsends the outbox, notifies about new mail and DMs. Logs to stderr.")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -135,10 +135,10 @@ func daemon(a *app.App, args []string) error {
 	}
 	release, ok := a.HoldDaemonLock()
 	if !ok {
-		return errors.New("another sandesh daemon is already running")
+		return errors.New("another narada daemon is already running")
 	}
 	defer release()
-	log.Printf("sandesh %s daemon: mail every %s, chat every %s", app.Version, a.Config.MailInterval.Duration, a.Config.ChatInterval.Duration)
+	log.Printf("narada %s daemon: mail every %s, chat every %s", app.Version, a.Config.MailInterval.Duration, a.Config.ChatInterval.Duration)
 	type backoff struct {
 		next  time.Time
 		delay time.Duration
@@ -179,7 +179,7 @@ func daemon(a *app.App, args []string) error {
 			for _, sent := range a.DeliverDue(ctx) {
 				if sent.Status == store.StatusFailed {
 					log.Printf("send #%d failed: %s", sent.ID, sent.Error)
-					app.Notify("sandesh: send failed", sent.Error)
+					app.Notify("narada: send failed", sent.Error)
 				}
 			}
 			select {
@@ -232,10 +232,10 @@ func service(a *app.App, args []string) error {
 		if err := app.InstallService(); err != nil {
 			return err
 		}
-		fmt.Printf("Installed %s and started it.\nLogs: journalctl --user -u sandesh -f\n", app.UnitPath())
+		fmt.Printf("Installed %s and started it.\nLogs: journalctl --user -u narada -f\n", app.UnitPath())
 		return nil
 	case "remove", "uninstall":
-		_ = sc("disable", "--now", "sandesh.service")
+		_ = sc("disable", "--now", "narada.service")
 		if err := os.Remove(app.UnitPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -243,7 +243,7 @@ func service(a *app.App, args []string) error {
 		fmt.Println("Removed the background sync.")
 		return nil
 	case "status":
-		return sc("status", "--no-pager", "sandesh.service")
+		return sc("status", "--no-pager", "narada.service")
 	}
 	return usageError("unknown service command %q", args[0])
 }
@@ -251,7 +251,7 @@ func service(a *app.App, args []string) error {
 // -------------------------------------------------------------------- mcp
 
 func mcpCmd(a *app.App, args []string) error {
-	fs := flags("sandesh mcp", "sandesh mcp\n\nThe MCP server (stdio) for Claude Code and other agents:\n  claude mcp add --scope user sandesh -- sandesh mcp")
+	fs := flags("narada mcp", "narada mcp\n\nThe MCP server (stdio) for Claude Code and other agents:\n  claude mcp add --scope user narada -- narada mcp")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func MCPHelpers() mcpserver.Helpers {
 // ------------------------------------------------------------------- demo
 
 func demo(args []string, tui func(*app.App, string) error) error {
-	fs := flags("sandesh demo", "sandesh demo [--server ADDR]\n\nThe screen on made-up mail and chat, served by a fake Google inside this\nprocess. Nothing touches your accounts; everything is gone when you quit.\n--server only runs the fake Google (for development): point other sandesh\ncommands at it with the SANDESH_HOME and SANDESH_GOOGLE_URL it prints.")
+	fs := flags("narada demo", "narada demo [--server ADDR]\n\nThe screen on made-up mail and chat, served by a fake Google inside this\nprocess. Nothing touches your accounts; everything is gone when you quit.\n--server only runs the fake Google (for development): point other narada\ncommands at it with the NARADA_HOME and NARADA_GOOGLE_URL it prints.")
 	serve := fs.String("server", "", "run only the fake Google on this address, e.g. 127.0.0.1:8765")
 	if _, err := parse(fs, args); err != nil {
 		return err
@@ -283,14 +283,14 @@ func demo(args []string, tui func(*app.App, string) error) error {
 	if *serve != "" {
 		g := fake.New()
 		g.Seed()
-		home, err := os.MkdirTemp("", "sandesh-dev-")
+		home, err := os.MkdirTemp("", "narada-dev-")
 		if err != nil {
 			return err
 		}
-		fmt.Printf("export SANDESH_HOME=%s SANDESH_GOOGLE_URL=http://%s\nthen: sandesh auth add demo && sandesh\n", home, *serve)
+		fmt.Printf("export NARADA_HOME=%s NARADA_GOOGLE_URL=http://%s\nthen: narada auth add demo && narada\n", home, *serve)
 		return (&http.Server{Addr: *serve, Handler: g, ReadHeaderTimeout: 10 * time.Second}).ListenAndServe()
 	}
-	home, err := os.MkdirTemp("", "sandesh-demo-")
+	home, err := os.MkdirTemp("", "narada-demo-")
 	if err != nil {
 		return err
 	}
@@ -303,8 +303,8 @@ func demo(args []string, tui func(*app.App, string) error) error {
 	g.Seed()
 	srv := httptest.NewServer(g)
 	defer srv.Close()
-	os.Setenv("SANDESH_HOME", home)
-	os.Setenv("SANDESH_GOOGLE_URL", srv.URL)
+	os.Setenv("NARADA_HOME", home)
+	os.Setenv("NARADA_GOOGLE_URL", srv.URL)
 	a, err := app.Open()
 	if err != nil {
 		return err
@@ -318,7 +318,7 @@ func demo(args []string, tui func(*app.App, string) error) error {
 	w.Receipts = true
 	a.Config.ChatUndoSeconds = max(a.Config.ChatUndoSeconds, 5) // to show the countdown
 	a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }
-	if os.Getenv("SANDESH_DEMO_UNLINKED") != "" {
+	if os.Getenv("NARADA_DEMO_UNLINKED") != "" {
 		// for trying the WhatsApp tab's linking: the "phone" scans after 6 s
 		c, _ := w.Conn(context.Background())
 		_ = c.Logout(context.Background())
@@ -337,7 +337,7 @@ func demo(args []string, tui func(*app.App, string) error) error {
 // ----------------------------------------------------------------- doctor
 
 func doctor(a *app.App, args []string) error {
-	fs := flags("sandesh doctor", "sandesh doctor\n\nChecks the OAuth client, each account's sign-in and sync, the background\nservice, the tmux plugin and the Claude Code MCP server.")
+	fs := flags("narada doctor", "narada doctor\n\nChecks the OAuth client, each account's sign-in and sync, the background\nservice, the tmux plugin and the Claude Code MCP server.")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -347,15 +347,15 @@ func doctor(a *app.App, args []string) error {
 	fail := func(f string, x ...any) { bad++; fmt.Printf("  \033[31m✗\033[0m "+f+"\n", x...) }
 	look := func(bin string) bool { _, err := exec.LookPath(bin); return err == nil }
 
-	fmt.Printf("sandesh %s\n", app.Version)
+	fmt.Printf("narada %s\n", app.Version)
 	fmt.Println("Setup")
 	if _, err := os.Stat(a.Paths.ConfigFile()); err == nil {
 		okf("config: %s", a.Paths.ConfigFile())
 	} else {
-		okf("config: defaults (sandesh config > %s to change them)", a.Paths.ConfigFile())
+		okf("config: defaults (narada config > %s to change them)", a.Paths.ConfigFile())
 	}
 	if google.FakeURL() != "" {
-		warn("SANDESH_GOOGLE_URL is set: talking to a fake Google at %s", google.FakeURL())
+		warn("NARADA_GOOGLE_URL is set: talking to a fake Google at %s", google.FakeURL())
 	} else if _, err := google.LoadClient(a.Paths.ClientFile(), nil); err != nil {
 		fail("%v", err)
 	} else {
@@ -369,14 +369,14 @@ func doctor(a *app.App, args []string) error {
 	accs, _ := a.Store.Accounts()
 	fmt.Println("Accounts")
 	if len(accs) == 0 {
-		fail("none: sandesh auth add work")
+		fail("none: narada auth add work")
 	}
 	for _, x := range accs {
 		where := a.Tokens.Where(x.Name)
 		switch {
 		case google.FakeURL() != "":
 		case where == "":
-			fail("%s: not signed in (sandesh auth add %s)", x.Name, x.Name)
+			fail("%s: not signed in (narada auth add %s)", x.Name, x.Name)
 			continue
 		case where == "file":
 			warn("%s: token in a private file, not the keyring", x.Name)
@@ -384,7 +384,7 @@ func doctor(a *app.App, args []string) error {
 		if x.LastError != "" {
 			fail("%s: last sync failed: %s", x.Name, x.LastError)
 		} else if x.MailSynced == 0 {
-			warn("%s: never synced (sandesh sync)", x.Name)
+			warn("%s: never synced (narada sync)", x.Name)
 		} else {
 			age := time.Since(time.UnixMilli(x.MailSynced)).Round(time.Second)
 			if age > 10*time.Minute {
@@ -396,28 +396,28 @@ func doctor(a *app.App, args []string) error {
 	}
 	fmt.Println("Integrations")
 	if look("systemctl") {
-		out, _ := exec.Command("systemctl", "--user", "is-active", "sandesh.service").Output()
+		out, _ := exec.Command("systemctl", "--user", "is-active", "narada.service").Output()
 		if strings.TrimSpace(string(out)) == "active" {
-			okf("background sync: running (sandesh.service)")
+			okf("background sync: running (narada.service)")
 		} else {
-			warn("background sync: not running (sandesh service install)")
+			warn("background sync: not running (narada service install)")
 		}
 	}
 	if os.Getenv("TMUX") != "" {
 		out, _ := exec.Command("tmux", "list-keys", "-T", "prefix").Output()
-		if strings.Contains(string(out), "sandesh") {
+		if strings.Contains(string(out), "narada") {
 			okf("tmux: popup key bound")
 		} else {
-			warn("tmux: no sandesh key (add set -g @plugin 'Theyashsawarkar/sandesh')")
+			warn("tmux: no narada key (add set -g @plugin 'Theyashsawarkar/narada')")
 		}
 	}
 	if look("claude") {
 		home, _ := os.UserHomeDir()
 		b, _ := os.ReadFile(filepath.Join(home, ".claude.json"))
-		if strings.Contains(string(b), `"sandesh"`) {
-			okf("Claude Code: sandesh MCP server added")
+		if strings.Contains(string(b), `"narada"`) {
+			okf("Claude Code: narada MCP server added")
 		} else {
-			warn("Claude Code: run `claude mcp add --scope user sandesh -- sandesh mcp`")
+			warn("Claude Code: run `claude mcp add --scope user narada -- narada mcp`")
 		}
 	} else {
 		warn("no claude on PATH: @, S, D and T in the screen need it (or set ai_command)")
@@ -428,7 +428,7 @@ func doctor(a *app.App, args []string) error {
 		warn("no notify-send: no desktop notifications")
 	}
 	if items, _ := a.Store.Outbox(store.StatusApproval); len(items) > 0 {
-		warn("%d send(s) waiting for your approval: sandesh approve", len(items))
+		warn("%d send(s) waiting for your approval: narada approve", len(items))
 	}
 	if bad > 0 {
 		return exitError{1, fmt.Sprintf("%d problem(s)", bad)}

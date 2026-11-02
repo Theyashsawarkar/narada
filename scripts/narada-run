@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Runs narada for the tmux plugin: the one on PATH, else the copy built in
+# this plugin's folder (bin/narada), building it with Go the first time.
+dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# tmux's environment often lacks ~/.local/bin and ~/go/bin: look there too
+for bin in "$(command -v narada 2>/dev/null)" "$HOME/.local/bin/narada" "${GOBIN:-$HOME/go/bin}/narada"; do
+  if [ -n "$bin" ] && [ -x "$bin" ]; then exec "$bin" "$@"; fi
+done
+# the copy built here: rebuilt whenever the plugin's code is newer (TPM update)
+stale() { [ ! -x "$dir/bin/narada" ] || [ -n "$(find "$dir/cmd" "$dir/internal" "$dir/go.mod" -newer "$dir/bin/narada" -print -quit 2>/dev/null)" ]; }
+if stale; then
+  if [ "${1:-}" = status ]; then exit 0; fi   # never build from the status line
+  if command -v go >/dev/null 2>&1; then
+    echo "Building narada..."
+    (cd "$dir" && go build -o bin/narada ./cmd/narada) || { echo "Build failed."; read -rn1; exit 1; }
+  else
+    echo "narada isn't installed: see https://github.com/Theyashsawarkar/narada#install"
+    echo "(press a key)"; read -rn1; exit 1
+  fi
+fi
+exec "$dir/bin/narada" "$@"

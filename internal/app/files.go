@@ -16,18 +16,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // MaxAttach is the most a message may carry: Gmail's own limit is 25 MB,
 // and Chat's 200 MB, but more than this belongs in Drive.
 const MaxAttach = 25 << 20
 
-// DownloadDir is where saved attachments go: $SANDESH_DOWNLOADS, else
-// the XDG download folder (or ~/Downloads), in a "sandesh" folder.
+// DownloadDir is where saved attachments go: $NARADA_DOWNLOADS, else
+// the XDG download folder (or ~/Downloads), in a "narada" folder.
 func DownloadDir() string {
-	if d := os.Getenv("SANDESH_DOWNLOADS"); d != "" {
+	if d := os.Getenv("NARADA_DOWNLOADS"); d != "" {
 		return d
 	}
 	d := os.Getenv("XDG_DOWNLOAD_DIR")
@@ -35,7 +35,7 @@ func DownloadDir() string {
 		home, _ := os.UserHomeDir()
 		d = filepath.Join(home, "Downloads")
 	}
-	return filepath.Join(d, "sandesh")
+	return filepath.Join(d, "narada")
 }
 
 // writeDownload saves data as name in dir, never overwriting: a clash
@@ -111,7 +111,7 @@ func (a *App) SaveChatAttachment(ctx context.Context, account, msgName string, n
 	f := m.Files[n]
 	p, err := a.ChatFile(ctx, account, msgName, n)
 	if errors.Is(err, ErrMediaWaiting) {
-		return "", errors.New("WhatsApp files download through the sandesh that is online (the daemon, or an open screen); try again in a moment")
+		return "", errors.New("WhatsApp files download through the narada that is online (the daemon, or an open screen); try again in a moment")
 	}
 	if err != nil {
 		return "", err

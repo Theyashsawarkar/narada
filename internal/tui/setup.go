@@ -16,13 +16,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/google"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/google"
 )
 
-// The first-run screen, shown instead of the inbox while sandesh has no
+// The first-run screen, shown instead of the inbox while narada has no
 // OAuth client or no signed-in account. Three steps: the client file (you
-// give its path; sandesh copies it into its config), the Google sign-in,
+// give its path; narada copies it into its config), the Google sign-in,
 // the first sync. Then it turns into the inbox.
 
 const consoleURL = "https://console.cloud.google.com/apis/credentials"
@@ -156,7 +156,7 @@ func completions(typed string) []string {
 	return out
 }
 
-// describeClient: "Desktop app client 2736…, project sandesh-512808".
+// describeClient: "Desktop app client 2736…, project narada-512808".
 func describeClient(path string) string {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -204,7 +204,7 @@ func (s *setup) installFile(path string) {
 
 func (s *setup) install(b []byte, from string) {
 	if strings.HasPrefix(strings.TrimSpace(string(b)), "AIza") {
-		s.err = "That's an API key. sandesh needs an OAuth client: Credentials → Create credentials → OAuth client ID → Desktop app."
+		s.err = "That's an API key. narada needs an OAuth client: Credentials → Create credentials → OAuth client ID → Desktop app."
 		return
 	}
 	if err := s.a.InstallClient(b); err != nil {
@@ -273,7 +273,7 @@ func (s setup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// keep the copy fresh from now on, with or without this screen
 			cmds = append(cmds, func() tea.Msg {
 				if err := app.InstallService(); err != nil {
-					return doneMsg{err: fmt.Errorf("background sync: %w (sandesh service install retries)", err)}
+					return doneMsg{err: fmt.Errorf("background sync: %w (narada service install retries)", err)}
 				}
 				return doneMsg{msg: "background sync started"}
 			})
@@ -511,7 +511,7 @@ func (s setup) View() string {
 	w := min(s.w-4, 86)
 	inner := w - 6
 	var b []string
-	b = append(b, st.accent.Bold(true).Render("sandesh")+st.muted.Render(" · mail and chat in the terminal"), "")
+	b = append(b, st.accent.Bold(true).Render("narada")+st.muted.Render(" · mail and chat in the terminal"), "")
 	cur := int(s.step)
 	if s.step == stepSigning {
 		cur = 1
@@ -538,8 +538,8 @@ func (s setup) View() string {
 
 	switch s.step {
 	case stepClient:
-		b = append(b, st.bold.Render("sandesh doesn't have your Google credentials yet."),
-			wrapS(st.sub, "Where is your OAuth client file? It's the JSON from Google Cloud → Clients → Desktop app → Download JSON. sandesh copies it into ~/.config/sandesh/client.json, so you can delete the download afterwards.", inner), "")
+		b = append(b, st.bold.Render("narada doesn't have your Google credentials yet."),
+			wrapS(st.sub, "Where is your OAuth client file? It's the JSON from Google Cloud → Clients → Desktop app → Download JSON. narada copies it into ~/.config/narada/client.json, so you can delete the download afterwards.", inner), "")
 		switch s.in {
 		case inID:
 			b = append(b, field("client ID", string(s.input))...)

@@ -15,12 +15,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/config"
-	"github.com/Theyashsawarkar/sandesh/internal/google"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/google"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
-const Version = "0.4.3"
+const Version = "0.5.0"
 
 type App struct {
 	Paths  config.Paths
@@ -110,7 +110,7 @@ func (a *App) ResolveAccount(name string) (store.Account, error) {
 		return store.Account{}, err
 	}
 	if len(accs) == 0 {
-		return store.Account{}, fmt.Errorf("no account yet: run `sandesh auth add work`")
+		return store.Account{}, fmt.Errorf("no account yet: run `narada auth add work`")
 	}
 	if name == "" {
 		return accs[0], nil
@@ -133,7 +133,7 @@ func (a *App) LogAgent(format string, args ...any) {
 	fmt.Fprintf(f, "%s %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, args...))
 }
 
-// lock takes a cross-process lock (a file under state/), so two sandesh
+// lock takes a cross-process lock (a file under state/), so two narada
 // processes never sync the same account at once. ok is false when another
 // one holds it.
 func (a *App) lock(name string) (unlock func(), ok bool) {
@@ -158,14 +158,14 @@ func (a *App) DaemonRunning() bool {
 	return !ok
 }
 
-// HoldDaemonLock is taken by `sandesh daemon` for its whole life.
+// HoldDaemonLock is taken by `narada daemon` for its whole life.
 func (a *App) HoldDaemonLock() (func(), bool) { return a.lock("daemon") }
 
 // Executable is the path to this binary, for popups and units.
 func Executable() string {
 	p, err := os.Executable()
 	if err != nil {
-		return "sandesh"
+		return "narada"
 	}
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r

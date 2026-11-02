@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Install sandesh for the current user, no root needed:
+# Install narada for the current user, no root needed:
 #
-#   curl -fsSL https://raw.githubusercontent.com/Theyashsawarkar/sandesh/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Theyashsawarkar/narada/main/install.sh | bash
 #
-# Downloads the release binary for this machine into ~/.local/share/sandesh
-# (or builds it with Go when there is none), links ~/.local/bin/sandesh,
-# then runs `sandesh doctor`. Run it again to update.
+# Downloads the release binary for this machine into ~/.local/share/narada
+# (or builds it with Go when there is none), links ~/.local/bin/narada,
+# then runs `narada doctor`. Run it again to update.
 #
 #   install.sh [--bin-dir DIR] [--dir DIR] [--ref TAG] [--build] [--uninstall]
 set -euo pipefail
 
-REPO=Theyashsawarkar/sandesh
-DIR=${XDG_DATA_HOME:-$HOME/.local/share}/sandesh
+REPO=Theyashsawarkar/narada
+DIR=${XDG_DATA_HOME:-$HOME/.local/share}/narada
 BIN_DIR=$HOME/.local/bin
 REF=latest
 BUILD=0
@@ -32,11 +32,11 @@ done
 say() { printf '\033[1;38;2;116;199;236m==>\033[0m %s\n' "$*"; }
 
 if [ "$UNINSTALL" = 1 ]; then
-  rm -f "$BIN_DIR/sandesh"
+  rm -f "$BIN_DIR/narada"
   rm -rf "$DIR"
-  say "Removed sandesh ($BIN_DIR/sandesh, $DIR)."
-  say "Your settings (~/.config/sandesh) and local copy (~/.local/share/sandesh) are kept"
-  say "only if they live elsewhere; run 'sandesh service remove' first if you installed the service."
+  say "Removed narada ($BIN_DIR/narada, $DIR)."
+  say "Your settings (~/.config/narada) and local copy (~/.local/share/narada) are kept"
+  say "only if they live elsewhere; run 'narada service remove' first if you installed the service."
   exit 0
 fi
 
@@ -50,22 +50,22 @@ esac
 got=0
 if [ "$BUILD" = 0 ] && [ -n "$arch" ] && command -v curl >/dev/null; then
   if [ "$REF" = latest ]; then
-    url="https://github.com/$REPO/releases/latest/download/sandesh-linux-$arch"
+    url="https://github.com/$REPO/releases/latest/download/narada-linux-$arch"
   else
-    url="https://github.com/$REPO/releases/download/$REF/sandesh-linux-$arch"
+    url="https://github.com/$REPO/releases/download/$REF/narada-linux-$arch"
   fi
   say "Downloading $url"
-  if curl -fsSL -o "$DIR/sandesh.new" "$url"; then
-    chmod +x "$DIR/sandesh.new" && mv "$DIR/sandesh.new" "$DIR/sandesh" && got=1
+  if curl -fsSL -o "$DIR/narada.new" "$url"; then
+    chmod +x "$DIR/narada.new" && mv "$DIR/narada.new" "$DIR/narada" && got=1
   else
-    rm -f "$DIR/sandesh.new"
+    rm -f "$DIR/narada.new"
     say "No release binary; building from source instead."
   fi
 fi
 
 if [ "$got" = 0 ]; then
   command -v go >/dev/null || { echo "install.sh: no release binary for this machine, and Go is needed to build one" >&2; exit 1; }
-  command -v git >/dev/null || { echo "install.sh: git is needed to build sandesh" >&2; exit 1; }
+  command -v git >/dev/null || { echo "install.sh: git is needed to build narada" >&2; exit 1; }
   src="$DIR/src"
   if [ -d "$src/.git" ]; then
     git -C "$src" fetch --quiet --tags origin
@@ -73,12 +73,12 @@ if [ "$got" = 0 ]; then
     git clone --quiet "https://github.com/$REPO.git" "$src"
   fi
   if [ "$REF" = latest ]; then git -C "$src" checkout --quiet main && git -C "$src" pull --quiet --ff-only; else git -C "$src" checkout --quiet "$REF"; fi
-  say "Building sandesh"
-  (cd "$src" && go build -trimpath -o "$DIR/sandesh" ./cmd/sandesh)
+  say "Building narada"
+  (cd "$src" && go build -trimpath -o "$DIR/narada" ./cmd/narada)
 fi
 
-ln -sf "$DIR/sandesh" "$BIN_DIR/sandesh"
-say "Linked $BIN_DIR/sandesh -> $DIR/sandesh"
+ln -sf "$DIR/narada" "$BIN_DIR/narada"
+say "Linked $BIN_DIR/narada -> $DIR/narada"
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
@@ -86,12 +86,12 @@ case ":$PATH:" in
      echo "    export PATH=\"$BIN_DIR:\$PATH\"" ;;
 esac
 
-say "$("$DIR/sandesh" --version) installed. Next steps:"
+say "$("$DIR/narada" --version) installed. Next steps:"
 cat <<'NEXT'
-    sandesh demo                       try it on example mail
-    sandesh auth setup client.json     your Google OAuth client (see the README)
-    sandesh auth add work              sign in
-    sandesh service install            background sync and notifications
-    claude mcp add --scope user sandesh -- sandesh mcp
+    narada demo                       try it on example mail
+    narada auth setup client.json     your Google OAuth client (see the README)
+    narada auth add work              sign in
+    narada service install            background sync and notifications
+    claude mcp add --scope user narada -- narada mcp
 NEXT
-"$DIR/sandesh" doctor || true
+"$DIR/narada" doctor || true

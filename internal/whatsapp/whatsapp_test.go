@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// The real key store opens on sandesh's SQLite driver, private, unlinked
+// The real key store opens on narada's SQLite driver, private, unlinked
 // (nothing here goes online).
 func TestOpenKeys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "whatsapp.db")

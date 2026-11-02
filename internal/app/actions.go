@@ -2,8 +2,8 @@ package app
 
 import (
 	"fmt"
-	"github.com/Theyashsawarkar/sandesh/internal/google"
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/google"
+	"github.com/Theyashsawarkar/narada/internal/mime"
 	"strconv"
 	"strings"
 
@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/config"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // Mail actions change the local copy first (the screen reacts at once),
@@ -168,7 +168,7 @@ func (a *App) RenameSpace(ctx context.Context, account, space, name string) (onG
 	if err := rename(ctx, space, name); err != nil {
 		switch {
 		case google.IsMissingScope(err):
-			return false, fmt.Errorf("%w: renaming spaces needs it (sign in again: sandesh auth add %s)", ErrNeedsSignIn, account)
+			return false, fmt.Errorf("%w: renaming spaces needs it (sign in again: narada auth add %s)", ErrNeedsSignIn, account)
 		case strings.Contains(err.Error(), "permission") || strings.Contains(err.Error(), "403"):
 			return false, fmt.Errorf("Google Chat says you can't rename this space (only its managers can)")
 		}
@@ -256,11 +256,11 @@ func (a *App) OpenConversation(ctx context.Context, account string, people, name
 }
 
 // ErrNeedsSignIn: Google wants a permission the account's sign-in doesn't
-// have (an older sign-in, before sandesh asked for it). Reauthorize fixes it.
-var ErrNeedsSignIn = errors.New("sandesh needs one more Google permission")
+// have (an older sign-in, before narada asked for it). Reauthorize fixes it.
+var ErrNeedsSignIn = errors.New("narada needs one more Google permission")
 
 // Reauthorize signs an account in again (the browser opens at say's URL),
-// with every permission sandesh asks for now. Nothing local is lost.
+// with every permission narada asks for now. Nothing local is lost.
 func (a *App) Reauthorize(ctx context.Context, account string, say func(url string)) error {
 	acc, err := a.Store.Account(account)
 	if err != nil {

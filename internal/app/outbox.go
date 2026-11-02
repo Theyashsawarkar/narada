@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/config"
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // sendAt is when a queued message goes: its scheduled time, else after the
@@ -295,7 +295,7 @@ func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 			a.dropFiles(it.Out.Files)
 			if s := it.Out.ScheduledFor; s > 0 && time.Since(time.UnixMilli(s)) > 5*time.Minute {
 				// the computer was off (or asleep) at the time
-				Notify("sandesh: a scheduled message went out late",
+				Notify("narada: a scheduled message went out late",
 					fmt.Sprintf("%s was due %s; sent now.", describe(it.Kind, it.Out), time.UnixMilli(s).Format("Mon 02 Jan 15:04")))
 			}
 		}
@@ -436,11 +436,11 @@ func (a *App) WaitFor(ctx context.Context, id int64, deliver bool, statuses ...s
 // tmux server to show it on, and a desktop notification either way.
 func (a *App) AskApproval(it store.OutboxItem) {
 	what := describe(it.Kind, it.Out)
-	Notify("sandesh: approve a send?", "An agent wants to send "+it.Kind+" "+what+". Open sandesh (or run sandesh approve) to answer.")
+	Notify("narada: approve a send?", "An agent wants to send "+it.Kind+" "+what+". Open narada (or run narada approve) to answer.")
 	if os.Getenv("TMUX") == "" {
 		return
 	}
-	args := []string{"display-popup", "-E", "-w", "84%", "-h", "80%", "-T", " sandesh: approve send ",
+	args := []string{"display-popup", "-E", "-w", "84%", "-h", "80%", "-T", " narada: approve send ",
 		fmt.Sprintf("%s approve %d", shellQuote(Executable()), it.ID)}
 	if pane := os.Getenv("TMUX_PANE"); pane != "" {
 		args = append(args[:1], append([]string{"-t", pane}, args[1:]...)...)
@@ -457,13 +457,13 @@ func Notify(title, body string) {
 	if _, err := exec.LookPath("notify-send"); err != nil {
 		return
 	}
-	_ = exec.Command("notify-send", "-a", "sandesh", "-i", "mail-unread", title, body).Start()
+	_ = exec.Command("notify-send", "-a", "narada", "-i", "mail-unread", title, body).Start()
 }
 
 // notifySending tells you an agent's send is about to go, with a Cancel
 // button (when notify-send can show one) good until it goes.
 func (a *App) notifySending(id int64, kind string, out store.Outgoing, at time.Time) {
-	if _, err := exec.LookPath("notify-send"); err != nil || os.Getenv("SANDESH_GOOGLE_URL") != "" { // none from tests and the demo
+	if _, err := exec.LookPath("notify-send"); err != nil || os.Getenv("NARADA_GOOGLE_URL") != "" { // none from tests and the demo
 		return
 	}
 	what := map[string]string{"mail": "a mail", "chat": "a chat message", "whatsapp": "a WhatsApp message"}[kind]
@@ -477,18 +477,18 @@ func (a *App) notifySending(id int64, kind string, out store.Outgoing, at time.T
 	}
 	wait := max(time.Until(at), time.Second)
 	if out.ScheduledFor > 0 {
-		Notify("sandesh: an agent scheduled "+what, body+"\n"+fmt.Sprintf("Goes %s; sandesh outbox cancel %d stops it.", at.Format("Mon 15:04"), id))
+		Notify("narada: an agent scheduled "+what, body+"\n"+fmt.Sprintf("Goes %s; narada outbox cancel %d stops it.", at.Format("Mon 15:04"), id))
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "notify-send", "-a", "sandesh", "-i", "mail-send", "-t", fmt.Sprint(wait.Milliseconds()),
-		"-A", "cancel=Cancel", fmt.Sprintf("sandesh: sending %s in %ds", what, int(wait.Seconds()+0.5)), body)
+	cmd := exec.CommandContext(ctx, "notify-send", "-a", "narada", "-i", "mail-send", "-t", fmt.Sprint(wait.Milliseconds()),
+		"-A", "cancel=Cancel", fmt.Sprintf("narada: sending %s in %ds", what, int(wait.Seconds()+0.5)), body)
 	b, _ := cmd.Output()
 	if strings.TrimSpace(string(b)) == "cancel" {
 		if err := a.Cancel(id); err == nil {
 			a.LogAgent("cancelled #%d from the notification", id)
-			Notify("sandesh: cancelled", "Nothing was sent.")
+			Notify("narada: cancelled", "Nothing was sent.")
 		}
 	}
 }

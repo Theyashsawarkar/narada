@@ -1,4 +1,4 @@
-// Package store is sandesh's local copy of mail and chat: one SQLite
+// Package store is narada's local copy of mail and chat: one SQLite
 // database (WAL, so the daemon, the screen, the CLI and the MCP server
 // can all use it at once) with full-text search over mail.
 package store
@@ -296,7 +296,7 @@ func (s *Store) Account(name string) (Account, error) {
 			return a, nil
 		}
 	}
-	return Account{}, fmt.Errorf("no account %q (sandesh auth list)", name)
+	return Account{}, fmt.Errorf("no account %q (narada auth list)", name)
 }
 
 func (s *Store) AddAccount(a Account) error {
@@ -517,7 +517,7 @@ func (s *Store) FindThread(id string) (Thread, error) {
 		return Thread{}, err
 	}
 	if len(ts) == 0 {
-		return Thread{}, fmt.Errorf("no thread %q in the local copy (try sandesh sync)", id)
+		return Thread{}, fmt.Errorf("no thread %q in the local copy (try narada sync)", id)
 	}
 	return ts[0], nil
 }
@@ -1325,7 +1325,7 @@ func (s *Store) UnreadChatMessages(account, space string) ([]ChatMessage, error)
 	return out, nil
 }
 
-// RepairWhatsAppNames fixes names stored before sandesh knew better:
+// RepairWhatsAppNames fixes names stored before narada knew better:
 // WhatsApp's service chat goes, Meta AI gets its name, and in one-to-one
 // chats the other person's messages carry the chat's name (not the one
 // they gave themselves).

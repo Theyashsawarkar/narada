@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/mime"
 )
 
 // Client calls Google's REST APIs for one account.
@@ -28,7 +28,7 @@ type Client struct {
 }
 
 // Gmail allows 15,000 "quota units" a minute per user (threads.get is 10,
-// history.list 2, send 100). sandesh spends at most 40 a second (2,400 a
+// history.list 2, send 100). narada spends at most 40 a second (2,400 a
 // minute) with a burst of 200, far under it even with several processes.
 type bucket struct {
 	mu     sync.Mutex
@@ -96,7 +96,7 @@ func (e *APIError) Error() string {
 	case strings.Contains(e.Message, "Chat app not found"):
 		return "Google Chat isn't set up in your Cloud project: open Google Chat API → Configuration, fill in an app name, avatar URL and description, save, and wait a few minutes"
 	case strings.Contains(e.Message, "Quota exceeded") || strings.Contains(e.Message, "ateLimitExceeded"):
-		return "Google is rate-limiting sandesh for a minute; it slows down and retries by itself"
+		return "Google is rate-limiting narada for a minute; it slows down and retries by itself"
 	case strings.Contains(e.Message, "has not been used in project") || strings.Contains(e.Message, "is disabled"):
 		api := "an API"
 		for _, n := range []string{"Gmail API", "People API", "Google Chat API"} {
@@ -108,7 +108,7 @@ func (e *APIError) Error() string {
 	}
 	switch e.Status {
 	case 401:
-		return "Google refused the sign-in (" + e.Message + "); run sandesh auth add again"
+		return "Google refused the sign-in (" + e.Message + "); run narada auth add again"
 	case 403:
 		return "Google said no: " + e.Message
 	}
@@ -174,7 +174,7 @@ func (c *Client) raw(ctx context.Context, method, u, ctype string, payload []byt
 			if resp != nil {
 				code = resp.StatusCode
 			}
-			fmt.Fprintf(os.Stderr, "sandesh http: %s %s %d %v\n", method, strings.SplitN(u, "?", 2)[0], code, time.Since(t0).Round(time.Millisecond))
+			fmt.Fprintf(os.Stderr, "narada http: %s %s %d %v\n", method, strings.SplitN(u, "?", 2)[0], code, time.Since(t0).Round(time.Millisecond))
 		}
 		if err != nil {
 			return nil, err
@@ -213,9 +213,9 @@ func (c *Client) raw(ctx context.Context, method, u, ctype string, payload []byt
 	}
 }
 
-// SANDESH_DEBUG_HTTP=1 logs every request (method, URL without the query,
+// NARADA_DEBUG_HTTP=1 logs every request (method, URL without the query,
 // time) to stderr: for counting what a sync costs.
-var debugHTTP = os.Getenv("SANDESH_DEBUG_HTTP") != ""
+var debugHTTP = os.Getenv("NARADA_DEBUG_HTTP") != ""
 
 // root is the API host the client talks to ("https://gmail.googleapis.com"
 // or the fake's address), for the upload endpoints.
@@ -431,7 +431,7 @@ func (c *Client) sendUpload(ctx context.Context, raw, threadID string) (string, 
 	if threadID == "" {
 		meta = []byte("{}")
 	}
-	const boundary = "sandesh-upload-boundary"
+	const boundary = "narada-upload-boundary"
 	var b bytes.Buffer
 	b.WriteString("--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n")
 	b.Write(meta)
@@ -741,7 +741,7 @@ func (c *Client) NameGroup(ctx context.Context, space, name string) error {
 		map[string]string{"spaceType": "SPACE", "displayName": name}, nil)
 }
 
-// IsMissingScope: the sign-in predates a permission sandesh now asks for.
+// IsMissingScope: the sign-in predates a permission narada now asks for.
 func IsMissingScope(err error) bool {
 	e, ok := err.(*APIError)
 	return ok && (strings.Contains(e.Message, "insufficient authentication scopes") || strings.Contains(e.Message, "ACCESS_TOKEN_SCOPE_INSUFFICIENT"))
@@ -756,7 +756,7 @@ func (c *Client) ChatMedia(ctx context.Context, resourceName string) ([]byte, er
 // UploadChatFile uploads a file to a space; the returned reference goes
 // into the message that carries it.
 func (c *Client) UploadChatFile(ctx context.Context, space, name, ctype string, data []byte) (json.RawMessage, error) {
-	const boundary = "sandesh-upload-boundary"
+	const boundary = "narada-upload-boundary"
 	meta, _ := json.Marshal(map[string]string{"filename": name})
 	var b bytes.Buffer
 	b.WriteString("--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n")

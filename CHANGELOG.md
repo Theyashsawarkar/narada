@@ -2,6 +2,18 @@
 
 Newest first.
 
+## v0.5.0 -- 2026-11-02
+
+- **Renamed from sandesh to narada** (नारद, the divine messenger who carries word
+  between worlds). The command is `narada`, the repository
+  github.com/Theyashsawarkar/narada (the old address redirects), the MCP server
+  `narada`, the service `narada.service`. The first run moves your folders
+  (mail cache, WhatsApp link, settings) and keyring sign-ins to the new name, so
+  nothing needs linking or signing in again; `kosha update` moves the install.
+- **Quiet by default**: no desktop notification for new mail, chat or WhatsApp
+  (`notify = true` brings them back). The tmux capsule still shows what came; a
+  send an agent asks for still shows its undo notification.
+
 ## v0.4.3 -- 2026-11-02
 
 - **Quieter**: bubbles and the picked list row lose their colour fill: just

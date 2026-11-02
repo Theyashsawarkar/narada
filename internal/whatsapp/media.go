@@ -202,7 +202,7 @@ func gifToMP4(ctx context.Context, path string) ([]byte, error) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return nil, errors.New("sending a GIF needs ffmpeg (WhatsApp sends GIFs as MP4)")
 	}
-	out, err := os.CreateTemp("", "sandesh-gif-*.mp4")
+	out, err := os.CreateTemp("", "narada-gif-*.mp4")
 	if err != nil {
 		return nil, err
 	}

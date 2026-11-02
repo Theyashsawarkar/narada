@@ -1,4 +1,4 @@
-// Package tui is the sandesh screen: sections on top, threads or spaces
+// Package tui is the narada screen: sections on top, threads or spaces
 // on the left, the selected one on the right, keys only.
 package tui
 
@@ -14,10 +14,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/cli"
-	"github.com/Theyashsawarkar/sandesh/internal/config"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/cli"
+	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 type mode int
@@ -164,9 +164,9 @@ func New(a *app.App, launch string) Model {
 		expanded: map[string]bool{}}
 	m.sections = a.Sections()
 	m.accounts = a.AccountNames()
-	// sandesh --tab chat (a status bar's chat capsule) opens on chat
+	// narada --tab chat (a status bar's chat capsule) opens on chat
 	_, m.waLinked = a.Store.WhatsApp()
-	switch os.Getenv("SANDESH_TAB") {
+	switch os.Getenv("NARADA_TAB") {
 	case "chat":
 		m.tab = tabChat
 	case "whatsapp":
@@ -783,7 +783,7 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 	if it.Out.ScheduledFor > 0 {
 		m.say("scheduled for " + app.SendTime(time.UnixMilli(it.Out.ScheduledFor), time.Now()) + " · in Scheduled: t moves it, z cancels")
 		if !m.a.DaemonRunning() {
-			m.setErr("the background service isn't running, and it's what sends scheduled mail: sandesh service install")
+			m.setErr("the background service isn't running, and it's what sends scheduled mail: narada service install")
 		}
 		return nil
 	}
@@ -1388,7 +1388,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		}
 	}
 	if what := m.notOnWhatsApp(s); what != "" {
-		m.say(what + " isn't on WhatsApp in sandesh yet")
+		m.say(what + " isn't on WhatsApp in narada yet")
 		return m, nil
 	}
 	switch s {
@@ -1590,7 +1590,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 				m.say("account " + m.accounts[m.acct])
 			}
 		} else {
-			m.say("only one account (sandesh auth add <name> adds another)")
+			m.say("only one account (narada auth add <name> adds another)")
 		}
 	case "R":
 		if it, ok := m.curOutbox(); ok && it.Status == store.StatusFailed {
@@ -2045,7 +2045,7 @@ func copyText(s string) string {
 	return "copied the link (OSC 52)"
 }
 
-// notOnWhatsApp: what key s would do that sandesh can't do on WhatsApp
+// notOnWhatsApp: what key s would do that narada can't do on WhatsApp
 // yet ("" when it can).
 func (m Model) notOnWhatsApp(s string) string {
 	if !m.wa || m.tab != tabChat {
@@ -2063,7 +2063,7 @@ func (m Model) notOnWhatsApp(s string) string {
 	}
 	switch s {
 	case "N":
-		return "starting a chat here (use sandesh whatsapp send <number>)"
+		return "starting a chat here (use narada whatsapp send <number>)"
 	}
 	return ""
 }

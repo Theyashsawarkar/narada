@@ -68,8 +68,8 @@ var Keys = []Key{
 	{"Act", "t", "Move a scheduled send to another time (in Scheduled; Enter edits it)"},
 	{"Act", "n", "Rename the chat (spaces and groups on Google Chat; a DM only here)"},
 	{"Act", "N", "Start a conversation (opens the one you have with them, earlier messages and all)"},
-	{"Act", "v", "Open the attachments in their apps (kept in ~/Downloads/sandesh; picker when several)"},
-	{"Act", "V", "Save the attachments to ~/Downloads/sandesh without opening them"},
+	{"Act", "v", "Open the attachments in their apps (kept in ~/Downloads/narada; picker when several)"},
+	{"Act", "V", "Save the attachments to ~/Downloads/narada without opening them"},
 	{"Act", "U", "Send a file into this chat (Google Chat or WhatsApp; file picker with preview)"},
 	{"Act", "z", "Cancel the last change, or a send in its undo window (undo)"},
 	{"Act", "A", "Show the sends an agent is waiting on you to approve"},
@@ -128,22 +128,22 @@ var Keys = []Key{
 // KeybindLines renders the table as Vayu `# keybind:` annotations.
 func KeybindLines() string {
 	var b strings.Builder
-	b.WriteString("# Keys inside the sandesh screen, for Vayu's keybinding search\n")
+	b.WriteString("# Keys inside the narada screen, for Vayu's keybinding search\n")
 	b.WriteString("# (keybind-search.py reads ~/.tmux/plugins/*/scripts). Generated from\n")
 	b.WriteString("# internal/tui/keys.go by `go test ./internal/tui -update`; don't edit.\n")
 	for _, k := range Keys {
-		scope := "sandesh"
+		scope := "narada"
 		switch k.Group {
 		case "Compose":
-			scope = "sandesh compose"
+			scope = "narada compose"
 		case "Search":
-			scope = "sandesh search"
+			scope = "narada search"
 		case "Review":
-			scope = "sandesh review"
+			scope = "narada review"
 		case "Approve":
-			scope = "sandesh approve"
+			scope = "narada approve"
 		case "Setup":
-			scope = "sandesh setup"
+			scope = "narada setup"
 		}
 		fmt.Fprintf(&b, "# keybind: Tmux/%s | %s | %s\n", scope, k.Keys, k.Desc)
 	}

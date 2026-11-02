@@ -9,7 +9,7 @@ import (
 )
 
 // VarnaPalette is the desktop theme varna (github.com/Theyashsawarkar/varna)
-// writes; sandesh follows it, and recolours live when it changes.
+// writes; narada follows it, and recolours live when it changes.
 func VarnaPalette() string {
 	dir := os.Getenv("XDG_STATE_HOME")
 	if dir == "" {
@@ -19,11 +19,11 @@ func VarnaPalette() string {
 	return filepath.Join(dir, "varna", "palette.json")
 }
 
-// applyVarna overlays the theme's colours: sandesh's own pick under
-// tools.sandesh if the theme has one, else the desktop's. A missing or
+// applyVarna overlays the theme's colours: narada's own pick under
+// tools.narada if the theme has one, else the desktop's. A missing or
 // broken palette leaves c alone.
 func applyVarna(c *Colors) {
-	if os.Getenv("SANDESH_NO_VARNA") != "" {
+	if os.Getenv("NARADA_NO_VARNA") != "" {
 		return
 	}
 	b, err := os.ReadFile(VarnaPalette())
@@ -41,7 +41,7 @@ func applyVarna(c *Colors) {
 		return
 	}
 	cols := data.Colors
-	if t, ok := data.Tools["sandesh"]; ok && len(t.Colors) > 0 {
+	if t, ok := data.Tools["narada"]; ok && len(t.Colors) > 0 {
 		cols = t.Colors
 	}
 	pick := func(dst *string, names ...string) {

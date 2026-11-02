@@ -11,12 +11,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/cli"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/cli"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
-// Approve is `sandesh approve` (and the popup an agent's send opens): one
+// Approve is `narada approve` (and the popup an agent's send opens): one
 // card per waiting send, exactly who gets what, answered with a key.
 func Approve(a *app.App, items []store.OutboxItem) error {
 	m := approver{a: a, items: items, styles: newStyles(a.Config.Colors, a.Config.NerdFont)}
@@ -93,7 +93,7 @@ func (m approver) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			wait := int(time.Until(time.Now().Add(m.a.UndoWindow(it.Kind))).Seconds() + 0.5)
 			m.done = "✓ approved"
 			if wait > 0 {
-				m.done += fmt.Sprintf(" · goes in %ds (sandesh outbox cancel %d stops it)", wait, it.ID)
+				m.done += fmt.Sprintf(" · goes in %ds (narada outbox cancel %d stops it)", wait, it.ID)
 			}
 			return m, tea.Tick(1200*time.Millisecond, func(time.Time) tea.Msg { return approveNext{} })
 		case "n", "N":

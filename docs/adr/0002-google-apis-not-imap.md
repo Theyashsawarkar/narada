@@ -5,7 +5,7 @@
 
 ## Context
 
-sandesh needs both Gmail and Google Chat. IMAP and SMTP would cover mail with existing tools (isync, msmtp), but Google Chat has no open protocol: its only programmatic access is the Chat REST API with OAuth. Workspace admins also often turn IMAP off.
+narada needs both Gmail and Google Chat. IMAP and SMTP would cover mail with existing tools (isync, msmtp), but Google Chat has no open protocol: its only programmatic access is the Chat REST API with OAuth. Workspace admins also often turn IMAP off.
 
 ## Decision
 

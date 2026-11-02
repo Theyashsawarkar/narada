@@ -14,7 +14,7 @@ The user wants WhatsApp next to mail and chat: read it, send from the terminal, 
 
 ## Decision
 
-Link sandesh as a companion device with whatsmeow, with click-to-chat as the fallback when nothing is linked.
+Link narada as a companion device with whatsmeow, with click-to-chat as the fallback when nothing is linked.
 
 - WhatsApp is an account of kind `whatsapp` (name `whatsapp`) in the same store: its chats are spaces and its messages chat messages, so the chat screen, unread counts and the outbox work unchanged. `Store.Accounts()` stays Google-only, so no Google code path ever sees it.
 - WhatsApp is a connection, not a sync: one process holds it (a `whatsapp` lock): the daemon, else the screen, the MCP server or a CLI command while they run. Only that process claims `whatsapp` outbox rows; the others leave them queued for it.
@@ -24,7 +24,7 @@ Link sandesh as a companion device with whatsmeow, with click-to-chat as the fal
 
 ## Consequences
 
-- The user gets a real WhatsApp tab and agent tools, at the cost of a ban risk the README and `sandesh whatsapp link --help` state plainly. The cap and the always-ask rule keep usage looking like a person's.
-- whatsmeow follows WhatsApp's protocol changes; sandesh has to update it when WhatsApp breaks old clients.
-- The phone must be online now and then (every ~14 days) or WhatsApp unlinks the device; sandesh then shows the error and asks to link again.
+- The user gets a real WhatsApp tab and agent tools, at the cost of a ban risk the README and `narada whatsapp link --help` state plainly. The cap and the always-ask rule keep usage looking like a person's.
+- whatsmeow follows WhatsApp's protocol changes; narada has to update it when WhatsApp breaks old clients.
+- The phone must be online now and then (every ~14 days) or WhatsApp unlinks the device; narada then shows the error and asks to link again.
 - Reactions, edits, deletes, files and new groups aren't sent yet; the screen says so instead of failing.

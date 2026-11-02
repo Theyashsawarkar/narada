@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // approve shows each send waiting for approval and asks y/e/n. It is what
@@ -20,7 +20,7 @@ import (
 var ApproveScreen func(*app.App, []store.OutboxItem) error
 
 func approve(a *app.App, args []string) error {
-	fs := flags("sandesh approve", "sandesh approve [id]\n\nAnswer the sends an agent asked for: y sends (after the undo window), e edits\nin your editor first, n declines, q leaves it waiting.")
+	fs := flags("narada approve", "narada approve [id]\n\nAnswer the sends an agent asked for: y sends (after the undo window), e edits\nin your editor first, n declines, q leaves it waiting.")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func approveOne(a *app.App, it store.OutboxItem) error {
 			if err := a.Approve(it.ID, e); err != nil {
 				return err
 			}
-			fmt.Printf("Approved. Sends in %ds; `sandesh outbox cancel %d` stops it.\n", int(a.UndoWindow(it.Kind).Seconds()), it.ID)
+			fmt.Printf("Approved. Sends in %ds; `narada outbox cancel %d` stops it.\n", int(a.UndoWindow(it.Kind).Seconds()), it.ID)
 			time.Sleep(1200 * time.Millisecond)
 			return nil
 		case 'n', 'N':

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
-// Photos and files the screen shows live in a cache (~/.cache/sandesh/
+// Photos and files the screen shows live in a cache (~/.cache/narada/
 // media), downloaded once. WhatsApp's need the connection, so a process
 // that isn't holding it asks the one that is (media_fetch).
 

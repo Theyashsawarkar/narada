@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Theyashsawarkar/sandesh/internal/config"
-	"github.com/Theyashsawarkar/sandesh/internal/fake"
-	"github.com/Theyashsawarkar/sandesh/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/fake"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 func setup(t *testing.T) (*App, *fake.Server) {
@@ -21,8 +21,8 @@ func setup(t *testing.T) (*App, *fake.Server) {
 	g.Seed()
 	srv := httptest.NewServer(g)
 	t.Cleanup(srv.Close)
-	t.Setenv("SANDESH_GOOGLE_URL", srv.URL)
-	t.Setenv("SANDESH_HOME", t.TempDir())
+	t.Setenv("NARADA_GOOGLE_URL", srv.URL)
+	t.Setenv("NARADA_HOME", t.TempDir())
 	a, err := Open()
 	if err != nil {
 		t.Fatal(err)

@@ -1,5 +1,5 @@
 // Package mime turns Gmail's message payloads into plain text and builds
-// the RFC 5322 messages sandesh sends.
+// the RFC 5322 messages narada sends.
 package mime
 
 import (
@@ -291,7 +291,7 @@ func Build(d Draft) (string, error) {
 	text := plain
 	if d.HTML != "" {
 		text = func() {
-			alt := fmt.Sprintf("sandesh-alt-%d", time.Now().UnixNano())
+			alt := fmt.Sprintf("narada-alt-%d", time.Now().UnixNano())
 			b.WriteString(`Content-Type: multipart/alternative; boundary="` + alt + "\"\r\n\r\n--" + alt + "\r\n")
 			plain()
 			b.WriteString("--" + alt + "\r\nContent-Type: text/html; charset=\"UTF-8\"\r\nContent-Transfer-Encoding: base64\r\n\r\n")
@@ -303,7 +303,7 @@ func Build(d Draft) (string, error) {
 		text()
 		return base64.URLEncoding.EncodeToString(b.Bytes()), nil
 	}
-	boundary := fmt.Sprintf("sandesh-%d", time.Now().UnixNano())
+	boundary := fmt.Sprintf("narada-%d", time.Now().UnixNano())
 	h("Content-Type", `multipart/mixed; boundary="`+boundary+`"`)
 	b.WriteString("\r\n--" + boundary + "\r\n")
 	text()

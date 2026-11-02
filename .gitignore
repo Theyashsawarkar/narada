@@ -1,5 +1,5 @@
 /bin/
-/sandesh
+/narada
 /dist/
 # never commit credentials or mail: OAuth clients, tokens, local copies
 client.json
@@ -14,5 +14,5 @@ tokens/
 # makepkg output (packaging/arch)
 packaging/arch/src/
 packaging/arch/pkg/
-packaging/arch/sandesh/
+packaging/arch/narada/
 packaging/arch/*.pkg.tar.*

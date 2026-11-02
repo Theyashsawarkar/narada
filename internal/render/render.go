@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
-	"github.com/Theyashsawarkar/sandesh/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/mime"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )

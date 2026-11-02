@@ -1,13 +1,13 @@
 # Maintainer: theyashsawarkar <theyashsawarkar@gmail.com>
-# Builds sandesh from the latest commit on main:
+# Builds narada from the latest commit on main:
 #   cd packaging/arch && makepkg -si
-pkgname=sandesh-git
-_pkgname=sandesh
+pkgname=narada-git
+_pkgname=narada
 pkgver=0.4.3
 pkgrel=1
 pkgdesc="Gmail and Google Chat in the terminal, with an MCP server for AI agents"
 arch=('x86_64' 'aarch64')
-url="https://github.com/Theyashsawarkar/sandesh"
+url="https://github.com/Theyashsawarkar/narada"
 license=('MIT')
 depends=('glibc')
 optdepends=('libsecret: keep sign-in tokens in the keyring (secret-tool)'

@@ -7,16 +7,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Theyashsawarkar/sandesh/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/app"
 )
 
 func TestTimingOnRealData(t *testing.T) {
-	// BENCH_HOME=<a copy of a sandesh home> go test ./internal/tui -run Timing -v
+	// BENCH_HOME=<a copy of a narada home> go test ./internal/tui -run Timing -v
 	if os.Getenv("BENCH_HOME") == "" {
 		t.Skip()
 	}
-	t.Setenv("SANDESH_HOME", os.Getenv("BENCH_HOME"))
-	t.Setenv("SANDESH_GOOGLE_URL", "")
+	t.Setenv("NARADA_HOME", os.Getenv("BENCH_HOME"))
+	t.Setenv("NARADA_GOOGLE_URL", "")
 	a, err := app.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -48,8 +48,8 @@ func TestSearchTimingOnRealData(t *testing.T) {
 	if os.Getenv("BENCH_HOME") == "" {
 		t.Skip()
 	}
-	t.Setenv("SANDESH_HOME", os.Getenv("BENCH_HOME"))
-	t.Setenv("SANDESH_GOOGLE_URL", "")
+	t.Setenv("NARADA_HOME", os.Getenv("BENCH_HOME"))
+	t.Setenv("NARADA_GOOGLE_URL", "")
 	a, err := app.Open()
 	if err != nil {
 		t.Fatal(err)
