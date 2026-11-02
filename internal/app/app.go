@@ -40,6 +40,7 @@ type App struct {
 	DialWhatsApp func(ctx context.Context) (WhatsAppConn, error)
 	waMu         sync.Mutex
 	wa           WhatsAppConn  // set while this process holds the connection
+	waUnlock     func()        // releases the whatsapp lock
 	waReady      chan struct{} // closed once it is connected
 	waReadyOnce  *sync.Once
 	waUnreadMu   sync.Mutex

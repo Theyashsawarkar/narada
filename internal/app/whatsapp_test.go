@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 func setupWhatsApp(t *testing.T) (*App, *fake.WhatsApp) {
 	t.Helper()
+	linkQuiet = 50 * time.Millisecond
 	a, _ := setup(t)
 	w := fake.NewWhatsApp()
 	w.SeedWhatsApp()
@@ -20,7 +22,7 @@ func setupWhatsApp(t *testing.T) (*App, *fake.WhatsApp) {
 	_ = c.Logout(context.Background()) // seeded linked; link it through sandesh
 	a.DialWhatsApp = func(ctx context.Context) (WhatsAppConn, error) { return w.Conn(ctx) }
 	var shown string
-	if err := a.LinkWhatsApp(context.Background(), "", func(qr, code string) { shown = qr }); err != nil {
+	if err := a.LinkWhatsApp(context.Background(), "", func(qr, code string) { shown = qr }, nil); err != nil {
 		t.Fatal(err)
 	}
 	if shown == "" {
@@ -191,5 +193,42 @@ func TestWhatsAppOneConnection(t *testing.T) {
 func TestWhatsAppLink(t *testing.T) {
 	if got := WhatsAppLink("+91 98765-43210", "on my way & late"); got != "https://wa.me/919876543210?text=on+my+way+%26+late" {
 		t.Fatal(got)
+	}
+}
+
+// Linking keeps the history the phone sends right away, and a logout
+// (the phone removing the device) frees WhatsApp for a later connect.
+func TestWhatsAppLinkKeepsHistoryAndLogoutFrees(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	// setupWhatsApp linked through LinkWhatsApp: history arrived then
+	if sps, _ := a.Store.Spaces([]string{store.WhatsAppAccount}, nil); len(sps) != 3 {
+		t.Fatalf("chats after linking: %d", len(sps))
+	}
+	if msgs, _ := a.Store.ChatMessages(store.WhatsAppAccount, "919800000001@s.whatsapp.net", 0); len(msgs) != 3 || !msgs[0].Mine {
+		t.Fatalf("history while linking (yours marked mine): %+v", msgs)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if ok, _ := a.StartWhatsApp(ctx); !ok {
+		t.Fatal("not online")
+	}
+	w.Emit(whatsapp.Event{State: "logged-out", Err: errors.New("the phone unlinked this device")})
+	for i := 0; i < 50 && a.WhatsAppOnline(); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if a.WhatsAppOnline() {
+		t.Fatal("still online after a logout")
+	}
+	if wa, _ := a.Store.WhatsApp(); !strings.Contains(wa.LastError, "unlinked") {
+		t.Fatalf("logout not shown: %q", wa.LastError)
+	}
+	// the lock is free again: a retry gets as far as "not linked"
+	c, _ := w.Conn(ctx)
+	_ = c.Logout(ctx)
+	if ok, _ := a.StartWhatsApp(ctx); ok {
+		t.Fatal("online without keys")
+	}
+	if wa, _ := a.Store.WhatsApp(); !strings.Contains(wa.LastError, "not linked") {
+		t.Fatalf("retry after logout: %q (lock still held?)", wa.LastError)
 	}
 }

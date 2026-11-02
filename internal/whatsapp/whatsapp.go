@@ -109,12 +109,33 @@ func (cl *Client) Me() string {
 
 // Link links this machine. Without a phone number, show gets each QR
 // code to draw (they change every ~20 seconds); with one, show gets the
-// eight-character code to type on the phone. It returns once the phone
-// accepted, or ctx ended.
-func (cl *Client) Link(ctx context.Context, phone string, show func(qr, code string)) error {
+// eight-character code to type on the phone. Once the phone accepts,
+// WhatsApp has the new device reconnect and log in with its new keys:
+// Link waits for that (going offline before it makes the phone report
+// the link failed) and returns online, handing events to handler like
+// Connect.
+func (cl *Client) Link(ctx context.Context, phone string, show func(qr, code string), handler func(Event)) error {
 	if cl.Linked() {
 		return errors.New("already linked")
 	}
+	loggedIn := make(chan error, 1)
+	cl.mu.Lock()
+	cl.handler = func(e Event) {
+		switch e.State {
+		case "connected":
+			select {
+			case loggedIn <- nil:
+			default:
+			}
+		case "logged-out", "replaced", "banned":
+			select {
+			case loggedIn <- e.Err:
+			default:
+			}
+		}
+		handler(e)
+	}
+	cl.mu.Unlock()
 	qrs, err := cl.c.GetQRChannel(ctx)
 	if err != nil {
 		return err
@@ -130,26 +151,45 @@ func (cl *Client) Link(ctx context.Context, phone string, show func(qr, code str
 		}
 		show("", code)
 	}
+	paired := false
 	for it := range qrs {
-		switch {
-		case it.Event == whatsmeow.QRChannelEventCode:
+		if it.Event == whatsmeow.QRChannelEventCode {
 			if phone == "" {
 				show(it.Code, "")
 			}
-		case it == whatsmeow.QRChannelSuccess:
-			return nil
-		case it.Error != nil:
-			cl.c.Disconnect()
-			return it.Error
-		default:
-			cl.c.Disconnect()
-			if it.Event == "timeout" {
-				return errors.New("timed out: nobody scanned the code")
-			}
-			return fmt.Errorf("linking failed (%s)", it.Event)
+			continue
 		}
+		if it == whatsmeow.QRChannelSuccess {
+			paired = true
+			break
+		}
+		cl.c.Disconnect()
+		switch {
+		case it.Error != nil:
+			return it.Error
+		case it.Event == "timeout":
+			return errors.New("timed out: nobody scanned the code")
+		}
+		return fmt.Errorf("linking failed (%s)", it.Event)
 	}
-	return ctx.Err()
+	if !paired {
+		cl.c.Disconnect()
+		return ctx.Err()
+	}
+	select {
+	case err := <-loggedIn:
+		if err != nil {
+			cl.c.Disconnect()
+			return fmt.Errorf("the phone accepted, but logging in failed: %w", err)
+		}
+		return nil
+	case <-time.After(90 * time.Second):
+		cl.c.Disconnect()
+		return errors.New("the phone accepted, but WhatsApp never logged this device in; try again")
+	case <-ctx.Done():
+		cl.c.Disconnect()
+		return ctx.Err()
+	}
 }
 
 // Connect goes online and hands every event to handler, until Close.
@@ -160,6 +200,9 @@ func (cl *Client) Connect(handler func(Event)) error {
 	cl.mu.Lock()
 	cl.handler = handler
 	cl.mu.Unlock()
+	if cl.c.IsConnected() {
+		return nil // still online from Link
+	}
 	return cl.c.Connect()
 }
 

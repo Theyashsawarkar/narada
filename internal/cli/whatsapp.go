@@ -30,7 +30,7 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		ctx, cancel := ctxSignal()
 		defer cancel()
-		ctx, tcancel := context.WithTimeout(ctx, 3*time.Minute)
+		ctx, tcancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer tcancel()
 		err := a.LinkWhatsApp(ctx, *phone, func(qr, code string) {
 			if code != "" {
@@ -42,7 +42,15 @@ func whatsApp(a *app.App, args []string) error {
 			fmt.Println()
 			qrterminal.GenerateHalfBlock(qr, qrterminal.L, os.Stdout)
 			fmt.Println("\nThe code changes every 20 seconds. Ctrl+c stops.")
+		}, func(chats, msgs int) {
+			if chats == 0 && msgs == 0 {
+				fmt.Print("\033[H\033[2J")
+				fmt.Println("sandesh: linked. Keep this open while the phone sends your recent chats (up to two minutes)…")
+				return
+			}
+			fmt.Printf("\r\033[Ksandesh: received %d chats, %d messages", chats, msgs)
 		})
+		fmt.Println()
 		if errors.Is(err, context.Canceled) {
 			return errors.New("not linked")
 		}

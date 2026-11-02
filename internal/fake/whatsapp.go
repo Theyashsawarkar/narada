@@ -84,14 +84,15 @@ func (c *WhatsAppConn) Me() string {
 	return c.w.Me
 }
 
-func (c *WhatsAppConn) Link(ctx context.Context, phone string, show func(qr, code string)) error {
+// Link "scans" at once and stays online, like the real one.
+func (c *WhatsAppConn) Link(ctx context.Context, phone string, show func(qr, code string), handler func(whatsapp.Event)) error {
 	if phone != "" {
 		show("", "FAKE-CODE")
 	} else {
 		show("2@fake-qr-code", "")
 	}
 	c.w.SetLinked()
-	return nil
+	return c.Connect(handler)
 }
 
 func (c *WhatsAppConn) Connect(handler func(whatsapp.Event)) error {

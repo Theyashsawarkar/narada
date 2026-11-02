@@ -20,7 +20,7 @@ import (
 type WhatsAppConn interface {
 	Linked() bool
 	Me() string
-	Link(ctx context.Context, phone string, show func(qr, code string)) error
+	Link(ctx context.Context, phone string, show func(qr, code string), handler func(whatsapp.Event)) error
 	Connect(handler func(whatsapp.Event)) error
 	Send(ctx context.Context, chat, text string, quote *whatsapp.Message) (string, error)
 	MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error
@@ -54,10 +54,16 @@ func (a *App) whatsApp() WhatsAppConn {
 	return a.wa
 }
 
+// linkQuiet: linking is done once the phone's history stops this long.
+var linkQuiet = 15 * time.Second
+
 // LinkWhatsApp links this machine to a WhatsApp account (QR code, or a
 // pairing code with phone) and records it. Only one process may hold the
-// connection: linking fails while another one is online.
-func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code string)) error {
+// connection: linking fails while another one is online. After the phone
+// accepts, it stays online while the phone sends your recent chats
+// (progress hears how many so far) and returns once they stop coming,
+// or after at most two minutes; whoever goes online next gets the rest.
+func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code string), progress func(chats, messages int)) error {
 	unlock, ok := a.lock("whatsapp")
 	if !ok {
 		return errors.New("WhatsApp is in use by another sandesh (the daemon?); stop it, or unlink first")
@@ -74,14 +80,86 @@ func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code
 		}
 		return errors.New("already linked (sandesh whatsapp unlink first)")
 	}
-	if err := c.Link(ctx, phone, show); err != nil {
+	var (
+		mu             sync.Mutex
+		chats, msgs    int
+		lastHistory    time.Time
+		recorded       bool
+		historyArrived = make(chan struct{}, 1)
+		wasPhone       = phone
+	)
+	record := func() {
+		if recorded || c.Me() == "" {
+			return
+		}
+		p := wasPhone
+		if p == "" {
+			p = "+" + strings.SplitN(c.Me(), "@", 2)[0]
+		}
+		if a.Store.AddWhatsApp(p, c.Me()) == nil {
+			recorded = true
+		}
+	}
+	handler := func(e whatsapp.Event) {
+		mu.Lock()
+		record() // the account first: messages need your own id
+		if e.History {
+			chats += len(e.Chats)
+			msgs += len(e.Messages)
+			lastHistory = time.Now()
+			select {
+			case historyArrived <- struct{}{}:
+			default:
+			}
+		}
+		n, m := chats, msgs
+		mu.Unlock()
+		a.onWhatsApp(ctx, e)
+		if e.History && progress != nil {
+			progress(n, m)
+		}
+	}
+	if err := c.Link(ctx, phone, show, handler); err != nil {
 		return err
 	}
-	me := c.Me()
-	if phone == "" {
-		phone = "+" + strings.SplitN(me, "@", 2)[0]
+	mu.Lock()
+	record()
+	ok = recorded
+	mu.Unlock()
+	if !ok {
+		return errors.New("linked, but WhatsApp didn't say who you are; try again")
 	}
-	return a.Store.AddWhatsApp(phone, me)
+	if progress != nil {
+		progress(0, 0)
+	}
+	// the phone sends history in pieces, starting a few seconds in
+	deadline := time.After(2 * time.Minute)
+	select {
+	case <-historyArrived:
+	case <-time.After(45 * time.Second):
+		return nil // nothing came: it will arrive at the next connect
+	case <-deadline:
+		return nil
+	case <-ctx.Done():
+		return nil
+	}
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-deadline:
+			return nil
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+			mu.Lock()
+			quiet := time.Since(lastHistory) > linkQuiet
+			mu.Unlock()
+			if quiet {
+				return nil
+			}
+		}
+	}
 }
 
 // UnlinkWhatsApp logs this device out of WhatsApp and forgets its chats.
@@ -131,31 +209,33 @@ func (a *App) StartWhatsApp(ctx context.Context) (ok bool, err error) {
 		return false, nil
 	}
 	a.waMu.Lock()
-	a.wa = c
+	a.wa, a.waUnlock = c, unlock
 	a.waReady, a.waReadyOnce = make(chan struct{}), &sync.Once{}
 	a.waMu.Unlock()
 	if err := c.Connect(func(e whatsapp.Event) { a.onWhatsApp(ctx, e) }); err != nil {
 		a.StopWhatsApp()
-		unlock()
 		_ = a.Store.SetError(store.WhatsAppAccount, err.Error())
 		return false, err
 	}
 	go func() {
 		<-ctx.Done()
 		a.StopWhatsApp()
-		unlock()
 	}()
 	return true, nil
 }
 
-// StopWhatsApp goes offline.
+// StopWhatsApp goes offline and lets another process (or a later
+// StartWhatsApp) take WhatsApp.
 func (a *App) StopWhatsApp() {
 	a.waMu.Lock()
-	c := a.wa
-	a.wa = nil
+	c, unlock := a.wa, a.waUnlock
+	a.wa, a.waUnlock = nil, nil
 	a.waMu.Unlock()
 	if c != nil {
 		c.Close()
+	}
+	if unlock != nil {
+		unlock()
 	}
 }
 
@@ -173,9 +253,11 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			}
 			a.waMu.Unlock()
 			_ = a.Store.SetChatSynced(acc, "")
-			_ = a.Store.SetError(acc, "")
+			if wa.LastError == "" || !strings.HasPrefix(wa.LastError, "WhatsApp: ") {
+				_ = a.Store.SetError(acc, "")
+			}
 		case "logged-out", "replaced", "banned":
-			_ = a.Store.SetError(acc, e.Err.Error())
+			_ = a.Store.SetError(acc, "WhatsApp: "+e.Err.Error())
 			Notify("sandesh: WhatsApp went offline", e.Err.Error())
 			go a.StopWhatsApp()
 		}

@@ -457,7 +457,9 @@ sandesh whatsapp link                  # scan the QR code: WhatsApp → Settings
 sandesh whatsapp link --phone +9198…   # or type a code on the phone instead
 ```
 
-Your recent chats arrive over the next minutes. `Tab` in the screen now
+Keep it open after scanning: it waits until the phone has logged the new
+device in and sent your recent chats (up to two minutes), then hands over
+to the background service. `Tab` in the screen now
 goes Mail → Chat → WhatsApp, with sections All, Unread, People, Groups and
 Scheduled; `i` types a message, `r` on a picked message replies quoting it,
 and opening a chat marks it read (the sender sees blue ticks). The status
