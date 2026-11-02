@@ -62,7 +62,7 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
   `@` asks Claude, `S` summarises, `D` drafts a reply, `T` gives today's
   digest.
 - **Nothing goes out without you**: an agent's send waits for your `y` in a
-  popup (the same idea as [anumati](https://github.com/Theyashsawarkar/anumati)
+  popup (the same idea as [dvarapala](https://github.com/Theyashsawarkar/dvarapala)
   for root commands).
 - **Notifications**: new inbox mail and chat DMs or mentions, through
   `notify-send`.
