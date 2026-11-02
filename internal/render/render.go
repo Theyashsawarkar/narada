@@ -300,8 +300,10 @@ func textOf(n *html.Node) string {
 	return reWS.ReplaceAllString(reZW.ReplaceAllString(sb.String(), ""), " ")
 }
 
-// dataTable renders a table that holds data (no nested tables, several
-// columns, short cells) as a grid; anything else is layout and is walked.
+// dataTable renders a table that holds data (no nested tables, 2 to 6
+// columns, and short cells or a header row) as a grid; anything else is
+// layout and is walked. A header row (<th>) marks data even with long
+// cells, like a status report's Time | Tasks.
 func (b *builder) dataTable(n *html.Node, st span) bool {
 	var rows [][]*html.Node
 	var head []bool
@@ -347,11 +349,14 @@ func (b *builder) dataTable(n *html.Node, st span) bool {
 	if nested || len(rows) < 2 {
 		return false
 	}
-	cols := 0
-	for _, r := range rows {
+	cols, headed := 0, false
+	for i, r := range rows {
 		cols = max(cols, len(r))
+		headed = headed || head[i]
+	}
+	for _, r := range rows {
 		for _, c := range r {
-			if t := strings.TrimSpace(textOf(c)); runewidth.StringWidth(t) > 50 {
+			if t := strings.TrimSpace(textOf(c)); !headed && runewidth.StringWidth(t) > 50 {
 				return false
 			}
 		}
@@ -679,7 +684,7 @@ func table(bl block, w int, st Styles) []string {
 			widths[j] = max(widths[j], runewidth.StringWidth(texts[i][j]))
 		}
 	}
-	// fit: shrink the widest column until the table fits
+	// fit: shrink the widest column until the table fits; long cells wrap
 	total := func() int {
 		t := 1
 		for _, x := range widths {
@@ -694,7 +699,7 @@ func table(bl block, w int, st Styles) []string {
 				mi = j
 			}
 		}
-		if widths[mi] <= 4 {
+		if widths[mi] <= 8 {
 			break
 		}
 		widths[mi]--
@@ -709,23 +714,79 @@ func table(bl block, w int, st Styles) []string {
 	}
 	var out []string
 	out = append(out, line("╭", "┬", "╮"))
-	for i, row := range texts {
-		var cells []string
+	headed := func(i int) bool {
+		return bl.head != nil && i < len(bl.head) && bl.head[i] || i == 0 && allBold(bl.rows[0])
+	}
+	// Once any row wraps, every row gets a rule under it to read apart.
+	wraps := false
+	for _, row := range texts {
 		for j, t := range row {
-			t = runewidth.Truncate(t, widths[j], "…")
-			pad := strings.Repeat(" ", widths[j]-runewidth.StringWidth(t))
-			sty := st.Text
-			if bl.head != nil && i < len(bl.head) && bl.head[i] || i == 0 && allBold(bl.rows[0]) {
-				sty = st.TableHead
-			}
-			cells = append(cells, " "+sty.Render(t)+pad+" ")
+			wraps = wraps || runewidth.StringWidth(t) > widths[j]
 		}
-		out = append(out, bd.Render("│")+strings.Join(cells, bd.Render("│"))+bd.Render("│"))
-		if i == 0 && (len(bl.head) > 0 && bl.head[0] || allBold(bl.rows[0])) && len(texts) > 1 {
+	}
+	for i, row := range texts {
+		sty := st.Text
+		if headed(i) {
+			sty = st.TableHead
+		}
+		lines := make([][]string, len(row))
+		height := 1
+		for j, t := range row {
+			lines[j] = wrapCell(t, widths[j])
+			height = max(height, len(lines[j]))
+		}
+		for k := 0; k < height; k++ {
+			var cells []string
+			for j := range row {
+				t := ""
+				if k < len(lines[j]) {
+					t = lines[j][k]
+				}
+				pad := strings.Repeat(" ", widths[j]-runewidth.StringWidth(t))
+				cells = append(cells, " "+sty.Render(t)+pad+" ")
+			}
+			out = append(out, bd.Render("│")+strings.Join(cells, bd.Render("│"))+bd.Render("│"))
+		}
+		switch {
+		case i == 0 && headed(0) && len(texts) > 1:
+			out = append(out, line("├", "┼", "┤"))
+		case i < len(texts)-1 && wraps:
 			out = append(out, line("├", "┼", "┤"))
 		}
 	}
 	out = append(out, line("╰", "┴", "╯"))
+	return out
+}
+
+// wrapCell breaks a cell's text into lines of at most w columns, at spaces
+// where it can, mid-word only when a word is wider than the column.
+func wrapCell(t string, w int) []string {
+	if t == "" {
+		return []string{""}
+	}
+	var out []string
+	cur := ""
+	for _, f := range strings.Fields(t) {
+		for runewidth.StringWidth(f) > w {
+			if cur != "" {
+				out, cur = append(out, cur), ""
+			}
+			cut := runewidth.Truncate(f, w, "")
+			out = append(out, cut)
+			f = f[len(cut):]
+		}
+		switch {
+		case cur == "":
+			cur = f
+		case runewidth.StringWidth(cur)+1+runewidth.StringWidth(f) <= w:
+			cur += " " + f
+		default:
+			out, cur = append(out, cur), f
+		}
+	}
+	if cur != "" || len(out) == 0 {
+		out = append(out, cur)
+	}
 	return out
 }
 

@@ -49,3 +49,20 @@ func TestText(t *testing.T) {
 		t.Fatal("phone helpers")
 	}
 }
+
+// "@<phone number>" in the text tags that person; anything else stays plain.
+func TestOutgoingTags(t *testing.T) {
+	if m := outgoing("hello", nil); m.GetConversation() != "hello" {
+		t.Fatalf("plain text: %v", m)
+	}
+	m := outgoing("@919820147460 Sir, please check. Mail me@x.com, call @12", nil)
+	got := m.GetExtendedTextMessage().GetContextInfo().GetMentionedJID()
+	if len(got) != 1 || got[0] != "919820147460@s.whatsapp.net" {
+		t.Fatalf("tagged: %v", got)
+	}
+	q := outgoing("ok @919820147460 @919820147460", &Message{ID: "A", Sender: "1@s.whatsapp.net", Text: "hi"})
+	ci := q.GetExtendedTextMessage().GetContextInfo()
+	if ci.GetStanzaID() != "A" || len(ci.GetMentionedJID()) != 1 {
+		t.Fatalf("quote and tag: %v", ci)
+	}
+}

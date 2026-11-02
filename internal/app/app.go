@@ -20,7 +20,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
-const Version = "0.5.0"
+const Version = "0.5.1"
 
 type App struct {
 	Paths  config.Paths

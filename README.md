@@ -189,8 +189,9 @@ the right, keys at the bottom.
 - **Thread**: the subject and its labels on top, then each message in its
   own card with a From / To / Date header. HTML mail is turned into
   terminal formatting: headings, bold and italics, lists, real tables drawn
-  as tables, buttons, and numbered links (`o` and a number opens one in the
-  browser). Layout tables and hidden preview text are dropped. Older
+  as tables (long cells wrap inside the grid), buttons, and numbered links (`o` and a number opens one in the
+  browser). Layout tables and hidden preview text are dropped; `b` opens the
+  thread in Gmail when you want the sender's full layout. Older
   messages fold to one line (`E` opens them all), and quoted replies fold
   away (`Q` shows them).
 - **Chat**: messages grouped by sender with their initials, yours on the
@@ -653,7 +654,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
 | `narada whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
 | `narada whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
-| `narada whatsapp send <to> <text> [--at WHEN] [--link]` | Send one message (`--link`: open click-to-chat instead) |
+| `narada whatsapp send <to> <text> [--at WHEN] [--link]` | Send one message (`--link`: open click-to-chat instead); `@919820147460` (a phone number with its country code) tags that person |
 | `narada status [--json\|--tmux]` | Unread counts |
 | `narada sync` | Sync every account now |
 | `narada outbox` / `outbox cancel <id>` | Sends of the last week; stop one in its undo window |

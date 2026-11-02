@@ -2,6 +2,18 @@
 
 Newest first.
 
+## v0.5.1 -- 2026-11-02
+
+- **Tag people on WhatsApp**: an `@` followed by a phone number with its
+  country code (`@919820147460`) in a WhatsApp message you or an agent
+  send is now a real tag, so that person gets a mention notification in
+  the group. Before, it went as plain text.
+- **Tables with long cells show as tables**: a table with a header row
+  (like a daily status report's Time | Tasks) is drawn as a grid even when
+  its cells hold whole sentences; they wrap inside their column, with a rule
+  between rows. Before, such a table was taken for page layout and came out
+  as loose lines, and a long cell in a drawn table was cut off with "…".
+
 ## v0.5.0 -- 2026-11-02
 
 - **Renamed from sandesh to narada** (नारद, the divine messenger who carries word

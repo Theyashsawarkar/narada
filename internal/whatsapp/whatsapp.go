@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -257,17 +258,7 @@ func (cl *Client) Send(ctx context.Context, chat, text string, quote *Message) (
 	if err != nil {
 		return "", fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
 	}
-	msg := &waE2E.Message{Conversation: proto.String(text)}
-	if quote != nil {
-		msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(text),
-			ContextInfo: &waE2E.ContextInfo{
-				StanzaID:      proto.String(quote.ID),
-				Participant:   proto.String(quote.Sender),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String(quote.Text)},
-			},
-		}}
-	}
+	msg := outgoing(text, quote)
 	resp, err := cl.c.SendMessage(ctx, to, msg)
 	if err != nil {
 		return "", err
@@ -533,6 +524,33 @@ func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool
 		m.Text = cl.mentions(ctx, m.Text, ci.GetMentionedJID())
 	}
 	return m, true
+}
+
+// reMention is a phone number tagged in a message: "@919820147460".
+var reMention = regexp.MustCompile(`(?:^|[^\w@])@(\d{7,15})\b`)
+
+// outgoing is the message Send sends: plain text, or (to tag people or
+// quote a message) an extended text whose context names them, so an
+// "@<phone number>" in the text is a real tag that notifies that person.
+func outgoing(text string, quote *Message) *waE2E.Message {
+	var tagged []string
+	seen := map[string]bool{}
+	for _, m := range reMention.FindAllStringSubmatch(text, -1) {
+		if jid := m[1] + "@" + types.DefaultUserServer; !seen[jid] {
+			seen[jid] = true
+			tagged = append(tagged, jid)
+		}
+	}
+	if quote == nil && len(tagged) == 0 {
+		return &waE2E.Message{Conversation: proto.String(text)}
+	}
+	ci := &waE2E.ContextInfo{MentionedJID: tagged}
+	if quote != nil {
+		ci.StanzaID = proto.String(quote.ID)
+		ci.Participant = proto.String(quote.Sender)
+		ci.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
+	}
+	return &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ci}}
 }
 
 // mentions writes "@Priya" for the "@1234…" WhatsApp puts in the text

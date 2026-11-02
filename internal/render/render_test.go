@@ -46,6 +46,31 @@ func TestHTML(t *testing.T) {
 	}
 }
 
+// A table with a header row is data even with long cells: they wrap inside
+// the grid, nothing is cut off.
+func TestLongCellsWrap(t *testing.T) {
+	src := `<p>Date : 02/11/2026</p><table><tr><th>Time</th><th>Tasks</th></tr>
+<tr><td>09:00 AM to 11:00 AM</td><td>Worked on changing the brief flow so the client writes the brief and the agency approves it.</td></tr>
+<tr><td>01:00 PM to 02:00 PM</td><td>Lunch Break</td></tr></table>`
+	out := strings.Join(HTML(src, 60, st, false).Lines, "\n")
+	for _, want := range []string{"│ Time ", "│ Tasks ", "│ 09:00 AM to 11:00 AM │ Worked on changing", "agency approves it.", "│ Lunch Break"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Count(out, "├") != 2 {
+		t.Errorf("want a rule under the header and between the rows:\n%s", out)
+	}
+	if strings.Contains(out, "…") {
+		t.Errorf("a cell was cut off:\n%s", out)
+	}
+	for _, l := range strings.Split(out, "\n") {
+		if w := len([]rune(l)); w > 60 {
+			t.Errorf("line wider than 60 (%d): %q", w, l)
+		}
+	}
+}
+
 func TestText(t *testing.T) {
 	src := "Hi,\n\nSee https://example.com/a/very/long/path for details.\n\nOn Mon, Priya <p@x.example> wrote:\n> old\n> older"
 	r := Text(src, 40, st, false)
