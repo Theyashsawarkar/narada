@@ -2,6 +2,11 @@
 
 Newest first.
 
+## v0.4.3 -- 2026-11-02
+
+- **Quieter**: bubbles and the picked list row lose their colour fill: just
+  a rounded outline, plain text, and the time dim inside the bubble.
+
 ## v0.4.2 -- 2026-11-02
 
 - **Really rounded**: bubbles and the picked list row get rounded borders

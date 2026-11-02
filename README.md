@@ -173,8 +173,8 @@ sandesh doctor                         # checks all of it
 ## The screen
 
 <p align="center">
-  <img alt="A Google Chat conversation in filled bubbles: yours on the right in the accent colour, theirs on the left with a quoted reply, a reaction and the time inside" src="assets/screenshots/chat.png" width="49%">
-  <img alt="The WhatsApp tab: the chat list on one panel with the picked chat filled green, filled message bubbles with a photo inside, and read ticks on your message" src="assets/screenshots/whatsapp.png" width="49%">
+  <img alt="A Google Chat conversation in rounded bubbles: yours on the right outlined in the accent colour, theirs on the left with a quoted reply, a reaction and the time inside" src="assets/screenshots/chat.png" width="49%">
+  <img alt="The WhatsApp tab: the chat list on one panel with the picked chat in a green rounded card, rounded message bubbles with a photo inside, and read ticks on your message" src="assets/screenshots/whatsapp.png" width="49%">
 </p>
 <p align="center"><sub>All screenshots use <code>sandesh demo</code>: made-up mail, chats and people.</sub></p>
 
@@ -310,15 +310,15 @@ right side previews the highlighted file: text with line numbers, an
 image's size (the picture itself with `chafa` installed), a PDF's first
 page (with `pdftotext`). `Tab` picks several, `Enter` adds them.
 
-**The conversation** is drawn as filled bubbles, as on a phone: theirs on
-the left on the surface colour, their name once per run of messages, yours
-on the right in the accent colour, each with its time (and your ticks) at
-the bottom right inside it. A reply's quote sits inside its bubble, files
+**The conversation** is drawn as rounded bubbles, as on a phone: theirs on
+the left with a soft outline, their name once per run of messages, yours on
+the right outlined in the accent colour, each with its time (and your
+ticks) at the bottom right inside it. A reply's quote sits inside its bubble, files
 (`v` opens one) and numbered links (`o` opens one) inside too, reactions as
 chips underneath and "(edited)" where a message was changed.
 
 **The lists** (mail, chat, WhatsApp) are rows on one panel, divided by
-hairlines, the picked one filled in the tab's colour; `list_style = "cards"`
+hairlines, the picked one a rounded card in the tab's colour; `list_style = "cards"`
 draws a box around each instead. **In a mail thread** read messages fold to
 one line each, and a run of four or more to a single "⋯ N earlier messages"
 line (`Enter` opens them all). **The message box** holds what you're
@@ -710,7 +710,7 @@ chat_interval = "30s"       # and Google Chat
 initial_days  = 30          # how far back the first sync goes
 max_threads   = 150         # at most this many threads on the first sync (older mail: search)
 notify        = true        # desktop notifications for new mail and DMs
-list_style    = "panel"  # the lists: panel (rows, the picked one filled) or cards (a box each)
+list_style    = "panel"  # the lists: panel (rows, the picked one a card) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
 ai_command    = ["claude", "-p"]   # what @, S, D and T run

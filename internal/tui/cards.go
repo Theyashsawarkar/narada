@@ -74,13 +74,8 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 		row := gutter + fit(l, w+2)
 		if sel {
 			row = " " + fit(l, w+2) // the border takes the gutter's place
-			// keep each part's own colours (name capsules, badges) on a
-			// tint of the tab's colour
-			on := lipgloss.NewStyle().Background(lipgloss.Color(m.selFill()))
-			seq := strings.TrimSuffix(on.Render(" "), " \x1b[0m")
-			row = seq + strings.ReplaceAll(row, "\x1b[0m", "\x1b[0m"+seq) + on.Render(strings.Repeat(" ", max(0, w+2-ansi.StringWidth(row)))) + "\x1b[0m" // no bleed into the pane
 			edge := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
-			row = edge.Render("│") + row + edge.Render("│")
+			row = edge.Render("│") + row + strings.Repeat(" ", max(0, w+2-ansi.StringWidth(row))) + edge.Render("│")
 		}
 		out = append(out, row)
 	}
@@ -120,15 +115,6 @@ func (m Model) selEdge() string {
 		return m.styles.c.Muted
 	}
 	return m.partColor()
-}
-
-// selFill is the picked list row's background: a dark tint of the tab's
-// colour while the list has the focus, the surface colour when not.
-func (m Model) selFill() string {
-	if m.focus != 0 {
-		return m.styles.c.Surface
-	}
-	return blend(m.partColor(), m.styles.c.Base, 0.28)
 }
 
 func fg(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(c)) }
@@ -294,108 +280,45 @@ func (m Model) tickText(level int) string {
 	return map[int]string{1: " ✓", 2: " ✓✓", 3: " ✓✓"}[level]
 }
 
-// fillBubble draws a message as a filled block: yours in the accent colour
-// with dark text, theirs on the surface colour; the time (and your ticks)
-// sit at the bottom right inside it. raw lines (pictures) keep their own
-// colours. read colours your ticks blue, as on the phone.
-func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel bool, stamp string, read bool) (out []string) {
+// chatBubble draws a message in a rounded outline: a soft border for
+// theirs, the accent for yours, brighter when picked. The time (and your
+// ticks, blue once read) sit at the bottom right inside it.
+func (m Model) chatBubble(lines []string, maxW int, mine, sel bool, stamp string, read bool) []string {
 	s := m.styles
-	bg, fgc := s.c.Border, s.c.Text // the surface colour is too close to the background
+	color := s.c.Border
 	if mine {
-		bg, fgc = s.c.Accent2, s.c.Base
+		color = s.c.Accent2
 	}
 	if sel {
-		bg, fgc = s.c.Accent, s.c.Base
+		color = s.c.Accent
 	}
-	iw := 0
+	iw := ansi.StringWidth(stamp)
 	for _, l := range lines {
 		iw = max(iw, ansi.StringWidth(l))
 	}
-	iw = max(iw, ansi.StringWidth(stamp))
-	if last := len(lines) - 1; !raw[last] {
-		// room for the time beside the last line, as on the phone
-		iw = max(iw, ansi.StringWidth(lines[last])+2+ansi.StringWidth(stamp))
-	}
-	iw = min(iw, maxW-2)
-	on := lipgloss.NewStyle().Background(lipgloss.Color(bg))
-	text := on.Foreground(lipgloss.Color(fgc))
-	dim := on.Foreground(lipgloss.Color(fgc)) // on the accent: the dark text colour reads best
-	if !mine && !sel {
-		dim = on.Foreground(lipgloss.Color(s.c.Subtle))
-	}
-	tickStyle := dim
+	t := strings.TrimRight(stamp, " ✓")
+	ticks := s.muted.Render(strings.TrimPrefix(stamp, t))
 	if read {
-		tickStyle = on.Foreground(lipgloss.Color(s.c.Blue)).Bold(true)
+		ticks = s.blue.Render(strings.TrimPrefix(stamp, t))
 	}
-	// keep the background under styled text: every reset puts it back
-	bgSeq := strings.TrimSuffix(on.Render("x"), "x\x1b[0m")
-	if i := strings.Index(bgSeq, "x"); i >= 0 {
-		bgSeq = bgSeq[:i]
-	}
-	keep := func(l string) string {
-		return strings.ReplaceAll(strings.ReplaceAll(l, "\x1b[0m", "\x1b[0m"+bgSeq), "\x1b[m", "\x1b[m"+bgSeq)
-	}
-	cell := func(l string, i int) string {
-		switch {
-		case raw[i]:
-		case mine || sel:
-			l = text.Render(ansi.Strip(l)) // dark on the accent: one colour reads best
-		default:
-			l = keep(l)
-		}
-		l = ansi.Truncate(l, iw, "…")
-		return on.Render(" ") + bgSeq + l + on.Render(strings.Repeat(" ", max(0, iw-ansi.StringWidth(l))+1))
-	}
-	stampCell := func(left int) string {
-		t := strings.TrimRight(stamp, " ✓")
-		ticks := strings.TrimPrefix(stamp, t)
-		return dim.Render(strings.Repeat(" ", max(0, left))+t) + tickStyle.Render(ticks)
-	}
-	for i, l := range lines {
-		out = append(out, cell(l, i))
-	}
-	defer func() { out = m.rounded(out, bg, iw+2) }()
-	// the time on the last line if it fits there, else on its own line
 	sw := ansi.StringWidth(stamp)
+	stampText := s.muted.Render(t) + ticks
+	// the time beside the last line if it fits, else on its own line
 	last := len(lines) - 1
-	if lw := ansi.StringWidth(lines[last]); !raw[last] && lw+2+sw <= iw {
-		l := lines[last]
-		if mine || sel {
-			l = text.Render(ansi.Strip(l))
-		} else {
-			l = keep(l)
-		}
-		out[last] = on.Render(" ") + bgSeq + l + stampCell(iw-lw-sw) + on.Render(" ")
+	lw := ansi.StringWidth(lines[last])
+	picture := strings.ContainsAny(lines[last], "\U0010EEEE▀") // never beside a picture
+	beside := lw+2+sw <= maxW-4 && !picture
+	if beside {
+		iw = max(iw, lw+2+sw)
+	}
+	iw = min(iw, maxW-4)
+	body := append([]string{}, lines...)
+	if beside {
+		body[last] = lines[last] + strings.Repeat(" ", max(0, iw-lw-sw)) + stampText
 	} else {
-		out = append(out, on.Render(" ")+stampCell(iw-sw)+on.Render(" "))
+		body = append(body, strings.Repeat(" ", max(0, iw-sw))+stampText)
 	}
-	return out
-}
-
-// rounded frames a filled block of width w with a rounded border in its
-// colour (╭ ╮ ╰ ╯: the only corners a terminal draws round).
-func (m Model) rounded(block []string, bg string, w int) []string {
-	if len(block) == 0 {
-		return block
-	}
-	c := lipgloss.NewStyle().Foreground(lipgloss.Color(bg))
-	out := []string{c.Render("╭" + strings.Repeat("─", w) + "╮")}
-	for _, l := range block {
-		out = append(out, c.Render("│")+l+c.Render("│"))
-	}
-	return append(out, c.Render("╰"+strings.Repeat("─", w)+"╯"))
-}
-
-// blend mixes two "#rrggbb" colours, t of the first.
-func blend(a, b string, t float64) string {
-	var ar, ag, ab, br, bg, bb int
-	if len(a) != 7 || len(b) != 7 {
-		return a
-	}
-	fmt.Sscanf(a[1:], "%02x%02x%02x", &ar, &ag, &ab)
-	fmt.Sscanf(b[1:], "%02x%02x%02x", &br, &bg, &bb)
-	mix := func(x, y int) int { return int(float64(x)*t + float64(y)*(1-t)) }
-	return fmt.Sprintf("#%02x%02x%02x", mix(ar, br), mix(ag, bg), mix(ab, bb))
+	return bubble(body, iw+4, color, sel)
 }
 
 // ticks is WhatsApp's mark for how far your message got: ✓ sent,
@@ -961,7 +884,6 @@ func (m *Model) chatLines(w int) []string {
 			m.chatMsgLine[g.Name] = len(out)
 			sel := picking && i+k == m.chatSel
 			var lines []string
-			raw := map[int]bool{} // image lines: drawn as they are (their colour is the image)
 			if g.Quoted != "" {
 				who, what := "", "a message"
 				if q, ok := byName[g.Quoted]; ok {
@@ -977,10 +899,7 @@ func (m *Model) chatLines(w int) []string {
 			shown := map[int]bool{}
 			for fi, f := range g.Files {
 				if img := m.mediaLines(g.Account, g.Name, fi, f, bw-4); img != nil {
-					for _, l := range img {
-						raw[len(lines)] = true
-						lines = append(lines, l)
-					}
+					lines = append(lines, img...)
 					shown[fi] = true
 				}
 			}
@@ -1021,7 +940,7 @@ func (m *Model) chatLines(w int) []string {
 			if g.Mine {
 				stamp += m.tickText(g.Ticks)
 			}
-			box := m.fillBubble(lines, raw, bw, g.Mine, sel || g.Name == m.flashMsg, stamp, g.Mine && g.Ticks == 3)
+			box := m.chatBubble(lines, bw, g.Mine, sel || g.Name == m.flashMsg, stamp, g.Mine && g.Ticks == 3)
 			for _, l := range box {
 				if g.Mine {
 					out = append(out, padLeft(l, w))

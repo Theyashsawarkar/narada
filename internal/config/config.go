@@ -114,7 +114,7 @@ type Config struct {
 	// "blocks" or "off"
 	Images string `toml:"images"`
 	// ListStyle: how the lists draw an item: "panel" (rows on one panel,
-	// the picked one filled in the tab's colour) or "cards" (a box each)
+	// the picked one a rounded card in the tab's colour) or "cards" (a box each)
 	ListStyle string `toml:"list_style"`
 	// ChatList: the old name, from v0.3.0 ("cards" still means cards)
 	ChatList string `toml:"chat_list"`
@@ -287,7 +287,7 @@ nerd_font     = true   # round avatars (needs a Nerd Font, as most terminal setu
 older_page    = 10     # how many older threads j at the end of a list loads (+ / - change it there)
 max_threads   = 150    # at most this many threads on the first sync (older mail: search)
 notify        = true   # desktop notification for new mail and DMs
-list_style    = "panel"  # the lists: panel (rows, the picked one filled) or cards (a box each)
+list_style    = "panel"  # the lists: panel (rows, the picked one a card) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30 # at most this many WhatsApp sends an hour (a linked device that sends a lot risks the account)
 ai_command    = ["claude", "-p"]   # what @, S, D and T run
