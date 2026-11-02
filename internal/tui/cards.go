@@ -141,6 +141,21 @@ func firstWord(s string) string {
 	return s
 }
 
+// ticks is WhatsApp's mark for how far your message got: ✓ sent,
+// ✓✓ delivered, blue ✓✓ read.
+func (m Model) ticks(level int) string {
+	s := m.styles
+	switch level {
+	case 1:
+		return s.muted.Render(" ✓")
+	case 2:
+		return s.muted.Render(" ✓✓")
+	case 3:
+		return s.blue.Render(" ✓✓")
+	}
+	return ""
+}
+
 func (m Model) avatar(name string) string {
 	h := hash(name)
 	name = strings.TrimPrefix(name, "~") // a name they gave themselves
@@ -658,7 +673,7 @@ func (m *Model) chatLines(w int) []string {
 		color := ac[hash(name)%len(ac)]
 		out = append(out, "")
 		if c.Mine {
-			out = append(out, padLeft(s.muted.Render("You · "+t.Format("15:04")), w))
+			out = append(out, padLeft(s.muted.Render("You · "+t.Format("15:04"))+m.ticks(m.chatMsgs[j-1].Ticks), w))
 		} else {
 			out = append(out, m.avatar(name)+" "+fg(color).Bold(true).Render(name)+s.muted.Render(" · "+t.Format("15:04")))
 		}

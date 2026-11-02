@@ -309,3 +309,40 @@ func TestWhatsAppSendFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestWhatsAppTicks(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sp, _ := a.WhatsAppChat(ctx, "ravi")
+	it, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: sp.Name, Body: "on my way"}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.DeliverDue(ctx)
+	it, _ = a.Store.OutboxItem(it.ID)
+	ticks := func() int {
+		m, err := a.Store.ChatMessage(store.WhatsAppAccount, it.Result)
+		if err != nil {
+			t.Fatalf("sent message %q: %v", it.Result, err)
+		}
+		return m.Ticks
+	}
+	if got := ticks(); got != whatsapp.TickSent {
+		t.Fatalf("just sent: %d ticks", got)
+	}
+	_, id, _ := strings.Cut(strings.TrimPrefix(it.Result, sp.Name), "/")
+	w.Receipt(sp.Name, whatsapp.TickRead, id)
+	w.Receipt(sp.Name, whatsapp.TickDelivered, id) // late: never goes back down
+	if got := ticks(); got != whatsapp.TickRead {
+		t.Fatalf("after read: %d ticks", got)
+	}
+	// history keeps the phone's ticks; Ravi read "Yes, after standup"
+	h5, _ := a.Store.ChatMessage(store.WhatsAppAccount, sp.Name+"/H5")
+	if h5.Ticks != whatsapp.TickDelivered {
+		t.Fatalf("history ticks: %d", h5.Ticks)
+	}
+}

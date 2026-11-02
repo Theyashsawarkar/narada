@@ -39,6 +39,21 @@ type Message struct {
 	Edit       bool   // Text replaces message ID's text
 	Revoke     bool   // message ID was deleted for everyone
 	Media      *Media // a photo, GIF, file... it carries
+	Ticks      int    // yours: how far it got (TickSent, TickDelivered, TickRead)
+}
+
+// How far a message you sent got: the ticks WhatsApp shows beside it.
+const (
+	TickSent      = 1 // ✓ the server has it
+	TickDelivered = 2 // ✓✓ on their phone
+	TickRead      = 3 // ✓✓ in blue: read (or played)
+)
+
+// Ticks: messages of yours in Chat reached Level.
+type Ticks struct {
+	Chat  string
+	IDs   []string
+	Level int
 }
 
 // Chat is a conversation: a person or a group.
@@ -59,6 +74,7 @@ type Event struct {
 	Read     string    // a chat read on another device ...
 	ReadAt   time.Time // ... up to this time
 	Contacts map[string]string
+	Ticks    *Ticks // receipts for messages you sent
 	State    string // connected, disconnected, logged-out, replaced, banned
 	Err      error
 }
@@ -360,6 +376,14 @@ func (cl *Client) event(evt any) {
 		if e.IsFromMe && (e.Type == types.ReceiptTypeRead || e.Type == types.ReceiptTypeReadSelf) {
 			cl.emit(Event{Read: cl.chatJID(ctx, e.Chat), ReadAt: e.Timestamp})
 		}
+		// they got or read a message of yours
+		if !e.IsFromMe {
+			if level := receiptTicks(e.Type, e.IsGroup); level > 0 {
+				ids := make([]string, len(e.MessageIDs))
+				copy(ids, e.MessageIDs)
+				cl.emit(Event{Ticks: &Ticks{Chat: cl.chatJID(ctx, e.Chat), IDs: ids, Level: level}})
+			}
+		}
 	case *events.MarkChatAsRead:
 		if e.Action.GetRead() {
 			cl.emit(Event{Read: cl.chatJID(ctx, e.JID), ReadAt: e.Timestamp})
@@ -375,6 +399,33 @@ func (cl *Client) event(evt any) {
 
 // chatJID: a person's phone-number JID when WhatsApp addressed them by
 // their hidden id (LID), so one person is one chat.
+// receiptTicks is the ticks a receipt from someone else means. In a group
+// each member sends their own, and blue ticks need them all, which sandesh
+// doesn't count: a group message shows at most delivered.
+func receiptTicks(t types.ReceiptType, group bool) int {
+	level := 0
+	switch t {
+	case types.ReceiptTypeDelivered:
+		level = TickDelivered
+	case types.ReceiptTypeRead, types.ReceiptTypePlayed:
+		level = TickRead
+	}
+	if group {
+		level = min(level, TickDelivered)
+	}
+	return level
+}
+
+// historyTicks maps a history message's status (WebMessageInfo.Status:
+// 2 server ack, 3 delivered, 4 read, 5 played) to ticks.
+func historyTicks(status int, group bool) int {
+	level := map[int]int{2: TickSent, 3: TickDelivered, 4: TickRead, 5: TickRead}[status]
+	if group {
+		level = min(level, TickDelivered)
+	}
+	return level
+}
+
 func (cl *Client) chatJID(ctx context.Context, j types.JID) string {
 	j = j.ToNonAD()
 	if j.Server == types.HiddenUserServer {
@@ -420,6 +471,9 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 				continue
 			}
 			if m, ok := cl.convert(ctx, evt); ok {
+				if m.FromMe {
+					m.Ticks = historyTicks(int(hm.GetMessage().GetStatus()), ch.Group)
+				}
 				msgs = append(msgs, m)
 			}
 		}

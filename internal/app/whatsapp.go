@@ -297,6 +297,12 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 		}
 	case e.Read != "":
 		_ = a.Store.SetSpaceRead(acc, e.Read, e.ReadAt.UnixMilli())
+	case e.Ticks != nil:
+		names := make([]string, len(e.Ticks.IDs))
+		for i, id := range e.Ticks.IDs {
+			names[i] = waName(e.Ticks.Chat, id)
+		}
+		_ = a.Store.RaiseTicks(acc, names, e.Ticks.Level)
 	case len(e.Messages) > 0:
 		var put []store.ChatMessage
 		touched := map[string]int64{}
@@ -317,6 +323,8 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 				Text: m.Text, Created: m.Time.UnixMilli(), Edited: m.Edit}
 			if m.FromMe {
 				cm.Sender, cm.SenderName = wa.ChatUser, "You"
+				// sent from the phone: the server has it at least
+				cm.Ticks = max(m.Ticks, whatsapp.TickSent)
 			}
 			if m.Quoted != "" {
 				cm.Quoted = waName(m.Chat, m.Quoted)
@@ -487,7 +495,7 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 		_ = a.Store.PutSpace(store.Space{Account: store.WhatsAppAccount, Name: out.Space, DisplayName: a.waChatName(out.Space, out.SpaceName),
 			Type: waType(out.Space), LastActive: now})
 		_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: store.WhatsAppAccount, Name: name, Space: out.Space, Sender: wa.ChatUser,
-			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files}})
+			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files, Ticks: whatsapp.TickSent}})
 		_ = a.Store.SetSpaceRead(store.WhatsAppAccount, out.Space, time.Now().UnixMilli())
 	}
 	if len(out.Files) == 0 {

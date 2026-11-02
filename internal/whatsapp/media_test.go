@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"go.mau.fi/whatsmeow/types"
 )
 
 // WhatsApp wants even dimensions and yuv420p; an odd GIF must still convert.
@@ -38,5 +40,17 @@ func TestGIFToMP4(t *testing.T) {
 	}
 	if len(out) < 12 || string(out[4:8]) != "ftyp" {
 		t.Fatalf("not an MP4: %d bytes", len(out))
+	}
+}
+
+func TestReceiptTicks(t *testing.T) {
+	if receiptTicks(types.ReceiptTypeRead, false) != TickRead || receiptTicks(types.ReceiptTypeDelivered, false) != TickDelivered {
+		t.Fatal("one-to-one")
+	}
+	if receiptTicks(types.ReceiptTypeRead, true) != TickDelivered {
+		t.Fatal("a group shows at most delivered")
+	}
+	if receiptTicks(types.ReceiptTypeRetry, false) != 0 || historyTicks(4, false) != TickRead || historyTicks(1, false) != 0 {
+		t.Fatal("others")
 	}
 }

@@ -90,7 +90,7 @@ func Open(path string) (*Store, error) {
 }
 
 // schemaVersion: bump it with a step in migrate.
-const schemaVersion = 13
+const schemaVersion = 14
 
 func migrate(db *sql.DB) error {
 	var v int
@@ -207,6 +207,12 @@ func migrate(db *sql.DB) error {
 		// the one holding WhatsApp downloads them
 		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS media_fetch (account TEXT NOT NULL, msg TEXT NOT NULL, idx INTEGER NOT NULL,
 		  asked INTEGER NOT NULL, error TEXT NOT NULL DEFAULT '', PRIMARY KEY (account, msg, idx))`); err != nil {
+			return err
+		}
+	}
+	if v < 14 {
+		// v14: WhatsApp's ticks on messages you sent (1 sent, 2 delivered, 3 read)
+		if _, err := db.Exec(`ALTER TABLE chat_messages ADD COLUMN ticks INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
 		}
 	}
@@ -913,6 +919,7 @@ type ChatMessage struct {
 	Quoted     string     `json:"quoted,omitempty"`    // the message this one quotes (a reply)
 	Reactions  string     `json:"reactions,omitempty"` // "👍 2 · 😂 1"
 	Edited     bool       `json:"edited,omitempty"`
+	Ticks      int        `json:"ticks,omitempty"` // WhatsApp, yours: 1 sent, 2 delivered, 3 read
 }
 
 // ChatFile is a file in a chat message: Ref is Chat's media name (it can
@@ -989,12 +996,23 @@ func (s *Store) SearchChat(accounts []string, query string, limit int, space str
 	return out, rows.Err()
 }
 
+// RaiseTicks moves messages' ticks up to level (never down: receipts can
+// arrive out of order).
+func (s *Store) RaiseTicks(account string, names []string, level int) error {
+	for _, n := range names {
+		if _, err := s.db.Exec(`UPDATE chat_messages SET ticks=MAX(ticks,?) WHERE account=? AND name=?`, level, account, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ChatMessage returns one stored chat message.
 func (s *Store) ChatMessage(account, name string) (ChatMessage, error) {
 	var m ChatMessage
 	var files string
-	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited FROM chat_messages WHERE account=? AND name=?`, account, name).
-		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited)
+	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks FROM chat_messages WHERE account=? AND name=?`, account, name).
+		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks)
 	if err != nil {
 		return m, err
 	}
@@ -1138,10 +1156,11 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 		if m.Files == nil {
 			files = []byte("[]")
 		}
-		if _, err := tx.Exec(`INSERT INTO chat_messages(account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+		if _, err := tx.Exec(`INSERT INTO chat_messages(account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
 		  ON CONFLICT(account,name) DO UPDATE SET text=excluded.text, files=excluded.files, quoted=excluded.quoted, reactions=excluded.reactions, edited=excluded.edited,
+		    ticks=MAX(ticks, excluded.ticks),
 		    sender_name=CASE WHEN excluded.sender_name<>'' THEN excluded.sender_name ELSE sender_name END`,
-			m.Account, m.Name, m.Space, m.Thread, m.Sender, m.SenderName, m.Text, m.Created, string(files), m.Quoted, m.Reactions, m.Edited); err != nil {
+			m.Account, m.Name, m.Space, m.Thread, m.Sender, m.SenderName, m.Text, m.Created, string(files), m.Quoted, m.Reactions, m.Edited, m.Ticks); err != nil {
 			return err
 		}
 	}
@@ -1201,7 +1220,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited
+	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited, c.ticks
 	  FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=? AND c.space=? ORDER BY c.created DESC LIMIT ?`, account, space, limit)
 	if err != nil {
 		return nil, err
@@ -1211,7 +1230,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	for rows.Next() {
 		var m ChatMessage
 		var files string
-		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited); err != nil {
+		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(files), &m.Files)

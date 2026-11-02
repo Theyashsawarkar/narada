@@ -74,6 +74,11 @@ func (w *WhatsApp) Receive(m whatsapp.Message) {
 	}
 }
 
+// Receipt: the other side got (level 2) or read (3) messages of yours.
+func (w *WhatsApp) Receipt(chat string, level int, ids ...string) {
+	w.Emit(whatsapp.Event{Ticks: &whatsapp.Ticks{Chat: chat, IDs: ids, Level: level}})
+}
+
 // Emit plays any event.
 func (w *WhatsApp) Emit(e whatsapp.Event) {
 	w.mu.Lock()
@@ -243,12 +248,12 @@ func (w *WhatsApp) SeedWhatsApp() {
 		{JID: group, Name: "Weekend trek", Group: true, Last: at(40 * time.Minute), Unread: 3},
 	}
 	w.History = []whatsapp.Message{
-		{ID: "H1", Chat: amma, Sender: w.Me, FromMe: true, Text: "Reached office, will call at lunch", Time: at(5 * time.Hour)},
+		{ID: "H1", Chat: amma, Sender: w.Me, FromMe: true, Text: "Reached office, will call at lunch", Time: at(5 * time.Hour), Ticks: whatsapp.TickRead},
 		{ID: "H2", Chat: amma, Sender: amma, Text: "Did you eat?", Time: at(25 * time.Minute)},
 		{ID: "H3", Chat: amma, Sender: amma, Text: "📷 Photo: the new curtains", Time: at(20 * time.Minute),
 			Media: &whatsapp.Media{Kind: "image", Name: "photo.png", Mime: "image/png", Raw: []byte("demo-photo")}},
 		{ID: "H4", Chat: ravi, Sender: ravi, SenderName: "Ravi", Text: "PR is up, can you look today?", Time: at(4 * time.Hour)},
-		{ID: "H5", Chat: ravi, Sender: w.Me, FromMe: true, Text: "Yes, after standup", Time: at(3 * time.Hour), Quoted: "H4"},
+		{ID: "H5", Chat: ravi, Sender: w.Me, FromMe: true, Text: "Yes, after standup", Time: at(3 * time.Hour), Quoted: "H4", Ticks: whatsapp.TickDelivered},
 		{ID: "H6", Chat: group, Sender: ravi, SenderName: "Ravi", Text: "Rajmachi this Saturday?", Time: at(2 * time.Hour)},
 		{ID: "H7", Chat: group, Sender: "919800000003@s.whatsapp.net", SenderName: "Sneha", Text: "I'm in! Leaving 5am?", Time: at(70 * time.Minute)},
 		{ID: "H8", Chat: group, Sender: "919800000004@s.whatsapp.net", SenderName: "Kunal", Text: "📍 Location https://maps.google.com/?q=18.828,73.395: base village", Time: at(50 * time.Minute)},
