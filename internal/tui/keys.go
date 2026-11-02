@@ -114,7 +114,7 @@ var Keys = []Key{
 	{"Approve", "e", "Edit the agent's message in your editor first"},
 	{"Approve", "u", "Undo your edit of the agent's message"},
 	{"Approve", "d", "Toggle the changes marked in your edit of the agent's message"},
-	{"Approve", "s", "Skip to the next message waiting (leaves this one waiting)"},
+	{"Approve", "s", "Move to the next message waiting (leaves this one waiting)"},
 	{"Approve", "J / K", "Scroll the details of the agent's message"},
 	{"Approve", "n", "Cancel the agent's message (decline; nothing is sent)"},
 	{"Approve", "q", "Leave the agent's message waiting and go back"},

@@ -100,7 +100,7 @@
 # keybind: Tmux/narada approve | e | Edit the agent's message in your editor first
 # keybind: Tmux/narada approve | u | Undo your edit of the agent's message
 # keybind: Tmux/narada approve | d | Toggle the changes marked in your edit of the agent's message
-# keybind: Tmux/narada approve | s | Skip to the next message waiting (leaves this one waiting)
+# keybind: Tmux/narada approve | s | Move to the next message waiting (leaves this one waiting)
 # keybind: Tmux/narada approve | J / K | Scroll the details of the agent's message
 # keybind: Tmux/narada approve | n | Cancel the agent's message (decline; nothing is sent)
 # keybind: Tmux/narada approve | q | Leave the agent's message waiting and go back

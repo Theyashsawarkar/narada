@@ -426,7 +426,7 @@ whole mail there and back, or set `compose = "editor"`.
 | `d` | Save the message as a Gmail draft instead of sending | |
 | `n` | Delete the message you wrote (discard) | Cancel the agent's message (decline; nothing is sent) |
 | `u` | | Undo your edit of the agent's message |
-| `s` | | Skip to the next message waiting (leaves this one waiting) |
+| `s` | | Move to the next message waiting (leaves this one waiting) |
 | `J` / `K` | | Scroll the details of the agent's message |
 | `q` | | Leave the agent's message waiting and go back |
 
