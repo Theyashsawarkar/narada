@@ -5,7 +5,7 @@
 # keybind: Tmux/sandesh | + / - | Set how many older mails j at the end loads (10, 25, 50, 100)
 # keybind: Tmux/sandesh | g / G | Jump to the first / last
 # keybind: Tmux/sandesh | h / l | Switch to the previous / next section
-# keybind: Tmux/sandesh | Tab | Switch between mail and chat
+# keybind: Tmux/sandesh | Tab | Switch between mail, chat and WhatsApp
 # keybind: Tmux/sandesh | 1 / 2 | Focus the list / the preview
 # keybind: Tmux/sandesh | Enter | Open the thread or space (marks it read)
 # keybind: Tmux/sandesh | J / K | Scroll the preview down / up
@@ -39,6 +39,13 @@
 # keybind: Tmux/sandesh | [ / ] | Switch to the previous / next chat (staying in the conversation)
 # keybind: Tmux/sandesh | Ctrl+k | Open the chat switcher (search chats, people and messages)
 # keybind: Tmux/sandesh | Ctrl+o (typing) | Add a file to the chat message you're typing
+# keybind: Tmux/sandesh | Enter (typing) | Send the chat message and keep typing the next one (Esc leaves the box)
+# keybind: Tmux/sandesh | Alt+Enter / Ctrl+j (typing) | Start a new line in the chat message
+# keybind: Tmux/sandesh | ←→ Alt+b/f Ctrl+a/e (typing) | Move the cursor in the message by letter, word, line start / end
+# keybind: Tmux/sandesh | ↑↓ (typing) | Move the cursor up / down a line in a long message
+# keybind: Tmux/sandesh | Ctrl+w / Ctrl+k / Ctrl+u (typing) | Delete the word before the cursor / to the end / the whole message
+# keybind: Tmux/sandesh | L (WhatsApp, not linked) | Add this machine to WhatsApp (link it) with a QR code shown in the tab
+# keybind: Tmux/sandesh | P (WhatsApp, not linked) | Add this machine to WhatsApp (link it) with your phone number and a code
 # keybind: Tmux/sandesh | t | Move a scheduled send to another time (in Scheduled; Enter edits it)
 # keybind: Tmux/sandesh | n | Rename the chat (spaces and groups on Google Chat; a DM only here)
 # keybind: Tmux/sandesh | N | Start a conversation (opens the one you have with them, earlier messages and all)

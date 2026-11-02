@@ -53,6 +53,7 @@ type Chat struct {
 type Event struct {
 	Messages []Message // new ones, or a page of history
 	History  bool      // Messages came from the phone's history
+	Progress int       // with History: how far the phone's sending of it is, 0-100 (0: unknown)
 	Chats    []Chat    // names and unread counts
 	Read     string    // a chat read on another device ...
 	ReadAt   time.Time // ... up to this time
@@ -422,11 +423,12 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 			}
 		}
 	}
+	pct := int(e.Data.GetProgress())
 	if len(chats) > 0 {
-		cl.emit(Event{Chats: chats, History: true})
+		cl.emit(Event{Chats: chats, History: true, Progress: pct})
 	}
-	if len(msgs) > 0 {
-		cl.emit(Event{Messages: msgs, History: true})
+	if len(msgs) > 0 || len(chats) == 0 {
+		cl.emit(Event{Messages: msgs, History: true, Progress: pct})
 	}
 	cl.emit(Event{Contacts: cl.contacts(ctx)})
 }

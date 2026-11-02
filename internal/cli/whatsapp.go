@@ -42,13 +42,16 @@ func whatsApp(a *app.App, args []string) error {
 			fmt.Println()
 			qrterminal.GenerateHalfBlock(qr, qrterminal.L, os.Stdout)
 			fmt.Println("\nThe code changes every 20 seconds. Ctrl+c stops.")
-		}, func(chats, msgs int) {
+		}, func(chats, msgs, pct int) {
 			if chats == 0 && msgs == 0 {
 				fmt.Print("\033[H\033[2J")
 				fmt.Println("sandesh: linked. Keep this open while the phone sends your recent chats (up to two minutes)…")
 				return
 			}
 			fmt.Printf("\r\033[Ksandesh: received %d chats, %d messages", chats, msgs)
+			if pct > 0 {
+				fmt.Printf(" (%d%%)", pct)
+			}
 		})
 		fmt.Println()
 		if errors.Is(err, context.Canceled) {

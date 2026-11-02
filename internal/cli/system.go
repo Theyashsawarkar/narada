@@ -316,7 +316,12 @@ func demo(args []string, tui func(*app.App, string) error) error {
 	w := fake.NewWhatsApp()
 	w.SeedWhatsApp()
 	a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }
-	if err := a.Store.AddWhatsApp("+919876500000", w.Me); err != nil {
+	if os.Getenv("SANDESH_DEMO_UNLINKED") != "" {
+		// for trying the WhatsApp tab's linking: the "phone" scans after 6 s
+		c, _ := w.Conn(context.Background())
+		_ = c.Logout(context.Background())
+		w.LinkDelay = 6 * time.Second
+	} else if err := a.Store.AddWhatsApp("+919876500000", w.Me); err != nil {
 		return err
 	}
 	if _, errs := a.SyncAll(context.Background()); len(errs) > 0 {

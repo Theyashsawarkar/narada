@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,9 @@ type WhatsApp struct {
 	History []whatsapp.Message
 	Chats   []whatsapp.Chat
 	played  bool
+	// LinkDelay is how long the "phone" takes to scan (the demo shows
+	// the QR code meanwhile).
+	LinkDelay time.Duration
 }
 
 // NewWhatsApp is a fake account with the phone number +91 98765 00000.
@@ -87,9 +91,14 @@ func (c *WhatsAppConn) Me() string {
 // Link "scans" at once and stays online, like the real one.
 func (c *WhatsAppConn) Link(ctx context.Context, phone string, show func(qr, code string), handler func(whatsapp.Event)) error {
 	if phone != "" {
-		show("", "FAKE-CODE")
+		show("", "K7QD9WXA")
 	} else {
-		show("2@fake-qr-code", "")
+		show("2@sandesh-demo,not-a-real-code,"+strings.Repeat("x", 120), "")
+	}
+	select {
+	case <-time.After(c.w.LinkDelay):
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	c.w.SetLinked()
 	return c.Connect(handler)
@@ -114,10 +123,10 @@ func (c *WhatsAppConn) Connect(handler func(whatsapp.Event)) error {
 	handler(whatsapp.Event{Contacts: people})
 	if first {
 		if len(chats) > 0 {
-			handler(whatsapp.Event{Chats: chats, History: true})
+			handler(whatsapp.Event{Chats: chats, History: true, Progress: 40})
 		}
 		if len(history) > 0 {
-			handler(whatsapp.Event{Messages: history, History: true})
+			handler(whatsapp.Event{Messages: history, History: true, Progress: 100})
 		}
 	}
 	return nil

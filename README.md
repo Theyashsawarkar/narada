@@ -210,7 +210,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `+` / `-` | Set how many older mails j at the end loads (10, 25, 50, 100) |
 | `g` / `G` | Jump to the first / last |
 | `h` / `l` | Switch to the previous / next section |
-| `Tab` | Switch between mail and chat |
+| `Tab` | Switch between mail, chat and WhatsApp |
 | `1` / `2` | Focus the list / the preview |
 | `Enter` | Open the thread or space (marks it read) |
 | `J` / `K` | Scroll the preview down / up |
@@ -249,6 +249,13 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `[` / `]` | Switch to the previous / next chat (staying in the conversation) |
 | `Ctrl+k` | Open the chat switcher (search chats, people and messages) |
 | `Ctrl+o` (typing) | Add a file to the chat message you're typing |
+| `Enter` (typing) | Send the chat message and keep typing the next one (Esc leaves the box) |
+| `Alt+Enter` / `Ctrl+j` (typing) | Start a new line in the chat message |
+| `←→` `Alt+b/f` `Ctrl+a/e` (typing) | Move the cursor in the message by letter, word, line start / end |
+| `↑↓` (typing) | Move the cursor up / down a line in a long message |
+| `Ctrl+w` / `Ctrl+k` / `Ctrl+u` (typing) | Delete the word before the cursor / to the end / the whole message |
+| `L` (WhatsApp, not linked) | Add this machine to WhatsApp (link it) with a QR code shown in the tab |
+| `P` (WhatsApp, not linked) | Add this machine to WhatsApp (link it) with your phone number and a code |
 | `t` | Move a scheduled send to another time (in Scheduled; Enter edits it) |
 | `n` | Rename the chat (spaces and groups on Google Chat; a DM only here) |
 | `N` | Start a conversation (opens the one you have with them, earlier messages and all) |
@@ -450,10 +457,14 @@ threads a minute, with a progress bar in the top bar.
 ## WhatsApp
 
 sandesh links to your WhatsApp the way WhatsApp Web does: as a linked
-device of your phone's account.
+device of your phone's account. Open the WhatsApp tab (`Tab` twice) and
+press `L`: the QR code shows right there; scan it from WhatsApp → Settings
+→ Linked devices. `P` links with your phone number instead (you type a code
+on the phone). A progress bar follows while the phone sends your recent
+chats. From a terminal it's the same:
 
 ```sh
-sandesh whatsapp link                  # scan the QR code: WhatsApp → Settings → Linked devices
+sandesh whatsapp link                  # scan the QR code
 sandesh whatsapp link --phone +9198…   # or type a code on the phone instead
 ```
 

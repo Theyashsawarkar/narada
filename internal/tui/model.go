@@ -39,6 +39,7 @@ const (
 	modeWhen    // picking when to send
 	modeConvo   // picking people for a new conversation
 	modeReact   // picking an emoji for a reaction
+	modePhone   // typing your number to link WhatsApp with a code
 	modeCompose // the compose screen
 	modeFind    // the search window
 )
@@ -78,17 +79,18 @@ type Model struct {
 	accounts []string
 	acct     int // -1: all
 
-	threads  []store.Thread
-	spaces   []store.Space
-	counts   map[string]int // unread per mail section
-	chatN    int
-	waN      int  // WhatsApp chats with unread messages
-	waLinked bool // show the WhatsApp tab
-	sel      int
-	offset   int
-	focus    int // 0 list, 1 preview
-	scroll   int
-	selected map[string]bool
+	threads   []store.Thread
+	spaces    []store.Space
+	counts    map[string]int // unread per mail section
+	chatN     int
+	waN       int     // WhatsApp chats with unread messages
+	waLinked  bool    // WhatsApp is linked (else its tab is the link panel)
+	waLinking *waLink // linking WhatsApp, from its tab
+	sel       int
+	offset    int
+	focus     int // 0 list, 1 preview
+	scroll    int
+	selected  map[string]bool
 
 	// preview of the current item
 	curKey     string
@@ -165,7 +167,7 @@ func New(a *app.App, launch string) Model {
 	case "chat":
 		m.tab = tabChat
 	case "whatsapp":
-		m.tab, m.wa = tabChat, m.waLinked
+		m.tab, m.wa = tabChat, true
 	}
 	m.reload()
 	return m
@@ -253,7 +255,6 @@ func (m *Model) reload() {
 		}
 	}
 	_, m.waLinked = m.a.Store.WhatsApp()
-	m.wa = m.wa && m.waLinked
 	m.waN = 0
 	if m.waLinked {
 		wsps, _ := m.a.Store.Spaces([]string{store.WhatsAppAccount}, nil)
@@ -843,6 +844,10 @@ func (m *Model) act(okMsg string, f func(ctx context.Context) error) tea.Cmd {
 // --------------------------------------------------------------- update
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case waLinkMsg, waLinkTick:
+		return m.linkUpdate(msg)
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
@@ -1114,7 +1119,7 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 		}
 		return m, nil
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename, modePhone:
 		return m.inputKey(k)
 	case modeReview:
 		return m.reviewKey(s)
@@ -1219,6 +1224,12 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case modeLink:
 			m.openLink(text)
+		case modePhone:
+			if len([]rune(strings.Trim(text, "+ "))) < 7 {
+				m.say("type your number with its country code, like +919876543210")
+				return m, nil
+			}
+			return m, m.startLink(text)
 		}
 		return m, nil
 	case tea.KeyBackspace:
@@ -1294,6 +1305,16 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 	page := max(1, m.previewHeight()/2)
+	if m.tab == tabChat && m.wa && !m.waLinked {
+		if mm, cmd, ok := m.linkKey(s); ok {
+			return mm, cmd
+		}
+		switch s {
+		case "tab", "q", "ctrl+c", "?", "esc":
+		default:
+			return m, nil // nothing else to act on yet
+		}
+	}
 	if what := m.notOnWhatsApp(s); what != "" {
 		m.say(what + " isn't on WhatsApp in sandesh yet")
 		return m, nil
@@ -1389,7 +1410,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		switch {
 		case m.tab == tabMail:
 			m.tab, m.wa = tabChat, false
-		case !m.wa && m.waLinked:
+		case !m.wa:
 			m.wa = true
 		default:
 			m.tab, m.wa = tabMail, false

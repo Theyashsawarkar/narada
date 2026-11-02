@@ -63,7 +63,7 @@ var linkQuiet = 15 * time.Second
 // accepts, it stays online while the phone sends your recent chats
 // (progress hears how many so far) and returns once they stop coming,
 // or after at most two minutes; whoever goes online next gets the rest.
-func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code string), progress func(chats, messages int)) error {
+func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code string), progress func(chats, messages, percent int)) error {
 	unlock, ok := a.lock("whatsapp")
 	if !ok {
 		return errors.New("WhatsApp is in use by another sandesh (the daemon?); stop it, or unlink first")
@@ -81,12 +81,12 @@ func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code
 		return errors.New("already linked (sandesh whatsapp unlink first)")
 	}
 	var (
-		mu             sync.Mutex
-		chats, msgs    int
-		lastHistory    time.Time
-		recorded       bool
-		historyArrived = make(chan struct{}, 1)
-		wasPhone       = phone
+		mu               sync.Mutex
+		chats, msgs, pct int
+		lastHistory      time.Time
+		recorded         bool
+		historyArrived   = make(chan struct{}, 1)
+		wasPhone         = phone
 	)
 	record := func() {
 		if recorded || c.Me() == "" {
@@ -106,17 +106,18 @@ func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code
 		if e.History {
 			chats += len(e.Chats)
 			msgs += len(e.Messages)
+			pct = max(pct, e.Progress)
 			lastHistory = time.Now()
 			select {
 			case historyArrived <- struct{}{}:
 			default:
 			}
 		}
-		n, m := chats, msgs
+		n, m, p := chats, msgs, pct
 		mu.Unlock()
 		a.onWhatsApp(ctx, e)
 		if e.History && progress != nil {
-			progress(n, m)
+			progress(n, m, p)
 		}
 	}
 	if err := c.Link(ctx, phone, show, handler); err != nil {
@@ -130,7 +131,7 @@ func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code
 		return errors.New("linked, but WhatsApp didn't say who you are; try again")
 	}
 	if progress != nil {
-		progress(0, 0)
+		progress(0, 0, 0)
 	}
 	// the phone sends history in pieces, starting a few seconds in
 	deadline := time.After(2 * time.Minute)
@@ -153,7 +154,7 @@ func (a *App) LinkWhatsApp(ctx context.Context, phone string, show func(qr, code
 			return nil
 		case <-tick.C:
 			mu.Lock()
-			quiet := time.Since(lastHistory) > linkQuiet
+			quiet := time.Since(lastHistory) > linkQuiet || pct >= 100 && time.Since(lastHistory) > linkQuiet/5
 			mu.Unlock()
 			if quiet {
 				return nil

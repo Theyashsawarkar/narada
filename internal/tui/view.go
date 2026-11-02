@@ -90,7 +90,7 @@ func (m Model) previewHeight() int { return m.bodyHeight() - 2 }
 
 func (m Model) inputMode() bool {
 	switch m.mode {
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone:
 		return true
 	}
 	return false
@@ -125,7 +125,9 @@ func (m Model) View() string {
 	default:
 		right = m.previewBox(pw, bh)
 	}
-	if under == modeCompose && m.comp != nil {
+	if m.tab == tabChat && m.wa && !m.waLinked {
+		rows = append(rows, m.box(m.w, bh, "WhatsApp · not linked", m.linkPanel(m.w-2, bh-2), true, m.styles.c.Green))
+	} else if under == modeCompose && m.comp != nil {
 		rows = append(rows, m.composerPanes(bh))
 	} else {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, left, right))
@@ -184,9 +186,7 @@ func (m Model) tabsView() string {
 		{"Mail", "󰇮", s.c.Accent, m.counts[m.sections[0].Name], m.tab == tabMail},
 		{"Chat", "󰭹", s.c.Accent2, m.chatN, m.tab == tabChat && !m.wa},
 	}
-	if m.waLinked {
-		places = append(places, place{"WhatsApp", "󰖣", s.c.Green, m.waN, m.wa})
-	}
+	places = append(places, place{"WhatsApp", "󰖣", s.c.Green, m.waN, m.wa})
 	var parts []string
 	for _, p := range places {
 		label := p.name
@@ -223,6 +223,8 @@ func (m Model) tabsView() string {
 		if m.search != nil {
 			section(m.search.Name, true)
 		}
+	} else if m.wa && !m.waLinked {
+		parts = append(parts, s.muted.Render(" not linked yet: L links it"))
 	} else {
 		unread := m.chatN
 		if m.wa {
@@ -248,7 +250,7 @@ func (m Model) tabsView() string {
 	acct := "all accounts"
 	if m.wa {
 		wa, _ := m.a.Store.WhatsApp()
-		acct = wa.Email
+		acct = firstNonEmpty(wa.Email, "WhatsApp")
 	} else if f := m.accountFilter(); len(f) > 0 {
 		acct = f[0]
 	} else if len(m.accounts) == 1 {
@@ -436,7 +438,8 @@ func firstNonEmpty(xs ...string) string {
 func (m Model) inputView() string {
 	s := m.styles
 	prompt := map[mode]string{modeFilter: "/", modeAsk: "@claude ", modeSearch: "search gmail: ", modeSaveName: "section name (Enter: the search itself): ",
-		modeDraftHint: "draft a reply that says (Enter for Claude's pick): ", modeLink: fmt.Sprintf("open link (1-%d): ", len(m.links)), modeRename: m.renamePrompt()}[m.mode]
+		modeDraftHint: "draft a reply that says (Enter for Claude's pick): ", modeLink: fmt.Sprintf("open link (1-%d): ", len(m.links)), modeRename: m.renamePrompt(),
+		modePhone: "your WhatsApp number, with its country code: "}[m.mode]
 	cur := m.cursor()
 	under, rest := " ", ""
 	if cur < len(m.input) {
@@ -448,7 +451,7 @@ func (m Model) inputView() string {
 func (m Model) footerView() string {
 	s := m.styles
 	modeName := map[mode]string{modeNormal: "normal", modeFilter: "filter", modeAsk: "ask", modeSearch: "search", modeSaveName: "save",
-		modeDraftHint: "draft", modeReview: "review", modeApprove: "approve", modeHelp: "keys", modeChatMsg: "message", modeLink: "link", modeCompose: "compose", modeFind: "search", modeRename: "rename", modePick: "files", modeWhen: "later", modeConvo: "new chat", modeReact: "react"}[m.mode]
+		modeDraftHint: "draft", modePhone: "link", modeReview: "review", modeApprove: "approve", modeHelp: "keys", modeChatMsg: "message", modeLink: "link", modeCompose: "compose", modeFind: "search", modeRename: "rename", modePick: "files", modeWhen: "later", modeConvo: "new chat", modeReact: "react"}[m.mode]
 	var keys [][2]string
 	switch m.mode {
 	case modeReview:
@@ -474,7 +477,7 @@ func (m Model) footerView() string {
 		if m.comp != nil && m.comp.approveID > 0 {
 			keys = [][2]string{{"tab", "next"}, {"ctrl+s", "keep changes"}, {"ctrl+e", "editor"}, {"esc", "back"}}
 		}
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone:
 		keys = [][2]string{{"enter", "done"}, {"esc", "cancel"}, {"ctrl+u", "clear"}}
 	case modeChatMsg:
 		keys = [][2]string{{"enter", "send"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+t", "send later"}, {"↑↓", "lines"}, {"esc", "done"}}
@@ -517,7 +520,7 @@ func (m Model) nextTab() string {
 	switch {
 	case m.tab == tabMail:
 		return "chat"
-	case !m.wa && m.waLinked:
+	case !m.wa:
 		return "whatsapp"
 	}
 	return "mail"
