@@ -73,20 +73,44 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 		}
 		row := gutter + fit(l, w+2)
 		if sel {
-			bg, fgc := m.partColor(), s.c.Base
-			if m.focus != 0 {
-				bg, fgc = s.c.Surface, s.c.Text
-			}
-			st := lipgloss.NewStyle().Background(lipgloss.Color(bg)).Foreground(lipgloss.Color(fgc))
-			if i == 0 {
-				st = st.Bold(true)
-			}
-			plain := ansi.Strip(row)
-			row = st.Render(plain + strings.Repeat(" ", max(0, w+4-ansi.StringWidth(plain))))
+			// keep each part's own colours (name capsules, badges) on a
+			// tint of the tab's colour
+			on := lipgloss.NewStyle().Background(lipgloss.Color(m.selFill()))
+			seq := strings.TrimSuffix(on.Render(" "), " \x1b[0m")
+			row = seq + strings.ReplaceAll(row, "\x1b[0m", "\x1b[0m"+seq) + on.Render(strings.Repeat(" ", max(0, w+3-ansi.StringWidth(row)))) + "\x1b[0m" // no bleed into the pane
 		}
 		out = append(out, row)
 	}
+	if sel && s.nerd {
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selFill()))
+		rw := ansi.StringWidth(out[0])                                          // as wide as the filled rows
+		return append(out, c.Render("▝"+strings.Repeat("▀", max(0, rw-2))+"▘")) // its rounded bottom
+	}
 	return append(out, m.hairline(w))
+}
+
+// appendItem adds an item to the list (each line one space in); the
+// picked one's rounded top replaces the hairline above it.
+func (m Model) appendItem(out, lines []string, w int, border string, sel, dot bool) []string {
+	start := len(out)
+	for _, l := range m.listItem(lines, w, border, sel, dot) {
+		out = append(out, " "+l)
+	}
+	if sel && m.panelList() && m.styles.nerd && start > 0 && out[start-1] == " "+m.hairline(w) {
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selFill()))
+		rw := ansi.StringWidth(out[start]) - 1
+		out[start-1] = " " + c.Render("▗"+strings.Repeat("▄", max(0, rw-2))+"▖")
+	}
+	return out
+}
+
+// selFill is the picked list row's background: a dark tint of the tab's
+// colour while the list has the focus, the surface colour when not.
+func (m Model) selFill() string {
+	if m.focus != 0 {
+		return m.styles.c.Surface
+	}
+	return blend(m.partColor(), m.styles.c.Base, 0.28)
 }
 
 func fg(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(c)) }
@@ -256,7 +280,7 @@ func (m Model) tickText(level int) string {
 // with dark text, theirs on the surface colour; the time (and your ticks)
 // sit at the bottom right inside it. raw lines (pictures) keep their own
 // colours. read colours your ticks blue, as on the phone.
-func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel bool, stamp string, read bool) []string {
+func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel bool, stamp string, read bool) (out []string) {
 	s := m.styles
 	bg, fgc := s.c.Border, s.c.Text // the surface colour is too close to the background
 	if mine {
@@ -309,10 +333,10 @@ func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel 
 		ticks := strings.TrimPrefix(stamp, t)
 		return dim.Render(strings.Repeat(" ", max(0, left))+t) + tickStyle.Render(ticks)
 	}
-	var out []string
 	for i, l := range lines {
 		out = append(out, cell(l, i))
 	}
+	defer func() { out = m.rounded(out, bg, iw+2) }()
 	// the time on the last line if it fits there, else on its own line
 	sw := ansi.StringWidth(stamp)
 	last := len(lines) - 1
@@ -328,6 +352,33 @@ func (m Model) fillBubble(lines []string, raw map[int]bool, maxW int, mine, sel 
 		out = append(out, on.Render(" ")+stampCell(iw-sw)+on.Render(" "))
 	}
 	return out
+}
+
+// rounded gives a filled block of width w round ends: a pill (Nerd Font
+// caps) when it's one line, else half-cell rounded corners above and below.
+func (m Model) rounded(block []string, bg string, w int) []string {
+	if !m.styles.nerd || len(block) == 0 {
+		return block
+	}
+	c := lipgloss.NewStyle().Foreground(lipgloss.Color(bg))
+	if len(block) == 1 {
+		return []string{c.Render("\ue0b6") + block[0] + c.Render("\ue0b4")}
+	}
+	top := c.Render("▗" + strings.Repeat("▄", max(0, w-2)) + "▖")
+	bottom := c.Render("▝" + strings.Repeat("▀", max(0, w-2)) + "▘")
+	return append(append([]string{top}, block...), bottom)
+}
+
+// blend mixes two "#rrggbb" colours, t of the first.
+func blend(a, b string, t float64) string {
+	var ar, ag, ab, br, bg, bb int
+	if len(a) != 7 || len(b) != 7 {
+		return a
+	}
+	fmt.Sscanf(a[1:], "%02x%02x%02x", &ar, &ag, &ab)
+	fmt.Sscanf(b[1:], "%02x%02x%02x", &br, &bg, &bb)
+	mix := func(x, y int) int { return int(float64(x)*t + float64(y)*(1-t)) }
+	return fmt.Sprintf("#%02x%02x%02x", mix(ar, br), mix(ag, bg), mix(ab, bb))
 }
 
 // ticks is WhatsApp's mark for how far your message got: ✓ sent,
@@ -428,7 +479,7 @@ func (m *Model) listView(w, h int) string {
 	for i := m.offset; i < min(m.count(), m.offset+visible); i++ {
 		if g := group(i); g != "" && (i == m.offset || g != group(i-1)) {
 			label := " " + s.muted.Bold(true).Render(strings.ToUpper(g))
-			if n := len(out); n > 0 && (out[n-1] == "" || out[n-1] == m.hairline(cw)) {
+			if n := len(out); n > 0 && (out[n-1] == "" || out[n-1] == " "+m.hairline(cw)) {
 				out[n-1] = label // in the gap (or on the hairline) above it
 			} else {
 				out = append(out, label)
@@ -472,9 +523,7 @@ func (m *Model) listView(w, h int) string {
 				}
 				lines = []string{row(s.text.Render(to), fg(col).Render(status), cw), s.text.Render(t.Subject),
 					ansi.Truncate(fg(col).Render(hint)+s.muted.Render("  "+oneLine(it.Out.Body)), cw, "…")}
-				for _, l := range m.listItem(lines, cw, border, sel, false) {
-					out = append(out, " "+l)
-				}
+				out = m.appendItem(out, lines, cw, border, sel, false)
 				continue
 			}
 			sentSt, isSent := m.sentStat[t.Account+"/"+t.ID]
@@ -514,9 +563,7 @@ func (m *Model) listView(w, h int) string {
 				}
 				lines = []string{row(m.avatar(sp.DisplayName)+" "+s.text.Render("→ "+sp.DisplayName), fg(col).Render(status), cw),
 					m.indent() + ansi.Truncate(s.muted.Render(sp.LastText), cw-lipgloss.Width(m.indent()), "…")}
-				for _, l := range m.listItem(lines, cw, border, sel, false) {
-					out = append(out, " "+l)
-				}
+				out = m.appendItem(out, lines, cw, border, sel, false)
 				continue
 			}
 			dot = sp.Unread > 0
@@ -536,15 +583,16 @@ func (m *Model) listView(w, h int) string {
 			if sp.Pinned {
 				title += s.accent.Render(" 📌")
 			}
+			if m.selected[sp.Account+"/"+sp.Name] {
+				title = s.accent2.Render("✓ ") + title
+			}
 			last := oneLine(sp.LastText)
 			if sp.LastSender != "" {
 				last = strings.SplitN(sp.LastSender, " ", 2)[0] + ": " + last
 			}
 			lines = []string{row(m.avatar(name)+" "+mark+title, s.muted.Render(cli.When(sp.LastActive)), cw), m.indent() + s.muted.Render(last)}
 		}
-		for _, l := range m.listItem(lines, cw, border, sel, dot) {
-			out = append(out, " "+l)
-		}
+		out = m.appendItem(out, lines, cw, border, sel, dot)
 	}
 	// the end of a mail list: older mail comes from Gmail on demand
 	if m.tab == tabMail && m.offset+visible >= m.count() && !m.currentSection().Today && m.currentSection().Label != "SCHEDULED" {

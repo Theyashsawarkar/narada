@@ -220,6 +220,46 @@ func (m *Model) spaceAccounts() []string {
 }
 
 // chatKind: an outbox kind that is a chat message (Google Chat or WhatsApp).
+// markSpaces marks chats read (or unread) in one go.
+func (m *Model) markSpaces(sps []store.Space, read bool, what string) tea.Cmd {
+	var todo []store.Space
+	for _, sp := range sps {
+		if !strings.HasPrefix(sp.Name, outboxPrefix) && (!read || sp.Unread > 0) {
+			todo = append(todo, sp)
+		}
+	}
+	if len(todo) == 0 {
+		m.say("nothing unread there")
+		return nil
+	}
+	a := m.a
+	return m.act(what+" marked "+map[bool]string{true: "read", false: "unread"}[read], func(ctx context.Context) error {
+		for _, sp := range todo {
+			var err error
+			if read {
+				err = a.MarkSpaceRead(ctx, sp.Account, sp.Name)
+			} else {
+				err = a.MarkSpaceUnread(ctx, sp.Account, sp.Name)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// place is where you are: 0 Mail, 1 Chat, 2 WhatsApp.
+func (m Model) place() int {
+	switch {
+	case m.tab == tabMail:
+		return 0
+	case m.wa:
+		return 2
+	}
+	return 1
+}
+
 func chatKind(kind string) bool { return kind == "chat" || kind == "whatsapp" }
 
 func (m *Model) currentSection() config.Section {
@@ -1437,15 +1477,24 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		m.sel, m.offset, m.filter = 0, 0, ""
 		m.selected = map[string]bool{}
 		m.reload()
-	case "tab":
-		// Mail → Chat → WhatsApp (once linked) → Mail
-		switch {
-		case m.tab == tabMail:
-			m.tab, m.wa = tabChat, false
-		case !m.wa:
-			m.wa = true
+	case "tab", "shift+tab", "alt+m", "alt+c", "alt+w":
+		// Tab: Mail → Chat → WhatsApp → Mail; Shift+Tab the other way;
+		// Alt+m / Alt+c / Alt+w straight to one (Alt+1/2/3 are tmux's windows)
+		at := m.place()
+		switch s {
+		case "tab":
+			at = (at + 1) % 3
+		case "shift+tab":
+			at = (at + 2) % 3
 		default:
-			m.tab, m.wa = tabMail, false
+			at = strings.Index("mcw", s[len(s)-1:])
+		}
+		if at == m.place() {
+			return m, nil
+		}
+		m.tab, m.wa = tabChat, at == 2
+		if at == 0 {
+			m.tab = tabMail
 		}
 		m.sec, m.sel, m.offset, m.filter, m.search, m.ai = 0, 0, 0, "", nil, ""
 		m.selected = map[string]bool{}
@@ -1555,8 +1604,38 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		}
 		m.say("syncing…")
 		return m, m.syncCmd()
+	case "ctrl+x":
+		// pick everything in the list, or nothing when it all is
+		all := m.count() > 0
+		for i := range m.count() {
+			if k := m.keyAt(i); k != "" && !m.selected[k] {
+				all = false
+			}
+		}
+		m.selected = map[string]bool{}
+		if !all {
+			for i := range m.count() {
+				if k := m.keyAt(i); k != "" && !strings.Contains(k, outboxPrefix) {
+					m.selected[k] = true
+				}
+			}
+			m.say(fmt.Sprintf("%d picked · m marks them read, M unread · ctrl+x again clears", len(m.selected)))
+		}
+		return m, nil
+	case "alt+r":
+		// everything in this list, read
+		if m.tab == tabMail {
+			m.selected = map[string]bool{}
+			for i := range m.count() {
+				if k := m.keyAt(i); k != "" {
+					m.selected[k] = true
+				}
+			}
+			return m, m.modify("m")
+		}
+		return m, m.markSpaces(m.spaces, true, "everything here")
 	case "x":
-		if key := m.keyAt(m.sel); key != "" && m.tab == tabMail {
+		if key := m.keyAt(m.sel); key != "" && !strings.Contains(key, outboxPrefix) {
 			if m.selected[key] {
 				delete(m.selected, key)
 			} else {
@@ -1593,6 +1672,16 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 	case "m", "M":
 		read := s == "m"
 		if m.tab == tabChat {
+			if len(m.selected) > 0 {
+				var picked []store.Space
+				for _, sp := range m.spaces {
+					if m.selected[sp.Account+"/"+sp.Name] {
+						picked = append(picked, sp)
+					}
+				}
+				m.selected = map[string]bool{}
+				return m, m.markSpaces(picked, read, fmt.Sprintf("%d chats", len(picked)))
+			}
 			if sp, ok := m.curSpace(); ok {
 				if read {
 					return m, m.act("marked read", func(ctx context.Context) error { return m.a.MarkSpaceRead(ctx, sp.Account, sp.Name) })
@@ -1975,8 +2064,6 @@ func (m Model) notOnWhatsApp(s string) string {
 	switch s {
 	case "N":
 		return "starting a chat here (use sandesh whatsapp send <number>)"
-	case "U", "v", "V":
-		return "files"
 	}
 	return ""
 }

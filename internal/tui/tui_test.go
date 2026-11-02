@@ -590,3 +590,34 @@ func TestJumpToOriginal(t *testing.T) {
 		t.Fatalf("back twice: %q", m.chatMsgs[m.chatSel].Text)
 	}
 }
+
+func TestPickAndMarkAllRead(t *testing.T) {
+	m := model(t)
+	m = press(m, "tab") // chat
+	unread := func() int {
+		n := 0
+		for _, sp := range m.spaces {
+			if sp.Unread > 0 {
+				n++
+			}
+		}
+		return n
+	}
+	if unread() == 0 {
+		t.Fatal("the demo has unread chats")
+	}
+	m = press(m, "ctrl+x")
+	if len(m.selected) != len(m.spaces) || !strings.Contains(m.View(), "picked") {
+		t.Fatalf("ctrl+x picks every chat: %d of %d", len(m.selected), len(m.spaces))
+	}
+	m = press(m, "ctrl+x")
+	if len(m.selected) != 0 {
+		t.Fatal("ctrl+x again clears")
+	}
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
+	m = runCmds(nm.(Model), cmd)
+	m.reload()
+	if n := unread(); n != 0 {
+		t.Fatalf("alt+r leaves %d chats unread", n)
+	}
+}

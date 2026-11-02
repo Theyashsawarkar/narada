@@ -329,6 +329,9 @@ func (m Model) listTitle() string {
 	if m.filter != "" {
 		t += " · /" + m.filter
 	}
+	if len(m.selected) > 0 {
+		t += fmt.Sprintf(" · %d picked", len(m.selected))
+	}
 	return t
 }
 
@@ -498,7 +501,7 @@ func (m Model) footerView() string {
 		} else if m.pickingMsg() {
 			keys = [][2]string{{"j/k", "pick"}, {"⏎", "to the original"}, {"⌫", "back"}, {"r", "reply"}, {"e", "react"}, {"E", "edit"}, {"d", "delete"}, {"y", "copy"}, {"[ ]", "chats"}, {"1", "list"}}
 		} else {
-			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"i", "type"}, {"c", "editor"}, {"r", "reply"}, {"N", "new chat"},
+			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"i", "type"}, {"U", "send a file"}, {"r", "reply"}, {"N", "new chat"},
 				{"m/M", "read/unread"}, {"@", "ask"}, {"?", "keys"}}
 		}
 	}

@@ -5,7 +5,8 @@
 # keybind: Tmux/sandesh | + / - | Set how many older mails j at the end loads (10, 25, 50, 100)
 # keybind: Tmux/sandesh | g / G | Jump to the first / last
 # keybind: Tmux/sandesh | h / l | Switch to the previous / next section
-# keybind: Tmux/sandesh | Tab | Switch between mail, chat and WhatsApp
+# keybind: Tmux/sandesh | Tab / Shift+Tab | Switch to the next / previous of mail, chat and WhatsApp
+# keybind: Tmux/sandesh | Alt+m / Alt+c / Alt+w | Switch straight to mail / chat / WhatsApp
 # keybind: Tmux/sandesh | 1 / 2 | Focus the list / the preview
 # keybind: Tmux/sandesh | Enter | Open the thread or space (marks it read)
 # keybind: Tmux/sandesh | J / K | Scroll the preview down / up
@@ -23,15 +24,17 @@
 # keybind: Tmux/sandesh | f | Send the thread on to someone else (forward)
 # keybind: Tmux/sandesh | e | Move the thread out of the inbox (archive; or every selected one)
 # keybind: Tmux/sandesh | d | Move the thread to the trash (or every selected one)
-# keybind: Tmux/sandesh | m | Set the thread as read (mark read; or every selected one)
-# keybind: Tmux/sandesh | M | Set the thread as unread (mark unread; or every selected one)
+# keybind: Tmux/sandesh | m | Set the thread or chat as read (mark read; or every selected one)
+# keybind: Tmux/sandesh | M | Set the thread or chat as unread (mark unread; or every selected one)
 # keybind: Tmux/sandesh | * | Toggle the star on the thread
 # keybind: Tmux/sandesh | L | Add or remove a label (fzf picker)
-# keybind: Tmux/sandesh | x | Select the thread for e / d / m / M
+# keybind: Tmux/sandesh | x | Select the thread or chat for e / d / m / M (pick several)
+# keybind: Tmux/sandesh | Ctrl+x | Select every thread or chat in the list (again clears)
+# keybind: Tmux/sandesh | Alt+r | Set everything in this list as read (mark all read)
 # keybind: Tmux/sandesh | i | Start typing a chat message right in the preview (Ctrl+t sends it later)
 # keybind: Tmux/sandesh | Enter / 2 (chat) | Pick messages in the chat with j/k (k past the first loads earlier ones)
 # keybind: Tmux/sandesh | Enter (picking) | Jump to the message a reply quotes (again goes further back); on a photo, view it full size
-# keybind: Tmux/sandesh | Space (picking) | View the picked photo or GIF full size (h/l previous / next, v opens it, Esc back)
+# keybind: Tmux/sandesh | Space (picking) | Open the picked photo or GIF full size (h/l previous / next, v opens it, Esc back)
 # keybind: Tmux/sandesh | Backspace (picking) | Jump back to the reply you came from
 # keybind: Tmux/sandesh | e (picking) | Toggle a reaction on the picked message (yours are marked ✓; picking one removes it)
 # keybind: Tmux/sandesh | E (picking) | Edit your picked message in the message box
@@ -53,7 +56,7 @@
 # keybind: Tmux/sandesh | N | Start a conversation (opens the one you have with them, earlier messages and all)
 # keybind: Tmux/sandesh | v | Open the attachments in their apps (kept in ~/Downloads/sandesh; picker when several)
 # keybind: Tmux/sandesh | V | Save the attachments to ~/Downloads/sandesh without opening them
-# keybind: Tmux/sandesh | U | Send a file into this chat space (upload; file picker with preview)
+# keybind: Tmux/sandesh | U | Send a file into this chat (Google Chat or WhatsApp; file picker with preview)
 # keybind: Tmux/sandesh | z | Cancel the last change, or a send in its undo window (undo)
 # keybind: Tmux/sandesh | A | Show the sends an agent is waiting on you to approve
 # keybind: Tmux/sandesh | R | Reload mail and chat from Google now (sync)

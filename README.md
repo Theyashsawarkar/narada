@@ -221,7 +221,8 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `+` / `-` | Set how many older mails j at the end loads (10, 25, 50, 100) |
 | `g` / `G` | Jump to the first / last |
 | `h` / `l` | Switch to the previous / next section |
-| `Tab` | Switch between mail, chat and WhatsApp |
+| `Tab / Shift+Tab` | Switch to the next / previous of mail, chat and WhatsApp |
+| `Alt+m / Alt+c / Alt+w` | Switch straight to mail / chat / WhatsApp |
 | `1` / `2` | Focus the list / the preview |
 | `Enter` | Open the thread or space (marks it read) |
 | `J` / `K` | Scroll the preview down / up |
@@ -244,15 +245,17 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `f` | Send the thread on to someone else (forward) |
 | `e` | Move the thread out of the inbox (archive; or every selected one) |
 | `d` | Move the thread to the trash (or every selected one) |
-| `m` | Set the thread as read (mark read; or every selected one) |
-| `M` | Set the thread as unread (mark unread; or every selected one) |
+| `m` | Set the thread or chat as read (mark read; or every selected one) |
+| `M` | Set the thread or chat as unread (mark unread; or every selected one) |
 | `*` | Toggle the star on the thread |
 | `L` | Add or remove a label (fzf picker) |
-| `x` | Select the thread for e / d / m / M |
+| `x` | Select the thread or chat for e / d / m / M (pick several) |
+| `Ctrl+x` | Select every thread or chat in the list (again clears) |
+| `Alt+r` | Set everything in this list as read (mark all read) |
 | `i` | Start typing a chat message right in the preview (Ctrl+t sends it later) |
 | `Enter` / `2` (chat) | Pick messages in the chat with j/k (k past the first loads earlier ones) |
 | `Enter` (picking) | Jump to the message a reply quotes (again goes further back); on a photo, view it full size |
-| `Space` (picking) | View the picked photo or GIF full size (h/l previous / next, v opens it, Esc back) |
+| `Space` (picking) | Open the picked photo or GIF full size (h/l previous / next, v opens it, Esc back) |
 | `Backspace` (picking) | Jump back to the reply you came from |
 | `e` (picking) | Toggle a reaction on the picked message (yours are marked ✓; picking one removes it) |
 | `E` (picking) | Edit your picked message in the message box |
@@ -274,7 +277,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `N` | Start a conversation (opens the one you have with them, earlier messages and all) |
 | `v` | Open the attachments in their apps (kept in ~/Downloads/sandesh; picker when several) |
 | `V` | Save the attachments to ~/Downloads/sandesh without opening them |
-| `U` | Send a file into this chat space (upload; file picker with preview) |
+| `U` | Send a file into this chat (Google Chat or WhatsApp; file picker with preview) |
 | `z` | Cancel the last change, or a send in its undo window (undo) |
 | `A` | Show the sends an agent is waiting on you to approve |
 | `R` | Reload mail and chat from Google now (sync) |

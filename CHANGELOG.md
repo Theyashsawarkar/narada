@@ -2,6 +2,20 @@
 
 Newest first.
 
+## v0.4.1 -- 2026-11-02
+
+- **Fixed: sending files on WhatsApp**: `U` said "files isn't on WhatsApp
+  yet" (a leftover guard); it sends now, and `v` / `V` open and save
+  WhatsApp files. The key bar shows `U send a file`.
+- **Rounded**: one-line messages are pills, longer ones rounded blocks; the
+  picked list row is rounded too, and keeps its colours (name capsules
+  showed as dark blobs on it).
+- **Switching places**: `Shift+Tab` goes back (Mail ← Chat ← WhatsApp),
+  `Alt+m` / `Alt+c` / `Alt+w` go straight to one.
+- **Picking several, marking all read**: `x` picks chats too, `Ctrl+x`
+  picks the whole list (again clears), `m` / `M` act on what's picked, and
+  `Alt+r` marks everything in the list read.
+
 ## v0.4.0 -- 2026-11-02
 
 - **Filled bubbles**: chat and WhatsApp messages are filled blocks, yours
