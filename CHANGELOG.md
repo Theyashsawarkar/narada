@@ -2,6 +2,11 @@
 
 Newest first.
 
+## v0.6.2 -- 2026-11-03
+
+- The approval screen's labels are only what's at stake: why narada asks (your
+  send_policy) moved to the details. Labels and answers sit evenly apart.
+
 ## v0.6.1 -- 2026-11-03
 
 - **Files on WhatsApp from agents and the command line.** `whatsapp_send`

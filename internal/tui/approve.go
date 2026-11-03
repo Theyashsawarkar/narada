@@ -307,16 +307,16 @@ func (s styles) chip(text, bg string) string {
 	return s.round(st.Padding(0, 1), text)
 }
 
-// flow lays chips out in rows of at most w columns.
+// flow lays chips out in rows of at most w columns, two spaces apart.
 func flow(chips []string, w int) []string {
 	var rows []string
 	cur := ""
 	for _, c := range chips {
-		if cur != "" && lipgloss.Width(cur)+1+lipgloss.Width(c) > w {
+		if cur != "" && lipgloss.Width(cur)+3+lipgloss.Width(c) > w {
 			rows, cur = append(rows, cur), ""
 		}
 		if cur != "" {
-			cur += " "
+			cur += "   "
 		}
 		cur += c
 	}
@@ -459,9 +459,6 @@ func (m approver) View() string {
 	if out.ScheduledFor > 0 {
 		chips = append(chips, s.chip("goes "+time.UnixMilli(out.ScheduledFor).Format("Mon 02 Jan 15:04"), ""))
 	}
-	if it.Reason != "" {
-		chips = append(chips, s.chip(it.Reason, ""))
-	}
 	if rows := flow(chips, cw); len(rows) > 0 {
 		header = append(header, "")
 		header = append(header, rows...)
@@ -545,6 +542,12 @@ func (m approver) View() string {
 			}
 		}
 		field("Edited", s.green.Render(fmt.Sprintf("+%d", add))+" "+s.red.Render(fmt.Sprintf("-%d", del)))
+	}
+	if it.Reason != "" {
+		facts = append(facts, "")
+		for _, l := range wrapped(s.muted.Render("Asks because "+it.Reason), factW) {
+			facts = append(facts, l)
+		}
 	}
 	if m.i+1 < len(m.items) {
 		nx := m.items[m.i+1]

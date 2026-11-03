@@ -37,7 +37,7 @@ func TestApproveCard(t *testing.T) {
 	m, it, ap := queued(t, "mail", mailOut(), 150, 40)
 	v := ap.View()
 	for _, want := range []string{"narada · approve a send", "Mail", "1 of 1", "Claude Code wants to email priya.k@example.com",
-		"You asked: “tell Priya Thursday is fine”", "the message, exactly", "Release cut", "I'll cut the branch", "Send", "Decline", it.Reason} {
+		"You asked: “tell Priya Thursday is fine”", "the message, exactly", "Release cut", "I'll cut the branch", "Send", "Decline", "Asks because"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("missing %q:\n%s", want, v)
 		}
