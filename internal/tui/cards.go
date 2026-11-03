@@ -277,7 +277,7 @@ func intersperse(xs []string, sep string) []string {
 
 // tickText is ticks as plain text, for inside a filled bubble.
 func (m Model) tickText(level int) string {
-	return map[int]string{1: " ✓", 2: " ✓✓", 3: " ✓✓"}[level]
+	return map[int]string{store.TickFailed: " ✗ not sent", store.TickPending: " ◷", 1: " ✓", 2: " ✓✓", 3: " ✓✓"}[level]
 }
 
 // chatBubble draws a message in a rounded outline: a soft border for

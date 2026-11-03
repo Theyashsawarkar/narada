@@ -2,8 +2,15 @@
 
 Newest first.
 
-## Unreleased
+## v0.8.0 -- 2026-11-03
 
+- **Your chat message shows the moment you send it**, in Google Chat and WhatsApp:
+  `◷` while it's on its way, `✗ not sent` if it fails. Deleting one that hasn't
+  gone yet stops it.
+- **WhatsApp read receipts always arrive.** Only the process holding the connection
+  can send them, so marking a chat read from the screen or a command could lose
+  them. They now wait in a queue for that process (a week at most) and retry if
+  they fail. Answering a chat marks it read, as on the phone.
 - A logo and a shloka at the top of the README and the website: every Vayu tool has them now.
 
 ## v0.7.0 -- 2026-11-03

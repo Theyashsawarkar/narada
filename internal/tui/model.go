@@ -852,6 +852,7 @@ func (m *Model) recolour() {
 // by default), jumping to the end of the chat either way.
 func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 	if chatKind(it.Kind) {
+		m.reload() // your message shows now, before it has gone out
 		m.scroll = 1 << 30
 		m.fixView()
 	}
@@ -871,7 +872,9 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 		m.say(fmt.Sprintf("sending in %ds · z cancels", int(w.Seconds())))
 		return nil
 	}
-	m.say("sending…")
+	if !chatKind(it.Kind) {
+		m.say("sending…")
+	}
 	a := m.a
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -880,8 +883,13 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 			if d.ID == it.ID && d.Status == store.StatusFailed {
 				return doneMsg{err: fmt.Errorf("not sent: %s", d.Error)}
 			}
+			if d.ID == it.ID && !chatKind(it.Kind) {
+				return doneMsg{msg: "sent", sync: true}
+			}
 		}
-		return doneMsg{msg: "sent", sync: true}
+		// another process (the daemon) sends it; a chat message's mark
+		// shows how far it got, so nothing to announce
+		return doneMsg{sync: true}
 	}
 }
 
@@ -1018,10 +1026,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fixView() // the countdown under the conversation
 		}
 		// pick up the daemon's syncs and the agents' approvals
-		if time.Now().Unix()%3 == 0 && m.mode != modeReview && m.mode != modeCompose {
+		if m.mode != modeReview && m.mode != modeCompose {
 			// only when another process (the daemon, an agent) wrote
 			// something; Sent also counts down its outbox rows
-			if st := m.a.Store.Stamp(); st != m.dbStamp || len(m.outboxRows) > 0 {
+			if st := m.a.Store.Stamp(); st != m.dbStamp || len(m.outboxRows) > 0 && time.Now().Unix()%3 == 0 {
 				m.dbStamp = st
 				m.reload()
 			}

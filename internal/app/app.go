@@ -20,7 +20,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
-const Version = "0.7.0"
+const Version = "0.8.0"
 
 type App struct {
 	Paths  config.Paths
@@ -41,6 +41,7 @@ type App struct {
 	waMu         sync.Mutex
 	wa           WhatsAppConn  // set while this process holds the connection
 	waUnlock     func()        // releases the whatsapp lock
+	waReadErr    atomic.Value  // the last read-receipt failure logged
 	waReady      chan struct{} // closed once it is connected
 	waReadyOnce  *sync.Once
 	waUnreadMu   sync.Mutex

@@ -179,11 +179,19 @@ func TestWhatsAppOneConnection(t *testing.T) {
 	if it, _ = a.Store.OutboxItem(it.ID); it.Status != store.StatusSent {
 		t.Fatalf("online process: %s %s", it.Status, it.Error)
 	}
-	// reading a chat sends receipts
-	if err := a.MarkSpaceRead(ctx, store.WhatsAppAccount, "120363000000000001@g.us"); err != nil {
+	// answering a chat read it, as on the phone
+	if len(w.Read) != 1 || w.Read[0] != "919800000001@s.whatsapp.net" {
+		t.Fatalf("receipts after answering: %v", w.Read)
+	}
+	// reading a chat in the process without the connection reaches WhatsApp
+	if err := b.MarkSpaceRead(ctx, store.WhatsAppAccount, "120363000000000001@g.us"); err != nil {
 		t.Fatal(err)
 	}
 	if len(w.Read) != 1 {
+		t.Fatalf("offline process sent receipts: %v", w.Read)
+	}
+	a.DeliverDue(ctx)
+	if len(w.Read) != 2 || w.Read[1] != "120363000000000001@g.us" {
 		t.Fatalf("receipts: %v", w.Read)
 	}
 }
@@ -355,5 +363,194 @@ func TestWhatsAppTicks(t *testing.T) {
 	h5, _ := a.Store.ChatMessage(store.WhatsAppAccount, sp.Name+"/H5")
 	if h5.Ticks != whatsapp.TickDelivered {
 		t.Fatalf("history ticks: %d", h5.Ticks)
+	}
+}
+
+// The daemon usually holds the connection: marking read from the screen
+// (which doesn't) must still reach WhatsApp, through whoever holds it.
+func TestWhatsAppMarkReadWithoutTheConnection(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if ok, _ := a.StartWhatsApp(ctx); !ok {
+		t.Fatal("not online")
+	}
+	sps, _ := a.Store.Spaces([]string{store.WhatsAppAccount}, nil)
+	var amma store.Space
+	for _, sp := range sps {
+		if sp.DisplayName == "Amma" {
+			amma = sp
+		}
+	}
+	a.StopWhatsApp() // another process holds it now
+	if err := a.MarkSpaceRead(ctx, amma.Account, amma.Name); err != nil {
+		t.Fatal(err)
+	}
+	if sp, _ := a.Store.Space(amma.Account, amma.Name); sp.Unread != 0 {
+		t.Fatalf("still unread here: %d", sp.Unread)
+	}
+	a.DeliverDue(ctx)
+	if len(w.Read) != 0 {
+		t.Fatalf("receipts sent with no connection: %v", w.Read)
+	}
+	// whoever holds the connection sends them, once
+	if ok, _ := a.StartWhatsApp(ctx); !ok {
+		t.Fatal("not online")
+	}
+	a.DeliverDue(ctx)
+	a.DeliverDue(ctx)
+	if len(w.Read) != 1 || w.Read[0] != amma.Name {
+		t.Fatalf("receipts: %v", w.Read)
+	}
+}
+
+// A failed receipt stays queued and goes out on a later try.
+func TestWhatsAppMarkReadRetries(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if ok, _ := a.StartWhatsApp(ctx); !ok {
+		t.Fatal("not online")
+	}
+	sps, _ := a.Store.Spaces([]string{store.WhatsAppAccount}, nil)
+	var unread store.Space
+	for _, sp := range sps {
+		if sp.Unread > 0 {
+			unread = sp
+		}
+	}
+	w.ReadErr = errors.New("connection lost")
+	if err := a.MarkSpaceRead(ctx, unread.Account, unread.Name); err != nil {
+		t.Fatal("marked read here, so no error to show:", err)
+	}
+	a.DeliverDue(ctx)
+	w.ReadErr = nil
+	a.DeliverDue(ctx)
+	if len(w.Read) != 1 {
+		t.Fatalf("receipts: %v", w.Read)
+	}
+}
+
+func pendingIn(t *testing.T, a *App, space string) []store.ChatMessage {
+	t.Helper()
+	msgs, err := a.Store.ChatMessages(store.WhatsAppAccount, space, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []store.ChatMessage
+	for _, m := range msgs {
+		if store.IsPending(m.Name) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// What you send shows in the chat at once, before it has gone out.
+func TestWhatsAppOptimisticSend(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const chat = "919800000042@s.whatsapp.net"
+	out := store.Outgoing{Space: chat, SpaceName: "Someone", Body: "On my way"}
+	it, err := a.Queue(store.WhatsAppAccount, "whatsapp", out, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pendingIn(t, a, chat)
+	if len(got) != 1 || got[0].Text != "On my way" || !got[0].Mine || got[0].Ticks != store.TickPending {
+		t.Fatalf("not shown at once: %+v", got)
+	}
+	if sp, err := a.Store.Space(store.WhatsAppAccount, chat); err != nil || sp.LastActive == 0 {
+		t.Fatalf("the chat isn't listed: %+v %v", sp, err)
+	}
+
+	// offline it stays pending; delivered, the real message replaces it
+	a.DeliverDue(ctx)
+	if len(pendingIn(t, a, chat)) != 1 {
+		t.Fatal("pending message gone before it was sent")
+	}
+	if ok, _ := a.StartWhatsApp(ctx); !ok {
+		t.Fatal("not online")
+	}
+	a.DeliverDue(ctx)
+	if got := pendingIn(t, a, chat); len(got) != 0 {
+		t.Fatalf("still pending: %+v", got)
+	}
+	msgs, _ := a.Store.ChatMessages(store.WhatsAppAccount, chat, 0)
+	if len(msgs) != 1 || msgs[0].Text != "On my way" || msgs[0].Ticks != whatsapp.TickSent {
+		t.Fatalf("after sending: %+v", msgs)
+	}
+	if sent, _ := a.Store.OutboxItem(it.ID); sent.Status != store.StatusSent {
+		t.Fatalf("status: %s", sent.Status)
+	}
+	if len(w.Sent) != 1 {
+		t.Fatalf("sent: %+v", w.Sent)
+	}
+}
+
+// A failed send says so in the chat, a retry clears it, a cancel removes it.
+func TestWhatsAppOptimisticFailureAndCancel(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if ok, _ := a.StartWhatsApp(ctx); !ok {
+		t.Fatal("not online")
+	}
+	const chat = "919800000042@s.whatsapp.net"
+	out := store.Outgoing{Space: chat, SpaceName: "Someone", Body: "Hello"}
+	w.SendErr = errors.New("no network")
+	it, err := a.Queue(store.WhatsAppAccount, "whatsapp", out, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.DeliverDue(ctx)
+	if got := pendingIn(t, a, chat); len(got) != 1 || got[0].Ticks != store.TickFailed {
+		t.Fatalf("failure not shown: %+v", got)
+	}
+	w.SendErr = nil
+	if err := a.Retry(it.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := pendingIn(t, a, chat); len(got) != 1 || got[0].Ticks != store.TickPending {
+		t.Fatalf("retry not shown: %+v", got)
+	}
+	a.DeliverDue(ctx)
+	if got := pendingIn(t, a, chat); len(got) != 0 {
+		t.Fatalf("still pending after the retry: %+v", got)
+	}
+
+	// cancelled in the undo window: nothing left behind
+	a.Config.ChatUndoSeconds = 60
+	it, err = a.Queue(store.WhatsAppAccount, "whatsapp", out, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pendingIn(t, a, chat)) != 1 {
+		t.Fatal("not shown during the undo window")
+	}
+	if err := a.Cancel(it.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := pendingIn(t, a, chat); len(got) != 0 {
+		t.Fatalf("cancelled but shown: %+v", got)
+	}
+}
+
+// Nobody looked at an agent's send yet, and a scheduled one isn't sent
+// yet: neither shows as if on its way.
+func TestWhatsAppNotOptimistic(t *testing.T) {
+	a, _ := setupWhatsApp(t)
+	const chat = "919800000042@s.whatsapp.net"
+	out := store.Outgoing{Space: chat, SpaceName: "Someone", Body: "Hello", Agent: "Claude"}
+	if _, err := a.Queue(store.WhatsAppAccount, "whatsapp", out, OriginAgent); err != nil {
+		t.Fatal(err)
+	}
+	later := store.Outgoing{Space: chat, SpaceName: "Someone", Body: "Later", ScheduledFor: time.Now().Add(time.Hour).UnixMilli()}
+	if _, err := a.Queue(store.WhatsAppAccount, "whatsapp", later, OriginYou); err != nil {
+		t.Fatal(err)
+	}
+	if got := pendingIn(t, a, chat); len(got) != 0 {
+		t.Fatalf("shown: %+v", got)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,6 +67,8 @@ CREATE TABLE IF NOT EXISTS outbox (
   status TEXT NOT NULL, send_at INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, origin TEXT NOT NULL DEFAULT 'you',
   reason TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS notified (account TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY (account, key));
+CREATE TABLE IF NOT EXISTS whatsapp_reads (space TEXT NOT NULL, msg TEXT NOT NULL, sender TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL,
+  PRIMARY KEY (space, msg));
 `
 
 func Open(path string) (*Store, error) {
@@ -928,6 +931,86 @@ type ChatMessage struct {
 	Reactions  string     `json:"reactions,omitempty"` // "👍 2 · 😂 1"
 	Edited     bool       `json:"edited,omitempty"`
 	Ticks      int        `json:"ticks,omitempty"` // WhatsApp, yours: 1 sent, 2 delivered, 3 read
+}
+
+// Ticks of a message of yours that only exists here so far: it shows in
+// the chat the moment you send it, and the real one replaces it.
+const (
+	TickPending = -1 // on its way
+	TickFailed  = -2 // didn't go out
+)
+
+const pendingPrefix = "pending/"
+
+// PendingName is the local name of an outbox item's message until it's sent.
+func PendingName(outboxID int64) string { return pendingPrefix + strconv.FormatInt(outboxID, 10) }
+
+// IsPending: this message only exists here so far.
+func IsPending(name string) bool { return strings.HasPrefix(name, pendingPrefix) }
+
+// PendingOutboxID is the outbox item behind a pending message.
+func PendingOutboxID(name string) (int64, bool) {
+	id, err := strconv.ParseInt(strings.TrimPrefix(name, pendingPrefix), 10, 64)
+	return id, err == nil && IsPending(name)
+}
+
+// SetTicks sets a message's ticks (RaiseTicks is for receipts).
+func (s *Store) SetTicks(account, name string, level int) error {
+	_, err := s.db.Exec(`UPDATE chat_messages SET ticks=? WHERE account=? AND name=?`, level, account, name)
+	return err
+}
+
+// WhatsAppRead is a read receipt waiting for the process that holds the
+// WhatsApp connection (any process can mark a chat read).
+type WhatsAppRead struct {
+	Space, Msg, Sender string
+}
+
+// AddWhatsAppReads queues read receipts; one already queued stays as it is.
+func (s *Store) AddWhatsAppReads(reads []WhatsAppRead) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, r := range reads {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO whatsapp_reads(space,msg,sender,created) VALUES(?,?,?,?)`, r.Space, r.Msg, r.Sender, now()); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// WhatsAppReads are the queued read receipts, dropping those older than
+// maxAge (the phone has long moved on).
+func (s *Store) WhatsAppReads(maxAge time.Duration) ([]WhatsAppRead, error) {
+	if _, err := s.db.Exec(`DELETE FROM whatsapp_reads WHERE created<?`, time.Now().Add(-maxAge).UnixMilli()); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT space,msg,sender FROM whatsapp_reads ORDER BY created`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WhatsAppRead
+	for rows.Next() {
+		var r WhatsAppRead
+		if err := rows.Scan(&r.Space, &r.Msg, &r.Sender); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// DoneWhatsAppReads forgets receipts that went out.
+func (s *Store) DoneWhatsAppReads(reads []WhatsAppRead) error {
+	for _, r := range reads {
+		if _, err := s.db.Exec(`DELETE FROM whatsapp_reads WHERE space=? AND msg=?`, r.Space, r.Msg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ChatFile is a file in a chat message: Ref is Chat's media name (it can

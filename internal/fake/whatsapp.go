@@ -30,10 +30,12 @@ type WhatsApp struct {
 	handler func(whatsapp.Event)
 	nextID  int
 
-	Sent   []whatsapp.Message // what narada sent, in order
-	Read   []string           // chats narada sent read receipts for
-	Groups map[string]string  // group JID → name
-	People map[string]string  // JID → contact name
+	Sent    []whatsapp.Message // what narada sent, in order
+	Read    []string           // chats narada sent read receipts for
+	ReadErr error              // MarkRead fails with this
+	SendErr error              // Send fails with this
+	Groups  map[string]string  // group JID → name
+	People  map[string]string  // JID → contact name
 	// History is played when narada connects for the first time.
 	History []whatsapp.Message
 	Chats   []whatsapp.Chat
@@ -158,6 +160,9 @@ func (c *WhatsAppConn) Send(ctx context.Context, chat, text string, quote *whats
 	if c.closed || w.handler == nil {
 		return "", errors.New("offline")
 	}
+	if w.SendErr != nil {
+		return "", w.SendErr
+	}
 	w.nextID++
 	m := whatsapp.Message{ID: fmt.Sprintf("OUT%04d", w.nextID), Chat: chat, Sender: w.Me, Text: text, Time: time.Now(), FromMe: true}
 	if quote != nil {
@@ -224,6 +229,9 @@ func (c *WhatsAppConn) Download(ctx context.Context, raw []byte) ([]byte, error)
 func (c *WhatsAppConn) MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error {
 	c.w.mu.Lock()
 	defer c.w.mu.Unlock()
+	if c.w.ReadErr != nil {
+		return c.w.ReadErr
+	}
 	c.w.Read = append(c.w.Read, chat)
 	return nil
 }

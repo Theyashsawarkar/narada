@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -62,6 +63,9 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 		return store.OutboxItem{}, err
 	}
 	out.Files = files
+	if store.IsPending(out.Quote) {
+		out.Quote = "" // it isn't a message yet
+	}
 	if kind == "chat" && account == store.WhatsAppAccount {
 		kind = "whatsapp" // the chat screen sends WhatsApp's as chat
 	}
@@ -92,6 +96,9 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 	if err != nil {
 		return it, err
 	}
+	if origin == OriginYou && it.Status == store.StatusQueued && out.ScheduledFor == 0 && (kind == "chat" || kind == "whatsapp") {
+		a.showPending(id, account, kind, out)
+	}
 	if origin == OriginAgent {
 		a.LogAgent("queue #%d %s %s status=%s %s", id, kind, describe(kind, out), it.Status, it.Reason)
 		if it.Status == store.StatusQueued {
@@ -99,6 +106,37 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 		}
 	}
 	return a.Store.OutboxItem(id)
+}
+
+// showPending puts your message in the chat the moment you send it; the
+// real one replaces it when it goes out (DeliverDue).
+func (a *App) showPending(id int64, account, kind string, out store.Outgoing) {
+	var me string
+	if kind == "whatsapp" {
+		wa, _ := a.Store.WhatsApp()
+		me = wa.ChatUser
+	} else if acc, err := a.Store.Account(account); err == nil {
+		me = acc.ChatUser
+	}
+	t := time.Now().UnixMilli()
+	text := out.Body
+	var files []store.ChatFile
+	for _, f := range out.Files {
+		name := firstNonEmpty(f.Name, filepath.Base(f.Source))
+		if text != "" {
+			text += "\n"
+		}
+		text += "📎 " + name
+		files = append(files, store.ChatFile{Name: name, Type: f.Type})
+	}
+	if kind == "whatsapp" {
+		a.queueWhatsAppReads(out.Space) // answering a chat reads it, as on the phone
+		_ = a.Store.PutSpace(store.Space{Account: account, Name: out.Space, DisplayName: a.waChatName(out.Space, out.SpaceName),
+			Type: waType(out.Space), LastActive: t})
+	}
+	_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: account, Name: store.PendingName(id), Space: out.Space, Thread: out.Thread,
+		Sender: me, SenderName: "You", Text: text, Created: t, Quoted: out.Quote, Files: files, Ticks: store.TickPending}})
+	_ = a.Store.SetSpaceRead(account, out.Space, t)
 }
 
 func validate(kind string, out store.Outgoing) error {
@@ -262,6 +300,7 @@ func (a *App) Cancel(id int64) error {
 	}
 	if it, err := a.Store.OutboxItem(id); err == nil {
 		a.dropFiles(it.Out.Files)
+		_ = a.Store.DeleteChatMessage(it.Account, store.PendingName(id))
 	}
 	return nil
 }
@@ -272,6 +311,7 @@ func (a *App) Cancel(id int64) error {
 func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 	_ = a.Store.RecoverSending()
 	a.fetchAsked(ctx)
+	a.flushWhatsAppReads(ctx)
 	due, err := a.Store.DueOutbox()
 	if err != nil {
 		return nil
@@ -289,9 +329,11 @@ func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 		if err != nil {
 			_ = a.Store.FinishOutbox(it.ID, store.StatusFailed, err.Error(), "")
 			it.Status, it.Error = store.StatusFailed, err.Error()
+			_ = a.Store.SetTicks(it.Account, store.PendingName(it.ID), store.TickFailed)
 		} else {
 			_ = a.Store.FinishOutbox(it.ID, store.StatusSent, "", result)
 			it.Status, it.Result = store.StatusSent, result
+			_ = a.Store.DeleteChatMessage(it.Account, store.PendingName(it.ID))
 			a.dropFiles(it.Out.Files)
 			if s := it.Out.ScheduledFor; s > 0 && time.Since(time.UnixMilli(s)) > 5*time.Minute {
 				// the computer was off (or asleep) at the time

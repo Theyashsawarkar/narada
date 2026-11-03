@@ -400,6 +400,10 @@ func (a *App) EditChatMessage(ctx context.Context, account, msg, text string) er
 
 // DeleteChatMessage deletes a message you sent.
 func (a *App) DeleteChatMessage(ctx context.Context, account, msg string) error {
+	if id, ok := store.PendingOutboxID(msg); ok { // not sent yet: stop it, if it still can be
+		_ = a.Cancel(id)
+		return a.Store.DeleteChatMessage(account, msg)
+	}
 	c, err := a.Client(account)
 	if err != nil {
 		return err
@@ -432,6 +436,11 @@ func (a *App) Retry(id int64) error {
 	ok, err := a.Store.Transition(id, store.StatusFailed, store.StatusQueued, time.Now().UnixMilli())
 	if err == nil && !ok {
 		err = fmt.Errorf("#%d hasn't failed", id)
+	}
+	if err == nil {
+		if it, gerr := a.Store.OutboxItem(id); gerr == nil {
+			_ = a.Store.SetTicks(it.Account, store.PendingName(id), store.TickPending)
+		}
 	}
 	return err
 }

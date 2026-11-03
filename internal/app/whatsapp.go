@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
@@ -444,23 +445,80 @@ func (a *App) waPerson(chat, jid, pushName string) string {
 	return firstNonEmpty(name, phoneOf(jid), jid)
 }
 
-// markWhatsAppRead sends read receipts for a chat's unread messages
-// (when this process is online; the local copy is marked either way).
+// markWhatsAppRead queues read receipts for a chat's unread messages. Only
+// the process holding the connection can send them (usually the daemon), so
+// they wait in the store for it; if that's this process, they go now.
 func (a *App) markWhatsAppRead(ctx context.Context, space string) error {
-	c := a.whatsApp()
-	if c == nil {
-		return nil
+	if err := a.queueWhatsAppReads(space); err != nil {
+		return err
 	}
+	if c := a.whatsApp(); c != nil {
+		a.waMu.Lock()
+		ready := a.waReady
+		a.waMu.Unlock()
+		select { // a command that just went online is still connecting
+		case <-ready:
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+		}
+		a.flushWhatsAppReads(ctx)
+	}
+	return nil
+}
+
+func (a *App) queueWhatsAppReads(space string) error {
 	unread, err := a.Store.UnreadChatMessages(store.WhatsAppAccount, space)
 	if err != nil || len(unread) == 0 {
 		return err
 	}
-	var msgs []whatsapp.Message
+	reads := make([]store.WhatsAppRead, 0, len(unread))
 	for _, m := range unread {
 		_, id, _ := strings.Cut(strings.TrimPrefix(m.Name, space), "/")
-		msgs = append(msgs, whatsapp.Message{ID: id, Sender: m.Sender})
+		reads = append(reads, store.WhatsAppRead{Space: space, Msg: id, Sender: m.Sender})
 	}
-	return c.MarkRead(ctx, space, msgs)
+	return a.Store.AddWhatsAppReads(reads)
+}
+
+// waReadsKept: a receipt that couldn't go out for this long is dropped.
+const waReadsKept = 7 * 24 * time.Hour
+
+// flushWhatsAppReads sends the queued read receipts, when this process is
+// online. A chat that fails stays queued for the next try.
+func (a *App) flushWhatsAppReads(ctx context.Context) {
+	c := a.whatsApp()
+	if c == nil {
+		return
+	}
+	a.waMu.Lock()
+	ready := a.waReady
+	a.waMu.Unlock()
+	select {
+	case <-ready:
+	default:
+		return // still connecting
+	}
+	reads, err := a.Store.WhatsAppReads(waReadsKept)
+	if err != nil || len(reads) == 0 {
+		return
+	}
+	bySpace := map[string][]store.WhatsAppRead{}
+	for _, r := range reads {
+		bySpace[r.Space] = append(bySpace[r.Space], r)
+	}
+	for space, rs := range bySpace {
+		msgs := make([]whatsapp.Message, 0, len(rs))
+		for _, r := range rs {
+			msgs = append(msgs, whatsapp.Message{ID: r.Msg, Sender: r.Sender})
+		}
+		if err := c.MarkRead(ctx, space, msgs); err != nil {
+			if a.waReadErr.Swap(err.Error()) != err.Error() {
+				log.Printf("whatsapp: read receipts: %v (will retry)", err)
+			}
+			continue
+		}
+		a.waReadErr.Store("")
+		_ = a.Store.DoneWhatsAppReads(rs)
+	}
 }
 
 // deliverWhatsApp sends one queued WhatsApp message.
@@ -496,6 +554,7 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 			Type: waType(out.Space), LastActive: now})
 		_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: store.WhatsAppAccount, Name: name, Space: out.Space, Sender: wa.ChatUser,
 			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files, Ticks: whatsapp.TickSent}})
+		_ = a.queueWhatsAppReads(out.Space) // answering a chat reads it, as on the phone
 		_ = a.Store.SetSpaceRead(store.WhatsAppAccount, out.Space, time.Now().UnixMilli())
 	}
 	if len(out.Files) == 0 {
