@@ -2,6 +2,15 @@
   <img alt="narada" src="assets/logo.svg" width="120">
 </p>
 
+<!-- identity -->
+<p align="center">
+  <b>अश्वत्थः सर्ववृक्षाणां देवर्षीणां च नारदः ।<br>
+  गन्धर्वाणां चित्ररथः सिद्धानां कपिलो मुनिः ॥</b><br>
+  <i>Among trees I am the sacred fig; among divine sages, Nārada.</i><br>
+  <sub>Bhagavad Gītā 10.26</sub>
+</p>
+<!-- /identity -->
+
 <p align="center">
   <b>Gmail, Google Chat and WhatsApp without leaving the terminal.</b><br>
   Every unread mail and chat in one keyboard-driven screen, and an agent that can read, draft and send them for you.
@@ -11,8 +20,8 @@
   <img alt="narada's mail tab: the inbox as cards on the left, the open thread on the right with its formatting, a table and numbered links" src="assets/screenshots/mail.png" width="100%">
 </p>
 
-> *Narada* (नारद) is Sanskrit for "message": the thing carried from one
-> person to another, whichever road it took.
+> *Narada* (नारद) is the divine messenger of Hindu tradition, who carries word
+> between the worlds.
 
 Checking mail and Google Chat usually means a browser tab: a context
 switch, a mouse, and a page that pulls you into everything else.

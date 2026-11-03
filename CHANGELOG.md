@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Unreleased
+
+- A logo and a shloka at the top of the README and the website: every Vayu tool has them now.
+
 ## v0.7.0 -- 2026-11-03
 
 - **The approval screen says more about where a send goes**, as the approved

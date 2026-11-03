@@ -6,3 +6,6 @@ tagline = "Gmail and Google Chat without leaving the terminal, with an agent tha
 color = "sapphire"
 kind = "mail & chat"
 logo = "assets/logo.svg"
+shloka = "अश्वत्थः सर्ववृक्षाणां देवर्षीणां च नारदः ।\nगन्धर्वाणां चित्ररथः सिद्धानां कपिलो मुनिः ॥"
+shloka_meaning = "Among trees I am the sacred fig; among divine sages, Nārada."
+shloka_source = "Bhagavad Gītā 10.26"
