@@ -168,7 +168,10 @@ func (c *WhatsAppConn) Send(ctx context.Context, chat, text string, quote *whats
 	return m.ID, nil
 }
 
-func (c *WhatsAppConn) SendFile(ctx context.Context, chat, path, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error) {
+func (c *WhatsAppConn) SendFile(ctx context.Context, chat, path, name, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error) {
+	if name == "" {
+		name = filepath.Base(path)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", nil, err
@@ -180,11 +183,11 @@ func (c *WhatsAppConn) SendFile(ctx context.Context, chat, path, caption string,
 		return "", nil, errors.New("offline")
 	}
 	w.nextID++
-	kind := whatsapp.KindOf(filepath.Base(path), http.DetectContentType(data))
+	kind := whatsapp.KindOf(name, http.DetectContentType(data))
 	if kind == "sticker" {
 		kind = "image"
 	}
-	md := &whatsapp.Media{Kind: kind, Name: filepath.Base(path), Mime: http.DetectContentType(data), Size: int64(len(data)),
+	md := &whatsapp.Media{Kind: kind, Name: name, Mime: http.DetectContentType(data), Size: int64(len(data)),
 		Raw: []byte(fmt.Sprintf("sent-%d", w.nextID))}
 	w.Files[string(md.Raw)] = data
 	m := whatsapp.Message{ID: fmt.Sprintf("OUT%04d", w.nextID), Chat: chat, Sender: w.Me, Text: caption, Time: time.Now(), FromMe: true, Media: md}

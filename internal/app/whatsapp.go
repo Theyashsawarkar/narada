@@ -25,7 +25,7 @@ type WhatsAppConn interface {
 	Link(ctx context.Context, phone string, show func(qr, code string), handler func(whatsapp.Event)) error
 	Connect(handler func(whatsapp.Event)) error
 	Send(ctx context.Context, chat, text string, quote *whatsapp.Message) (string, error)
-	SendFile(ctx context.Context, chat, path, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error)
+	SendFile(ctx context.Context, chat, path, name, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error)
 	Download(ctx context.Context, raw []byte) ([]byte, error)
 	MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error
 	Resolve(ctx context.Context, phone string) (string, error)
@@ -513,7 +513,7 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 		if i == 0 {
 			caption = out.Body
 		}
-		id, sent, err := c.SendFile(ctx, out.Space, f.Path, caption, quote)
+		id, sent, err := c.SendFile(ctx, out.Space, f.Path, firstNonEmpty(f.Name, filepath.Base(f.Source)), caption, quote)
 		if err != nil {
 			if i > 0 {
 				return name, fmt.Errorf("%d of %d files went out, then: %w", i, len(out.Files), err)

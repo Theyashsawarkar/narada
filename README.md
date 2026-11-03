@@ -596,7 +596,7 @@ claude  → contacts_find → mail_send
 | `chat_send` | Post in a space, DM or thread | **asks you** |
 | `whatsapp_chats` | WhatsApp chats with unread counts | reads |
 | `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
-| `whatsapp_send` | One message to one WhatsApp chat, optionally replying to a message; opens click-to-chat when not linked | **always asks you** |
+| `whatsapp_send` | One message to one WhatsApp chat, optionally with local files (`attachments`) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
 
@@ -666,7 +666,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
 | `narada whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
 | `narada whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
-| `narada whatsapp send <to> <text> [--at WHEN] [--link]` | Send one message (`--link`: open click-to-chat instead); `@919820147460` (a phone number with its country code) tags that person |
+| `narada whatsapp send <to> [text] [--attach FILE]... [--at WHEN] [--link]` | Send one message, with files (`--attach`, repeatable; each its own message, the text the first one's caption); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
 | `narada status [--json\|--tmux]` | Unread counts |
 | `narada sync` | Sync every account now |
 | `narada outbox` / `outbox cancel <id>` | Sends of the last week; stop one in its undo window |

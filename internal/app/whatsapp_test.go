@@ -259,7 +259,7 @@ func TestTrustPolicy(t *testing.T) {
 }
 
 func TestWhatsAppSendFiles(t *testing.T) {
-	a, _ := setupWhatsApp(t)
+	a, w := setupWhatsApp(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if _, err := a.StartWhatsApp(ctx); err != nil {
@@ -270,7 +270,7 @@ func TestWhatsAppSendFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	one, two := filepath.Join(dir, "one.txt"), filepath.Join(dir, "two.txt")
+	one, two := filepath.Join(dir, "one.txt"), filepath.Join(dir, "Phase 1 Flow.pdf")
 	if err := os.WriteFile(one, []byte("first"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -291,6 +291,17 @@ func TestWhatsAppSendFiles(t *testing.T) {
 	msgs, _ := a.Store.ChatMessages(store.WhatsAppAccount, sp.Name, 0)
 	if len(msgs) != len(before)+2 {
 		t.Fatalf("%d messages, want %d", len(msgs), len(before)+2)
+	}
+	// the other side sees your file's name, not narada's private copy's
+	for i, want := range []string{"one.txt", "Phase_1_Flow.pdf"} {
+		if got := msgs[len(before)+i].Files[0].Name; got != want && got != "Phase 1 Flow.pdf" {
+			t.Errorf("file %d is called %q", i, got)
+		}
+	}
+	for _, m := range w.Sent {
+		if m.Media != nil && (strings.HasPrefix(m.Media.Name, "0-") || strings.HasPrefix(m.Media.Name, "1-")) {
+			t.Errorf("sent as %q: the private copy's name", m.Media.Name)
+		}
 	}
 	for i, want := range []string{"first", "second"} {
 		m := msgs[len(before)+i]

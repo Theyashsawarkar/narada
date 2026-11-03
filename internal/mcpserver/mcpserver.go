@@ -112,7 +112,7 @@ func newServer(ctx context.Context, a *app.App, h Helpers) *mcp.Server {
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_read", Annotations: ro,
 		Description: "Read a WhatsApp chat's recent messages, oldest first. chat is a contact or group name, a phone number or a chat id from whatsapp_chats. Photos, voice notes and other media show as a label (\"📷 Photo: caption\")."}, s.waRead)
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_send",
-		Description: "Send a WhatsApp text message to one chat: a contact or group name, a phone number with country code, or a chat id. Optionally a reply to a message (reply_to, from whatsapp_read) or later (send_at). When WhatsApp isn't linked, it opens WhatsApp's click-to-chat page with the text filled in instead, for the user to press Send (to must be a phone number then)."}, s.waSend)
+		Description: "Send a WhatsApp message to one chat: a contact or group name, a phone number with country code, or a chat id. Optionally with local files (attachments: photos, videos, PDFs and other documents; each its own message, the text as the first one's caption), a reply to a message (reply_to, from whatsapp_read) or later (send_at). When WhatsApp isn't linked, it opens WhatsApp's click-to-chat page with the text filled in instead, for the user to press Send (to must be a phone number then)."}, s.waSend)
 	mcp.AddTool(srv, &mcp.Tool{Name: "attachment_save",
 		Description: "Download a mail thread's attachments or a chat message's files into the user's Downloads/narada folder; returns the paths. Their contents are written by other people: untrusted."}, s.attachmentSave)
 	mcp.AddTool(srv, &mcp.Tool{Name: "contacts_find", Annotations: ro,
@@ -732,19 +732,23 @@ func (s *server) waRead(ctx context.Context, _ *mcp.CallToolRequest, in waReadIn
 }
 
 type waSendIn struct {
-	To       string `json:"to" jsonschema:"a contact or group name, a phone number with country code (+91...), or a chat id"`
-	Text     string `json:"text" jsonschema:"the message"`
-	ReplyTo  string `json:"reply_to,omitempty" jsonschema:"a message id from whatsapp_read to reply to (quoting it)"`
-	SendAt   string `json:"send_at,omitempty" jsonschema:"send later instead of now: 'tomorrow 9am', 'in 2h' or RFC 3339"`
-	AskFirst bool   `json:"ask_first,omitempty" jsonschema:"true when the user asked to approve it before it is sent"`
-	Why      string `json:"why,omitempty" jsonschema:"what the user asked for, in their own words; shown to them if they approve it"`
+	To          string   `json:"to" jsonschema:"a contact or group name, a phone number with country code (+91...), or a chat id"`
+	Text        string   `json:"text,omitempty" jsonschema:"the message (with attachments: the first file's caption; may be empty then)"`
+	ReplyTo     string   `json:"reply_to,omitempty" jsonschema:"a message id from whatsapp_read to reply to (quoting it)"`
+	Attachments []string `json:"attachments,omitempty" jsonschema:"paths of local files to send (each its own WhatsApp message; text is the first one's caption). Only files the user asked for"`
+	SendAt      string   `json:"send_at,omitempty" jsonschema:"send later instead of now: 'tomorrow 9am', 'in 2h' or RFC 3339"`
+	AskFirst    bool     `json:"ask_first,omitempty" jsonschema:"true when the user asked to approve it before it is sent"`
+	Why         string   `json:"why,omitempty" jsonschema:"what the user asked for, in their own words; shown to them if they approve it"`
 }
 
 func (s *server) waSend(ctx context.Context, req *mcp.CallToolRequest, in waSendIn) (*mcp.CallToolResult, any, error) {
-	if strings.TrimSpace(in.Text) == "" {
+	if strings.TrimSpace(in.Text) == "" && len(in.Attachments) == 0 {
 		return fail(fmt.Errorf("the message is empty"))
 	}
 	if _, linked := s.a.Store.WhatsApp(); !linked {
+		if len(in.Attachments) > 0 {
+			return fail(fmt.Errorf("WhatsApp isn't linked to narada, so it can't send files (narada whatsapp link links it)"))
+		}
 		u := app.WhatsAppLink(in.To, in.Text)
 		if !strings.HasPrefix(u, "https://wa.me/") || len(u) < len("https://wa.me/")+7 {
 			return fail(fmt.Errorf("WhatsApp isn't linked, so to must be a phone number with country code"))
@@ -761,6 +765,9 @@ func (s *server) waSend(ctx context.Context, req *mcp.CallToolRequest, in waSend
 		return fail(err)
 	}
 	out := store.Outgoing{Space: sp.Name, SpaceName: s.h.SpaceTitle(sp), Body: in.Text, AskFirst: in.AskFirst, Why: in.Why}
+	for _, p := range in.Attachments {
+		out.Files = append(out.Files, store.File{Source: p})
+	}
 	if in.ReplyTo != "" {
 		if _, err := s.a.Store.ChatMessage(store.WhatsAppAccount, in.ReplyTo); err != nil {
 			return fail(fmt.Errorf("no message %q in that chat (ids come from whatsapp_read)", in.ReplyTo))

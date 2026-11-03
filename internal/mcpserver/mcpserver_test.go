@@ -3,6 +3,7 @@ package mcpserver_test
 import (
 	"context"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -194,5 +195,50 @@ func TestWhatsAppTools(t *testing.T) {
 	out = call(t, cs, "whatsapp_send", map[string]any{"to": "Amma", "text": "Yes, ate. Curtains look nice!", "reply_to": "919800000001@s.whatsapp.net/H3"})
 	if out != "Sent." || len(w.Sent) != 1 || w.Sent[0].Quoted != "H3" || w.Sent[0].Chat != "919800000001@s.whatsapp.net" {
 		t.Fatalf("whatsapp_send: %q %+v", out, w.Sent)
+	}
+	// with files: each its own message, the text the first one's caption,
+	// sent under your file's name
+	dir := t.TempDir()
+	pdf, photo := filepath.Join(dir, "Phase 1 Flow.pdf"), filepath.Join(dir, "site.png")
+	_ = os.WriteFile(pdf, []byte("%PDF-1.4 the flow"), 0o600)
+	_ = os.WriteFile(photo, []byte("\x89PNG\r\n\x1a\n0000"), 0o600)
+	go func() {
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if items, _ := a.Store.Outbox(store.StatusApproval); len(items) > 0 {
+				_ = a.Approve(items[0].ID, nil)
+				return
+			}
+		}
+	}()
+	out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek", "text": "The plan", "attachments": []string{pdf, photo}})
+	if out != "Sent." || len(w.Sent) != 3 {
+		t.Fatalf("whatsapp_send with files: %q, %d sent", out, len(w.Sent))
+	}
+	doc, img := w.Sent[1], w.Sent[2]
+	if doc.Media == nil || doc.Media.Name != "Phase 1 Flow.pdf" || doc.Text != "The plan" || doc.Chat != "120363000000000001@g.us" {
+		t.Fatalf("the PDF went as %+v (%+v)", doc, doc.Media)
+	}
+	if img.Media == nil || img.Media.Kind != "image" || img.Text != "" {
+		t.Fatalf("the photo went as %+v (%+v)", img, img.Media)
+	}
+	// files only, no text
+	go func() {
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if items, _ := a.Store.Outbox(store.StatusApproval); len(items) > 0 {
+				_ = a.Approve(items[0].ID, nil)
+				return
+			}
+		}
+	}()
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek", "attachments": []string{pdf}}); out != "Sent." || len(w.Sent) != 4 {
+		t.Fatalf("a file alone: %q", out)
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek", "attachments": []string{filepath.Join(dir, "missing.pdf")}}); !strings.Contains(out, "missing.pdf") {
+		t.Fatalf("a missing file: %q", out)
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek"}); !strings.Contains(out, "empty") {
+		t.Fatalf("nothing to send: %q", out)
 	}
 }

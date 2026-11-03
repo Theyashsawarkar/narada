@@ -109,11 +109,12 @@ func KindOf(name, mime string) string {
 	return "document"
 }
 
-// SendFile sends a file to chat with an optional caption; quote is the
+// SendFile sends a file to chat as name (what the other side sees; empty:
+// the file's own) with an optional caption; quote is the
 // message it replies to. A .gif becomes the MP4 WhatsApp plays as a GIF
 // (it needs ffmpeg); other images go as photos, videos as videos, the
 // rest as documents. Returns the new message's id and what was sent.
-func (cl *Client) SendFile(ctx context.Context, chat, path, caption string, quote *Message) (string, *Media, error) {
+func (cl *Client) SendFile(ctx context.Context, chat, path, name, caption string, quote *Message) (string, *Media, error) {
 	to, err := types.ParseJID(chat)
 	if err != nil {
 		return "", nil, fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
@@ -122,7 +123,9 @@ func (cl *Client) SendFile(ctx context.Context, chat, path, caption string, quot
 	if err != nil {
 		return "", nil, err
 	}
-	name := filepath.Base(path)
+	if name == "" {
+		name = filepath.Base(path)
+	}
 	mime := http.DetectContentType(data)
 	kind := KindOf(name, mime)
 	if kind == "gif" {

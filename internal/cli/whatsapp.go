@@ -155,10 +155,12 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		return nil
 	case "send":
-		fs := flags("narada whatsapp send", "narada whatsapp send <to> <text...> [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
+		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more): each is its own message, the text\nits first one's caption.\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
 		nowFlag := fs.Bool("now", false, "skip the undo window")
 		link := fs.Bool("link", false, "open the click-to-chat page instead of sending")
 		at := fs.String("at", "", "send later: \"tomorrow 9am\", \"in 2h\"...")
+		var attach listFlag
+		fs.Var(&attach, "attach", "a file to send (repeat for more)")
 		pos, err := parse(fs, rest)
 		if err != nil {
 			return err
@@ -167,9 +169,12 @@ func whatsApp(a *app.App, args []string) error {
 			return usageError("whatsapp send needs who to send to")
 		}
 		text := strings.Join(pos[1:], " ")
-		if text == "" && !term.IsTerminal(int(os.Stdin.Fd())) {
+		if text == "" && len(attach) == 0 && !term.IsTerminal(int(os.Stdin.Fd())) {
 			b, _ := io.ReadAll(os.Stdin)
 			text = strings.TrimSpace(string(b))
+		}
+		if _, linked := a.Store.WhatsApp(); (*link || !linked) && len(attach) > 0 {
+			return usageError("files go only through a linked WhatsApp (narada whatsapp link), not the click-to-chat page")
 		}
 		if _, linked := a.Store.WhatsApp(); *link || !linked {
 			u := app.WhatsAppLink(pos[0], text)
@@ -190,6 +195,9 @@ func whatsApp(a *app.App, args []string) error {
 			a.Config.ChatUndoSeconds = 0
 		}
 		out := store.Outgoing{Space: sp.Name, SpaceName: SpaceTitle(sp), Body: text}
+		for _, p := range attach {
+			out.Files = append(out.Files, store.File{Source: p})
+		}
 		if err := scheduleFlag(&out, *at); err != nil {
 			return err
 		}

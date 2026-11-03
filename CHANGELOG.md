@@ -2,6 +2,16 @@
 
 Newest first.
 
+## v0.6.1 -- 2026-11-03
+
+- **Files on WhatsApp from agents and the command line.** `whatsapp_send`
+  takes `attachments` (photos, videos, PDFs and other documents; each its own
+  message, the text the first one's caption; text may be empty), and
+  `narada whatsapp send` takes `--attach FILE` (repeatable). Only the screen
+  could send them before, so agents fell back to Google Chat.
+- Fixed: a document sent on WhatsApp arrived named after narada's private copy
+  (`0-report.pdf`). It now keeps your file's name.
+
 ## v0.6.0 -- 2026-11-02
 
 - **A new approval screen.** One sentence says who wants to send what to
