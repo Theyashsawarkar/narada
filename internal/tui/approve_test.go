@@ -45,6 +45,7 @@ func TestApproveCard(t *testing.T) {
 	if testing.Verbose() {
 		t.Log("\n" + v)
 	}
+	ap.shown = time.Now().Add(-time.Second)
 	nm, _ := ap.Update(key("y"))
 	if got, _ := m.a.Store.OutboxItem(it.ID); got.Status != store.StatusQueued || !strings.Contains(nm.View(), "Approved") {
 		t.Fatalf("y: %s\n%s", got.Status, nm.View())
@@ -89,10 +90,66 @@ func TestApproveWarnsAboutOutsiders(t *testing.T) {
 func TestApproveWhatsAppGroup(t *testing.T) {
 	_, _, ap := queued(t, "whatsapp", store.Outgoing{Space: "120@g.us", SpaceName: "Storefront", Body: "@919820147460 Sir, please check.", Agent: "Codex"}, 150, 40)
 	v := ap.View()
-	for _, want := range []string{"WhatsApp", "Codex wants to message the group Storefront", "a group", "tags 1 person", "@919820147460"} {
+	for _, want := range []string{"WhatsApp", "Codex wants to message the group Storefront", "a group", "tags +919820147460", "@919820147460"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("missing %q:\n%s", want, v)
 		}
+	}
+	// what narada knows of the group: its size, the tagged person's name,
+	// the last messages in it
+	st := ap.a.Store
+	_ = st.AddAccount(store.Account{Name: "demo", Chat: true})
+	if err := st.PutSpace(store.Space{Account: "demo", Name: "120@g.us", DisplayName: "Storefront", Type: "GROUP_CHAT", Members: 14}); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.PutUser("demo", "919820147460@s.whatsapp.net", "Jiggy Shah", "+919820147460")
+	_ = st.PutChatMessages([]store.ChatMessage{{Account: "demo", Name: "m1", Space: "120@g.us", Sender: "15550100@s.whatsapp.net", SenderName: "Dana Reyes", Text: "Okay, let's connect on the same link", Created: 1}})
+	v = ap.View()
+	for _, want := range []string{"a group of 14 people", "tags Jiggy Shah", "group, 14 people", "Jiggy Shah +919820147460", "@Jiggy Shah Sir", "Last in this chat", "Dana     Okay, let's connect"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("missing %q:\n%s", want, v)
+		}
+	}
+}
+
+// A post in a thread says which thread, and how big the space is.
+func TestApproveChatThread(t *testing.T) {
+	out := store.Outgoing{Space: "spaces/T", SpaceName: "Storefront team", Thread: "spaces/T/threads/a", Body: "Release 3.8 is live on staging.", Agent: "Claude Code"}
+	_, _, ap := queued(t, "chat", out, 150, 40)
+	st := ap.a.Store
+	_ = st.PutSpace(store.Space{Account: "demo", Name: "spaces/T", DisplayName: "Storefront team", Type: "SPACE", Members: 8})
+	_ = st.PutChatMessages([]store.ChatMessage{
+		{Account: "demo", Name: "spaces/T/messages/1", Space: "spaces/T", Thread: "spaces/T/threads/a", SenderName: "Priya", Text: "Release 3.8\nnotes inside", Created: 1},
+		{Account: "demo", Name: "spaces/T/messages/2", Space: "spaces/T", Thread: "spaces/T/threads/a", SenderName: "Arjun", Text: "nice", Created: 2},
+	})
+	v := ap.View()
+	for _, want := range []string{"Claude Code wants to post in Storefront team", "space, 8 people", "in a thread", "Release 3.8 1 reply", "Edit first", "Decide later"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("missing %q:\n%s", want, v)
+		}
+	}
+}
+
+// After an answer: what happened, in words, and how to undo it.
+func TestApproveResult(t *testing.T) {
+	m, it, ap := queued(t, "mail", mailOut(), 150, 40)
+	two, _ := m.a.Queue("demo", "mail", mailOut(), app.OriginAgent)
+	ap.items = append(ap.items, two)
+	nm, _ := ap.Update(key("y"))
+	v := nm.View()
+	for _, want := range []string{"✓ Approved", "The mail to priya.k@example.com goes", "next: 2 of 2 opens now"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("missing %q:\n%s", want, v)
+		}
+	}
+	_ = it
+	nm, _ = nm.Update(approveNext{})
+	nm.(approver).shown.Add(0)
+	a2 := nm.(approver)
+	a2.shown = time.Now().Add(-time.Second)
+	nm, _ = a2.Update(key("n"))
+	if v := nm.View(); !strings.Contains(v, "Nothing was sent. Claude Code has been told.") || !strings.Contains(v, "closing") {
+		t.Fatalf("declined:\n%s", v)
 	}
 }
 

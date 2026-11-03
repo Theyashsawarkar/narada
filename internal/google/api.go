@@ -524,6 +524,9 @@ type ChatSpace struct {
 	LastActiveTime   string `json:"lastActiveTime"`
 	SingleUserBotDM  bool   `json:"singleUserBotDm"`
 	SpaceThreadState string `json:"spaceThreadingState"`
+	MembershipCount  struct {
+		People int `json:"joinedDirectHumanUserCount"`
+	} `json:"membershipCount"`
 }
 
 func (c *Client) Spaces(ctx context.Context) ([]ChatSpace, error) {

@@ -114,9 +114,12 @@ func (m approver) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err.Error()
 				return m, nil
 			}
-			m.done, m.doneInfo = "✓ Approved", "It goes out now."
-			if wait := int(m.a.UndoWindow(it.Kind).Seconds()); wait > 0 {
-				m.doneInfo = fmt.Sprintf("It goes in %ds. narada outbox cancel %d stops it.", wait, it.ID)
+			what := sendWhat(it.Kind, m.message())
+			m.done, m.doneInfo = "✓ Approved", upFirst(what)+" goes out now."
+			if when := m.message().ScheduledFor; when > 0 {
+				m.doneInfo = upFirst(what) + " goes " + time.UnixMilli(when).Format("Mon 02 Jan 15:04") + fmt.Sprintf(".\nnarada outbox cancel %d stops it", it.ID)
+			} else if wait := int(m.a.UndoWindow(it.Kind).Seconds()); wait > 0 {
+				m.doneInfo = upFirst(what) + fmt.Sprintf(" goes in %ds.\nnarada outbox cancel %d stops it", wait, it.ID)
 			}
 			return m, tea.Tick(900*time.Millisecond, func(time.Time) tea.Msg { return approveNext{} })
 		case "n", "N":
@@ -124,7 +127,7 @@ func (m approver) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err.Error()
 				return m, nil
 			}
-			m.done, m.doneInfo = "✗ Declined", "Nothing was sent. The agent has been told."
+			m.done, m.doneInfo = "✗ Declined", "Nothing was sent. "+firstNonEmpty(it.Out.Agent, "The agent")+" has been told."
 			return m, tea.Tick(700*time.Millisecond, func(time.Time) tea.Msg { return approveNext{} })
 		case "e", "E":
 			out := m.message()
@@ -163,6 +166,109 @@ func (m approver) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// sendTarget: what a send does and to whom, as in "wants to email Priya".
+func sendTarget(kind string, out store.Outgoing) (verb, target string) {
+	name := firstNonEmpty(out.SpaceName, out.Space)
+	switch {
+	case kind == "whatsapp" && strings.HasSuffix(out.Space, "@g.us"):
+		return "message the group", name
+	case kind == "whatsapp":
+		return "message", name
+	case kind == "chat":
+		return "post in", name
+	}
+	first := ""
+	if len(out.To) > 0 {
+		first = out.To[0]
+		if a, err := mail.ParseAddress(first); err == nil && a.Name != "" {
+			first = a.Name
+		}
+	}
+	if others := len(out.To) + len(out.Cc) + len(out.Bcc) - 1; others > 0 {
+		first += " and " + count(others, "other")
+	}
+	return "email", first
+}
+
+// sendWhat: a send in a few words, "the mail to Priya Nair".
+func sendWhat(kind string, out store.Outgoing) string {
+	verb, target := sendTarget(kind, out)
+	switch verb {
+	case "email":
+		return "the mail to " + target
+	case "post in":
+		return "the post in " + target
+	case "message the group":
+		return "the message to the group " + target
+	}
+	return "the message to " + target
+}
+
+// queueLine: a waiting send in the queue, "Mail to Priya Nair".
+func queueLine(s styles, it store.OutboxItem) string {
+	name, _, _ := s.kindLook(it.Kind)
+	verb, target := sendTarget(it.Kind, it.Out)
+	if verb == "post in" {
+		return name + " in " + target
+	}
+	return name + " to " + target
+}
+
+func upFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func firstLine(s string) string {
+	l, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return l
+}
+
+// chatInfo is what narada knows of the chat a send goes to.
+type chatInfo struct {
+	sp      store.Space
+	tagged  [][2]string // each tag: their name (when known), their number
+	last    []store.ChatMessage
+	thread  string // the thread's first message
+	replies int
+}
+
+func (m approver) chatOf(it store.OutboxItem, out store.Outgoing) (ci chatInfo) {
+	st := m.a.Store
+	ci.sp, _ = st.Space(it.Account, out.Space)
+	for _, t := range reTag.FindAllStringSubmatch(out.Body, -1) {
+		name, _, _ := st.User(it.Account, t[1]+"@s.whatsapp.net")
+		ci.tagged = append(ci.tagged, [2]string{name, "+" + t[1]})
+	}
+	ci.last, _ = st.ChatMessages(it.Account, out.Space, 2)
+	if first, n, err := st.ThreadStart(it.Account, out.Space, out.Thread); err == nil {
+		ci.thread, ci.replies = first.Text, n-1
+	}
+	return ci
+}
+
+// kindNote: what kind of chat it is, and how many are in it.
+func (ci chatInfo) kindNote(kind string) string {
+	what := "chat"
+	switch ci.sp.Type {
+	case "DIRECT_MESSAGE":
+		return "direct message"
+	case "SPACE":
+		what = "space"
+	case "GROUP_CHAT", "GROUP":
+		what = "group"
+	}
+	if kind == "whatsapp" && ci.sp.Type == "" {
+		return ""
+	}
+	if ci.sp.Members > 0 {
+		return what + ", " + count(ci.sp.Members, "person")
+	}
+	return what
+}
+
 // kindLook: the name, icon and colour of a kind of send.
 func (s styles) kindLook(kind string) (name, icon, color string) {
 	switch kind {
@@ -175,7 +281,8 @@ func (s styles) kindLook(kind string) (name, icon, color string) {
 }
 
 var (
-	reTag = regexp.MustCompile(`(?:^|[^\w@])@(\d{7,15})\b`)
+	reTag   = regexp.MustCompile(`(?:^|[^\w@])@(\d{7,15})\b`)
+	reTagAt = regexp.MustCompile(`@(\d{7,15})\b`)
 	// addresses anyone can get: everyone else on them isn't "outside".
 	publicMail = map[string]bool{"gmail.com": true, "googlemail.com": true, "outlook.com": true, "hotmail.com": true,
 		"yahoo.com": true, "icloud.com": true, "proton.me": true, "protonmail.com": true}
@@ -211,6 +318,8 @@ func count(n int, one string) string {
 		return "1 " + one
 	case one == "person":
 		return fmt.Sprintf("%d people", n)
+	case one == "reply":
+		return fmt.Sprintf("%d replies", n)
 	}
 	return fmt.Sprintf("%d %ss", n, one)
 }
@@ -291,11 +400,42 @@ func (m approver) messageLines(w int) []string {
 	if out.HTML != "" {
 		return render.HTML(out.HTML, w, renderStylesOf(s), true).Lines
 	}
+	var names map[string]string
+	if chatKind(it.Kind) {
+		names = map[string]string{}
+		for _, t := range m.chatOf(it, out).tagged {
+			if t[0] != "" {
+				names[t[1][1:]] = t[0]
+			}
+		}
+	}
 	var lines []string
 	for _, l := range splitLines(out.Body) {
-		lines = append(lines, wrapped(s.text.Render(l), w)...)
+		lines = append(lines, wrapped(m.tagged(l, names), w)...)
 	}
 	return lines
+}
+
+// tagged renders a line with its @tags marked, by name: WhatsApp shows
+// "@919876543210" to everyone as "@Dana Reyes".
+func (m approver) tagged(l string, names map[string]string) string {
+	s := m.styles
+	if len(names) == 0 {
+		return s.text.Render(l)
+	}
+	var b strings.Builder
+	at := 0
+	for _, ix := range reTagAt.FindAllStringSubmatchIndex(l, -1) {
+		name, ok := names[l[ix[2]:ix[3]]]
+		if !ok {
+			continue
+		}
+		b.WriteString(s.text.Render(l[at:ix[0]]))
+		b.WriteString(s.peach.Render("@" + name))
+		at = ix[1]
+	}
+	b.WriteString(s.text.Render(l[at:]))
+	return b.String()
 }
 
 // chip is a small filled label; warn is for what you must not miss.
@@ -372,8 +512,11 @@ func (m approver) View() string {
 	}
 	chat := chatKind(it.Kind)
 	far := outside(account, out)
-	tags := reTag.FindAllStringSubmatch(out.Body, -1)
 	group := strings.HasSuffix(out.Space, "@g.us")
+	var ci chatInfo
+	if chat {
+		ci = m.chatOf(it, out)
+	}
 
 	// The border says how far this reaches: past your company, or to many.
 	tone := s.c.Accent
@@ -390,10 +533,16 @@ func (m approver) View() string {
 		if strings.HasPrefix(m.done, "✗") {
 			st = s.red
 		}
-		card := []string{st.Bold(true).Render(m.done), s.sub.Render(ansi.Truncate(m.doneInfo, cw, "…"))}
+		info, tiny, _ := strings.Cut(m.doneInfo, "\n")
+		card := []string{st.Bold(true).Render(m.done), "", s.sub.Render(ansi.Truncate(info, cw, "…"))}
+		after := "closing"
 		if len(m.items) > m.i+1 {
-			card = append(card, s.muted.Render(fmt.Sprintf("next: %d of %d", m.i+2, len(m.items))))
+			after = fmt.Sprintf("next: %d of %d opens now", m.i+2, len(m.items))
 		}
+		if tiny != "" {
+			after = tiny + " · " + after
+		}
+		card = append(card, s.muted.Render(ansi.Truncate(after, cw, "…")))
 		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, strings.Join(card, "\n"))
 	}
 
@@ -405,28 +554,8 @@ func (m approver) View() string {
 		top += strings.Repeat(" ", cw-lipgloss.Width(top)-lipgloss.Width(clock)) + s.muted.Render(clock)
 	}
 	who := firstNonEmpty(out.Agent, "An agent")
-	var verb, target string
-	switch {
-	case group:
-		verb, target = " wants to message the group ", firstNonEmpty(out.SpaceName, out.Space)
-	case it.Kind == "whatsapp":
-		verb, target = " wants to message ", firstNonEmpty(out.SpaceName, out.Space)
-	case it.Kind == "chat":
-		verb, target = " wants to post in ", firstNonEmpty(out.SpaceName, out.Space)
-	default:
-		verb = " wants to email "
-		first := ""
-		if len(out.To) > 0 {
-			first = out.To[0]
-			if a, err := mail.ParseAddress(first); err == nil && a.Name != "" {
-				first = a.Name
-			}
-		}
-		target = first
-		if others := len(out.To) + len(out.Cc) + len(out.Bcc) - 1; others > 0 {
-			target += " and " + count(others, "other")
-		}
-	}
+	verb, target := sendTarget(it.Kind, out)
+	verb = " wants to " + verb + " "
 	header := []string{top, ""}
 	header = append(header, wrapped(s.bold.Render(who+verb)+toneSt.Bold(true).Render(target), cw)...)
 	if out.Why != "" {
@@ -441,10 +570,22 @@ func (m approver) View() string {
 	if n := len(far); n > 0 {
 		chips = append(chips, s.chip(count(n, "person")+" outside your company", s.c.Peach))
 	}
-	if group {
+	switch {
+	case group && ci.sp.Members > 0:
+		chips = append(chips, s.chip("a group of "+count(ci.sp.Members, "person"), s.c.Peach))
+	case group:
 		chips = append(chips, s.chip("a group: everyone in it sees this", s.c.Peach))
+	case it.Kind == "chat" && ci.sp.Type == "SPACE" && ci.sp.Members > 0:
+		chips = append(chips, s.chip("space, "+count(ci.sp.Members, "person"), ""))
 	}
-	if n := len(tags); n > 0 {
+	switch n := len(ci.tagged); {
+	case n == 1 || n == 2:
+		var names []string
+		for _, t := range ci.tagged {
+			names = append(names, firstNonEmpty(t[0], t[1]))
+		}
+		chips = append(chips, s.chip("tags "+strings.Join(names, " and "), s.c.Peach))
+	case n > 2:
 		chips = append(chips, s.chip("tags "+count(n, "person"), s.c.Peach))
 	}
 	if n := len(out.Bcc); n > 0 {
@@ -453,8 +594,11 @@ func (m approver) View() string {
 	if n := len(out.Files); n > 0 {
 		chips = append(chips, s.chip(count(n, "attachment"), ""))
 	}
-	if out.ThreadID != "" || out.Thread != "" {
-		chips = append(chips, s.chip("a reply in a thread", ""))
+	switch {
+	case out.ThreadID != "":
+		chips = append(chips, s.chip("a reply in an existing thread", ""))
+	case out.Thread != "":
+		chips = append(chips, s.chip("in a thread", ""))
 	}
 	if out.ScheduledFor > 0 {
 		chips = append(chips, s.chip("goes "+time.UnixMilli(out.ScheduledFor).Format("Mon 02 Jan 15:04"), ""))
@@ -496,24 +640,50 @@ func (m approver) View() string {
 		}
 		return v
 	}
+	head := func(title string) {
+		if len(facts) > 0 {
+			facts = append(facts, "")
+		}
+		facts = append(facts, s.sub.Bold(true).Render(title))
+	}
 	if chat {
-		field("To", s.text.Render(firstNonEmpty(out.SpaceName, out.Space)))
+		field("To", s.text.Render(firstNonEmpty(out.SpaceName, out.Space))+" "+s.muted.Render(ci.kindNote(it.Kind)))
 		if out.Thread != "" {
-			field("Thread", s.text.Render("replying in the thread"))
+			if ci.thread != "" {
+				field("Thread", s.text.Render(ansi.Truncate(firstLine(ci.thread), max(8, factW-24), "…"))+" "+s.muted.Render(count(ci.replies, "reply")))
+			} else {
+				field("Thread", s.text.Render("replying in the thread"))
+			}
 		}
 		if out.Quote != "" {
 			field("Replying", s.text.Render("to a message (quoted)"))
 		}
-		if len(tags) > 0 {
+		if len(ci.tagged) > 0 {
 			var v []string
-			for _, t := range tags {
-				v = append(v, s.peach.Render("@"+t[1]))
+			for _, t := range ci.tagged {
+				if t[0] != "" {
+					v = append(v, s.peach.Render(t[0])+" "+s.muted.Render(t[1]))
+				} else {
+					v = append(v, s.peach.Render(t[1]))
+				}
 			}
 			field("Tags", v...)
 		}
-		field("As", s.text.Render(firstNonEmpty(it.Account, "your account")))
+		if it.Kind == "whatsapp" {
+			me := "your WhatsApp"
+			if wa, ok := m.a.Store.WhatsApp(); ok && wa.Email != "" {
+				me += " " + s.muted.Render(wa.Email)
+			}
+			field("As", s.text.Render(me))
+		} else {
+			field("From", s.text.Render(firstNonEmpty(it.Account, "your account"))+" "+s.muted.Render(strings.TrimPrefix(account, it.Account)))
+		}
 	} else {
-		field("From", s.person(account, s.text))
+		from := s.person(account, s.text)
+		if it.Account != "" && it.Account != account {
+			from = s.text.Render(it.Account) + " " + s.muted.Render(account)
+		}
+		field("From", from)
 		field("To", people(out.To)...)
 		if len(out.Cc) > 0 {
 			field("Cc", people(out.Cc)...)
@@ -541,7 +711,27 @@ func (m approver) View() string {
 				del++
 			}
 		}
-		field("Edited", s.green.Render(fmt.Sprintf("+%d", add))+" "+s.red.Render(fmt.Sprintf("-%d", del)))
+		head("Your edit")
+		if add > 0 {
+			facts = append(facts, s.green.Render("+ ")+s.text.Render(count(add, "line")+" added"))
+		}
+		if del > 0 {
+			facts = append(facts, s.red.Render("- ")+s.text.Render(count(del, "line")+" removed"))
+		}
+	}
+	if len(ci.last) > 0 && it.Kind == "whatsapp" {
+		head("Last in this chat")
+		for _, c := range ci.last {
+			who := "someone"
+			if f := strings.Fields(c.SenderName); len(f) > 0 {
+				who = f[0]
+			}
+			if c.Mine {
+				who = "you"
+			}
+			text := firstLine(firstNonEmpty(c.Text, "(a file)"))
+			facts = append(facts, s.muted.Render(fmt.Sprintf("%-9s", ansi.Truncate(who, 8, "…"))+ansi.Truncate(text, max(4, factW-9), "…")))
+		}
 	}
 	if it.Reason != "" {
 		facts = append(facts, "")
@@ -550,9 +740,9 @@ func (m approver) View() string {
 		}
 	}
 	if m.i+1 < len(m.items) {
+		head("Next in the queue")
 		nx := m.items[m.i+1]
-		nm, _, _ := s.kindLook(nx.Kind)
-		field("Next", s.muted.Render(fmt.Sprintf("%d of %d: ", m.i+2, len(m.items))+nm))
+		facts = append(facts, s.muted.Render(fmt.Sprintf("%-9s", fmt.Sprintf("%d of %d", m.i+2, len(m.items)))+queueLine(s, nx)))
 	}
 
 	// ---- the actions, pinned to the bottom
@@ -563,7 +753,14 @@ func (m approver) View() string {
 	if u := int(m.a.UndoWindow(it.Kind).Seconds()); u > 0 && out.ScheduledFor == 0 && two {
 		send += fmt.Sprintf(" (%ds to undo)", u)
 	}
-	acts := []string{s.answer("y", send, s.c.Green), s.answer("e", "Edit", "")}
+	edit := "Edit"
+	switch {
+	case m.out != nil:
+		edit = "Edit again"
+	case two:
+		edit = "Edit first"
+	}
+	acts := []string{s.answer("y", send, s.c.Green), s.answer("e", edit, "")}
 	if m.out != nil {
 		acts = append(acts, s.answer("u", "Undo my edit", ""))
 		if out.Body != it.Out.Body {
@@ -575,9 +772,16 @@ func (m approver) View() string {
 		acts = append(acts, s.answer("s", "Skip", ""))
 	}
 	if !m.inline {
-		acts = append(acts, s.answer("q", "Later", ""))
+		later := "Later"
+		if two {
+			later = "Decide later"
+		}
+		acts = append(acts, s.answer("q", later, ""))
 	}
 	actRows := flow(acts, cw)
+	if hint := "j/k scroll"; two && len(actRows) == 1 && lipgloss.Width(actRows[0])+len(hint)+4 <= cw {
+		actRows[0] += strings.Repeat(" ", cw-lipgloss.Width(actRows[0])-len(hint)) + s.muted.Render(hint)
+	}
 	foot := []string{}
 	if m.err != "" {
 		foot = append(foot, wrapped(s.red.Render("! "+m.err), cw)...)
@@ -629,6 +833,12 @@ func (m approver) middle(facts []string, room, cw, factW int, two bool) []string
 	scroll := min(m.scroll, max(0, len(body)-inside))
 	shown := body[scroll:min(len(body), scroll+inside)]
 	note := ""
+	if out := m.message(); m.out != nil && out.Body != m.cur().Out.Body {
+		note = "changes marked · d hides them"
+		if !m.diff {
+			note = "d marks the changes"
+		}
+	}
 	if len(body) > inside {
 		note = fmt.Sprintf("%d–%d of %d · j/k", scroll+1, scroll+len(shown), len(body))
 	}

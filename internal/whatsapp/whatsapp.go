@@ -62,6 +62,7 @@ type Chat struct {
 	JID    string
 	Name   string
 	Group  bool
+	People int // a group's members, when known
 	Last   time.Time
 	Unread int // from the phone's history: how many are unread
 }
@@ -348,6 +349,7 @@ func (cl *Client) event(evt any) {
 	case *events.Connected:
 		cl.emit(Event{State: "connected"})
 		cl.emit(Event{Contacts: cl.contacts(ctx)})
+		go cl.groups(ctx)
 	case *events.Disconnected:
 		cl.emit(Event{State: "disconnected"})
 	case *events.LoggedOut:
@@ -385,6 +387,28 @@ func (cl *Client) event(evt any) {
 		if e.Name != nil {
 			cl.emit(Event{Chats: []Chat{{JID: e.JID.String(), Name: e.Name.Name, Group: true}}})
 		}
+		if len(e.Join) > 0 || len(e.Leave) > 0 {
+			go func() {
+				if info, err := cl.c.GetGroupInfo(ctx, e.JID); err == nil {
+					cl.emit(Event{Chats: []Chat{{JID: e.JID.String(), Name: info.Name, Group: true, People: len(info.Participants)}}})
+				}
+			}()
+		}
+	}
+}
+
+// groups tells how many people each of your groups has (one call for all).
+func (cl *Client) groups(ctx context.Context) {
+	gs, err := cl.c.GetJoinedGroups(ctx)
+	if err != nil {
+		return
+	}
+	var chats []Chat
+	for _, g := range gs {
+		chats = append(chats, Chat{JID: g.JID.String(), Name: g.Name, Group: true, People: len(g.Participants)})
+	}
+	if len(chats) > 0 {
+		cl.emit(Event{Chats: chats})
 	}
 }
 

@@ -635,9 +635,11 @@ is written by strangers. So:
   unsure). Agents also pass `why`, what you asked for in your words, and
   the approval reads as one sentence: "Claude Code wants to email Priya and
   1 other", your words, then labels for what you mustn't miss (people outside
-  your company, a group, who's tagged, attachments). The details sit beside
-  the message exactly as it will arrive, tables included; an edit shows what
-  changed; the border turns orange when it reaches past your company.
+  your company, a group and its size, who's tagged by name, attachments). The
+  details sit beside the message exactly as it will arrive, tables included:
+  for a chat, its size, the thread and the last messages in it; an edit shows
+  what changed; the next send in the queue is named. The border turns orange
+  when it reaches past your company.
   Each send still waits out a short undo window (`narada outbox cancel`
   or `z` stops it; with `notify = true`, a notification can too). Mail an agent reads could try to talk it
   into sending, and under `trust` nothing stops that but the undo window,

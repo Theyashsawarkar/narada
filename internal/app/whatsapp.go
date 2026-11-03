@@ -285,7 +285,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 	case len(e.Chats) > 0:
 		for _, ch := range e.Chats {
 			_ = a.Store.PutSpace(store.Space{Account: acc, Name: ch.JID, DisplayName: a.waChatName(ch.JID, ch.Name), Type: waType(ch.JID),
-				LastActive: ch.Last.UnixMilli()})
+				LastActive: ch.Last.UnixMilli(), Members: ch.People})
 			if e.History {
 				a.waUnreadMu.Lock()
 				if a.waUnread == nil {

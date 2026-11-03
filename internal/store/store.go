@@ -90,7 +90,7 @@ func Open(path string) (*Store, error) {
 }
 
 // schemaVersion: bump it with a step in migrate.
-const schemaVersion = 14
+const schemaVersion = 15
 
 func migrate(db *sql.DB) error {
 	var v int
@@ -213,6 +213,13 @@ func migrate(db *sql.DB) error {
 	if v < 14 {
 		// v14: WhatsApp's ticks on messages you sent (1 sent, 2 delivered, 3 read)
 		if _, err := db.Exec(`ALTER TABLE chat_messages ADD COLUMN ticks INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return err
+		}
+	}
+	if v < 15 {
+		// v15: how many people are in a chat (a group, a space), for the
+		// approval of a send to it
+		if _, err := db.Exec(`ALTER TABLE spaces ADD COLUMN members INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
 		}
 	}
@@ -897,6 +904,7 @@ type Space struct {
 	Threaded    bool   `json:"threaded,omitempty"` // replies go in threads (else inline)
 	Pinned      bool   `json:"pinned,omitempty"`   // kept on top of the list (on this machine)
 	Type        string `json:"type"`               // SPACE, GROUP_CHAT, DIRECT_MESSAGE
+	Members     int    `json:"members,omitempty"`  // people in it, when known
 	LastActive  int64  `json:"last_active"`
 	LastRead    int64  `json:"-"`
 	SyncedTo    int64  `json:"-"`
@@ -937,9 +945,10 @@ type ChatFile struct {
 }
 
 func (s *Store) PutSpace(sp Space) error {
-	_, err := s.db.Exec(`INSERT INTO spaces(account,name,display_name,type,last_active,threaded) VALUES(?,?,?,?,?,?)
+	_, err := s.db.Exec(`INSERT INTO spaces(account,name,display_name,type,last_active,threaded,members) VALUES(?,?,?,?,?,?,?)
 	  ON CONFLICT(account,name) DO UPDATE SET display_name=CASE WHEN excluded.display_name<>'' THEN excluded.display_name ELSE display_name END,
-	  type=excluded.type, last_active=MAX(last_active,excluded.last_active), threaded=excluded.threaded`, sp.Account, sp.Name, sp.DisplayName, sp.Type, sp.LastActive, sp.Threaded)
+	  type=excluded.type, last_active=MAX(last_active,excluded.last_active), threaded=excluded.threaded,
+	  members=CASE WHEN excluded.members>0 THEN excluded.members ELSE members END`, sp.Account, sp.Name, sp.DisplayName, sp.Type, sp.LastActive, sp.Threaded, sp.Members)
 	return err
 }
 
@@ -1171,7 +1180,7 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 // (messages from others after the space's read time). No accounts means
 // every Google account: WhatsApp's chats only come when asked by name.
 func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error) {
-	q := `SELECT s.account,s.name,s.display_name,s.alias,s.threaded,s.pinned,s.type,s.last_active,s.last_read,s.synced_to,
+	q := `SELECT s.account,s.name,s.display_name,s.alias,s.threaded,s.pinned,s.type,s.last_active,s.last_read,s.synced_to,s.members,
 	  (SELECT COUNT(*) FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=s.account AND c.space=s.name AND c.created>s.last_read AND c.sender<>a.chat_user),
 	  COALESCE((SELECT c.text FROM chat_messages c WHERE c.account=s.account AND c.space=s.name ORDER BY c.created DESC LIMIT 1),''),
 	  COALESCE((SELECT CASE WHEN c.sender<>'' AND c.sender=(SELECT chat_user FROM accounts WHERE name=s.account) THEN 'You' ELSE c.sender_name END
@@ -1195,7 +1204,7 @@ func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error)
 	var out []Space
 	for rows.Next() {
 		var sp Space
-		if err := rows.Scan(&sp.Account, &sp.Name, &sp.DisplayName, &sp.Alias, &sp.Threaded, &sp.Pinned, &sp.Type, &sp.LastActive, &sp.LastRead, &sp.SyncedTo, &sp.Unread, &sp.LastText, &sp.LastSender); err != nil {
+		if err := rows.Scan(&sp.Account, &sp.Name, &sp.DisplayName, &sp.Alias, &sp.Threaded, &sp.Pinned, &sp.Type, &sp.LastActive, &sp.LastRead, &sp.SyncedTo, &sp.Members, &sp.Unread, &sp.LastText, &sp.LastSender); err != nil {
 			return nil, err
 		}
 		out = append(out, sp)
@@ -1241,6 +1250,23 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 		out[i], out[j] = out[j], out[i]
 	}
 	return out, rows.Err()
+}
+
+// ThreadStart is a chat thread's first message we have, and how many
+// messages it holds.
+func (s *Store) ThreadStart(account, space, thread string) (first ChatMessage, n int, err error) {
+	if thread == "" {
+		return first, 0, ErrNotFound
+	}
+	if err = s.db.QueryRow(`SELECT COUNT(*) FROM chat_messages WHERE account=? AND space=? AND thread=?`, account, space, thread).Scan(&n); err != nil {
+		return first, 0, err
+	}
+	if n == 0 {
+		return first, 0, ErrNotFound
+	}
+	err = s.db.QueryRow(`SELECT name,sender_name,text,created FROM chat_messages WHERE account=? AND space=? AND thread=? ORDER BY created LIMIT 1`,
+		account, space, thread).Scan(&first.Name, &first.SenderName, &first.Text, &first.Created)
+	return first, n, err
 }
 
 // ChatUser is someone you've seen in chat.

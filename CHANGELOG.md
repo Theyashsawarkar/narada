@@ -2,6 +2,25 @@
 
 Newest first.
 
+## v0.7.0 -- 2026-11-03
+
+- **The approval screen says more about where a send goes**, as the approved
+  design shows it:
+  - a WhatsApp group's size ("a group of 14 people"), who's tagged by name
+    ("tags Dana Reyes", and `@Dana Reyes` in the message, as WhatsApp shows
+    it), your number, and the last two messages in the chat;
+  - a Google Chat space's size, and the thread a reply goes into, with its
+    replies;
+  - after you edit, a "Your edit" summary (lines added and removed), and the
+    next send in the queue ("3 of 3 · Mail to Priya Nair").
+- Clearer answers: "Edit first" (after an edit, "Edit again"), "Decide
+  later", and a `j/k scroll` hint. After you answer, the screen says what
+  happened to which send ("The mail to Priya Nair goes in 10s."), how to stop
+  it, and whether the next one opens or the popup closes.
+- Group sizes come from WhatsApp when narada connects (one call for all your
+  groups, again when people join or leave), space sizes from Google Chat's
+  space list; until then the screen says what it knows.
+
 ## v0.6.2 -- 2026-11-03
 
 - The approval screen's labels are only what's at stake: why narada asks (your

@@ -465,7 +465,7 @@ func (a *App) syncChat(ctx context.Context, c *google.Client, acc store.Account)
 		active := google.ParseTime(gs.LastActiveTime)
 		cached, known := cachedSpaces[gs.Name]
 		sp := store.Space{Account: acc.Name, Name: gs.Name, DisplayName: mime.Clean(gs.DisplayName), Type: gs.SpaceType, LastActive: active.UnixMilli(),
-			Threaded: gs.SpaceThreadState == "THREADED_MESSAGES"}
+			Threaded: gs.SpaceThreadState == "THREADED_MESSAGES", Members: gs.MembershipCount.People}
 		// a DM or group without a title: work one out, but a failed try
 		// waits 6 hours (each costs Google calls on every sync otherwise)
 		if sp.DisplayName == "" && (!known || cached.DisplayName == "" || strings.Contains(cached.DisplayName, "user ")) &&
