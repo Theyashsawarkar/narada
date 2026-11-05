@@ -16,6 +16,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/fake"
 	"github.com/Theyashsawarkar/narada/internal/mcpserver"
 	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 func session(t *testing.T) (*app.App, *fake.Server, *mcp.ClientSession) {
@@ -281,6 +282,17 @@ func TestWhatsAppTools(t *testing.T) {
 	}
 	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "forward": "nope"}); !strings.Contains(out, "no message") {
 		t.Fatalf("forward of nothing: %q", out)
+	}
+	// what you did to a chat shows, and the status chat doesn't
+	if err := a.MuteWhatsApp(ctx, "120363000000000001@g.us", 0, false); err != nil {
+		t.Fatal(err)
+	}
+	w.Receive(whatsapp.Message{ID: "S1", Chat: whatsapp.StatusChat, Sender: "919800000002@s.whatsapp.net", Text: "At the top!"})
+	if out = call(t, cs, "whatsapp_chats", nil); !strings.Contains(out, "muted") || strings.Contains(out, whatsapp.StatusChat) {
+		t.Fatalf("whatsapp_chats: %s", out)
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": whatsapp.StatusChat, "text": "hi all"}); !strings.Contains(out, "status") || !strings.HasPrefix(out, "ERROR") {
+		t.Fatalf("an agent reached the status chat: %q", out)
 	}
 	// a place and a contact card, behind approval
 	go approveNext()

@@ -16,8 +16,11 @@ Two mechanisms already existed: the outbox (ADR 3), which every send goes throug
 - **Delete for me** stays on this machine. WhatsApp syncs it between devices through app state that whatsmeow doesn't build; deleting here is what a person expects of "for me".
 - Agents get forwarding (as a `forward` argument of `whatsapp_send`, under approval) and polls, locations and contacts as they come; editing, deleting, chat state and group administration stay with the user, in the screen and the command line.
 
+- **An action is kept with its own status (`queued-action`)**, which reads as `queued` in this version. A narada from before this decision would otherwise deliver one as an ordinary message, sending its text to real people: during an upgrade the daemon or an agent's `narada mcp` can still be the older binary. Older binaries can't see these rows, so an action waits for a process that understands it. Migrations don't cover this, because the older binary is already running.
+
 ## Consequences
 
 - One send path remains: nothing new talks to WhatsApp outside the process holding it, and nothing an agent does reaches other people without passing the send policy.
 - Edits and deletions take the outbox's round trip (a second or so with the daemon running) before they show; narada shows them when WhatsApp has them, not before.
 - A queued chat-state change made while no narada is online waits until one is, as read receipts already do.
+- After an upgrade, actions wait until the process holding WhatsApp is the new binary, so the daemon has to be restarted. An agent's action still waiting for approval could be approved from a screen left open on the older binary, which would queue it as an ordinary send: restart those too.

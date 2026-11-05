@@ -1,7 +1,7 @@
 // Package whatsapp links narada to a WhatsApp account as a companion
 // device, the way WhatsApp Web is linked, through whatsmeow. It turns
 // WhatsApp's events into plain chats and messages for the app layer and
-// sends text; it keeps nothing itself except whatsmeow's device keys
+// does what the app asks; it keeps nothing itself except whatsmeow's device keys
 // (whatsapp.db). See docs/adr/0005-whatsapp-as-a-linked-device.md.
 package whatsapp
 

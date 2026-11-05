@@ -617,6 +617,9 @@ func waGroup(a *app.App, args []string) error {
 		fmt.Printf("\n%d people:\n", len(info.People))
 		for _, p := range info.People {
 			name, _, _ := a.Store.User(store.WhatsAppAccount, p.JID)
+			if wa, _ := a.Store.WhatsApp(); p.JID == wa.ChatUser {
+				name = "You"
+			}
 			role := ""
 			switch {
 			case p.Owner:

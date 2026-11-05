@@ -1442,7 +1442,7 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				sp, _ := m.curSpace()
 				m.editingMsg = ""
 				a := m.a
-				return m, m.act("edited", func(ctx context.Context) error { return a.EditChatMessage(ctx, sp.Account, name, text) })
+				return m, m.act(map[bool]string{true: "editing…", false: "edited"}[m.wa], func(ctx context.Context) error { return a.EditChatMessage(ctx, sp.Account, name, text) })
 			}
 			if sp, ok := m.curSpace(); ok && (text != "" || len(m.chatFiles) > 0) {
 				if m.wa {
@@ -1928,7 +1928,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 						return err
 					})
 				}
-				return m, m.act("deleted", func(ctx context.Context) error { return a.DeleteChatMessage(ctx, c.Account, c.Name) })
+				return m, m.act(map[bool]string{true: "deleting…", false: "deleted"}[m.wa], func(ctx context.Context) error { return a.DeleteChatMessage(ctx, c.Account, c.Name) })
 			}
 			return m, nil
 		}

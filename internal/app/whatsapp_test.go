@@ -1179,6 +1179,14 @@ func TestWhatsAppStatus(t *testing.T) {
 	if _, err := a.PostWhatsAppStatus("  ", nil); err == nil {
 		t.Fatal("an empty status")
 	}
+	// looking tells nobody
+	if err := a.MarkSpaceRead(ctx, store.WhatsAppAccount, whatsapp.StatusChat); err != nil {
+		t.Fatal(err)
+	}
+	a.DeliverDue(ctx)
+	if len(w.Read) != 0 {
+		t.Fatalf("a read receipt for a status: %v", w.Read)
+	}
 	// a day on, they're gone
 	_ = a.Store.DeleteChatOlderThan(store.WhatsAppAccount, whatsapp.StatusChat, time.Now().Add(time.Hour).UnixMilli())
 	if msgs, _ := a.Store.ChatMessages(store.WhatsAppAccount, whatsapp.StatusChat, 0); len(msgs) != 0 {

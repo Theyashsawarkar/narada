@@ -64,6 +64,13 @@ Newest first.
   messages show 📌. A `.webp` now goes as a sticker, not a photo.
 - An agent's forward, poll, vote, place, contact or pin can't be changed in the
   approval: approve it as it is, or decline it. Edit still works on its text messages.
+- **A big WhatsApp file no longer shows as failed while it uploads.** Every narada
+  process marked a send stuck after a minute, so a long upload read `failed`
+  ("interrupted") until it finished, and retrying then would send it twice. A WhatsApp
+  file now gets two hours.
+- After upgrading, restart the background service (`systemctl --user restart narada`) and any
+  agent running `narada mcp`: edits, deletions, forwards, polls and the like wait for
+  a narada that understands them.
 - These go through a queue that the narada holding WhatsApp works off (ADR 7), so they
   work beside the daemon.
 

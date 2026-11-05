@@ -19,6 +19,13 @@ const (
 	StatusFailed    = "failed"
 )
 
+// statusQueuedAction is how a queued WhatsApp action (Outgoing.Action) is
+// kept. narada before ADR 7 knows nothing of actions and would send one's
+// Body as a plain message to real people, so a binary still running from
+// before an upgrade must not see it as queued. It reads as StatusQueued
+// everywhere in this version.
+const statusQueuedAction = "queued-action"
+
 // Outgoing is what is sent: a mail or a chat message.
 type Outgoing struct {
 	// mail
@@ -113,8 +120,12 @@ type OutboxItem struct {
 
 func (s *Store) AddOutbox(it OutboxItem) (int64, error) {
 	payload, _ := json.Marshal(it.Out)
+	status := it.Status
+	if status == StatusQueued && it.Out.Action != "" {
+		status = statusQueuedAction
+	}
 	res, err := s.db.Exec(`INSERT INTO outbox(account,kind,payload,status,send_at,created,origin,reason) VALUES(?,?,?,?,?,?,?,?)`,
-		it.Account, it.Kind, string(payload), it.Status, it.SendAt, now(), it.Origin, it.Reason)
+		it.Account, it.Kind, string(payload), status, it.SendAt, now(), it.Origin, it.Reason)
 	if err != nil {
 		return 0, err
 	}
@@ -133,6 +144,9 @@ func scanOutbox(rows *sql.Rows) ([]OutboxItem, error) {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(payload), &it.Out)
+		if it.Status == statusQueuedAction {
+			it.Status = StatusQueued
+		}
 		out = append(out, it)
 	}
 	return out, rows.Err()
@@ -166,6 +180,10 @@ func (s *Store) Outbox(statuses ...string) ([]OutboxItem, error) {
 			}
 			q += "?"
 			args = append(args, st)
+			if st == StatusQueued {
+				q += ",?"
+				args = append(args, statusQueuedAction)
+			}
 		}
 		q += `)`
 	} else {
@@ -183,7 +201,13 @@ func (s *Store) Outbox(statuses ...string) ([]OutboxItem, error) {
 // Transition moves an item from one status to another; false when it was
 // no longer in `from` (someone else got there first).
 func (s *Store) Transition(id int64, from, to string, sendAt int64) (bool, error) {
-	res, err := s.db.Exec(`UPDATE outbox SET status=?, send_at=CASE WHEN ?>0 THEN ? ELSE send_at END WHERE id=? AND status=?`, to, sendAt, sendAt, id, from)
+	also := from
+	if from == StatusQueued {
+		also = statusQueuedAction
+	}
+	res, err := s.db.Exec(`UPDATE outbox SET status=CASE WHEN ?=? AND json_extract(payload,'$.action') IS NOT NULL THEN ? ELSE ? END,
+	  send_at=CASE WHEN ?>0 THEN ? ELSE send_at END WHERE id=? AND status IN (?,?)`,
+		to, StatusQueued, statusQueuedAction, to, sendAt, sendAt, id, from, also)
 	if err != nil {
 		return false, err
 	}
@@ -204,7 +228,7 @@ func (s *Store) FinishOutbox(id int64, status, errMsg, result string) error {
 
 // DueOutbox: queued items whose undo window is over.
 func (s *Store) DueOutbox() ([]OutboxItem, error) {
-	rows, err := s.db.Query(`SELECT `+outboxCols+` FROM outbox WHERE status=? AND send_at<=?`, StatusQueued, now())
+	rows, err := s.db.Query(`SELECT `+outboxCols+` FROM outbox WHERE status IN (?,?) AND send_at<=?`, StatusQueued, statusQueuedAction, now())
 	if err != nil {
 		return nil, err
 	}
@@ -212,17 +236,20 @@ func (s *Store) DueOutbox() ([]OutboxItem, error) {
 }
 
 // RecoverSending puts items stuck in "sending" (a process died mid-send)
-// older than a minute back to failed, so they are visible, not lost.
+// older than a minute back to failed, so they are visible, not lost. Every
+// process calls it, so a WhatsApp file (up to 2 GB, uploading for a while)
+// gets two hours before it counts as stuck.
 func (s *Store) RecoverSending() error {
-	_, err := s.db.Exec(`UPDATE outbox SET status=?, error='interrupted while sending; check Sent before retrying' WHERE status=? AND send_at < ?`,
-		StatusFailed, StatusSending, time.Now().Add(-time.Minute).UnixMilli())
+	_, err := s.db.Exec(`UPDATE outbox SET status=?, error='interrupted while sending; check Sent before retrying' WHERE status=? AND send_at < ?
+	  AND (kind<>'whatsapp' OR json_array_length(payload,'$.files') IS NULL OR json_array_length(payload,'$.files')=0 OR send_at < ?)`,
+		StatusFailed, StatusSending, time.Now().Add(-time.Minute).UnixMilli(), time.Now().Add(-2*time.Hour).UnixMilli())
 	return err
 }
 
 // Reschedule moves a waiting send to another time (and its payload too).
 func (s *Store) Reschedule(id int64, out Outgoing, at int64) (bool, error) {
 	payload, _ := json.Marshal(out)
-	res, err := s.db.Exec(`UPDATE outbox SET send_at=?, payload=? WHERE id=? AND status=?`, at, string(payload), id, StatusQueued)
+	res, err := s.db.Exec(`UPDATE outbox SET send_at=?, payload=? WHERE id=? AND status IN (?,?)`, at, string(payload), id, StatusQueued, statusQueuedAction)
 	if err != nil {
 		return false, err
 	}

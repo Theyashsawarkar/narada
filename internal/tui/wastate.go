@@ -128,9 +128,6 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 	if sp.Type == store.TypeStatus {
 		switch s {
 		case "i", "r", "U", "c", "e", "p", "M", "Z", "B", "X", "I", "n", "f", "R", "P":
-			if m.pickingMsg() && s == "e" {
-				break
-			}
 			m.say("people's statuses are to look at: narada whatsapp status post posts yours")
 			return m, nil, true
 		}
@@ -206,6 +203,9 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 			fmt.Fprintf(&b, "%d people:\n", len(info.People))
 			for _, p := range info.People {
 				name, _, _ := a.Store.User(store.WhatsAppAccount, p.JID)
+				if wa, _ := a.Store.WhatsApp(); p.JID == wa.ChatUser {
+					name = "You"
+				}
 				role := ""
 				if p.Owner {
 					role = " · owner"

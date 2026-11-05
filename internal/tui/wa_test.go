@@ -265,7 +265,7 @@ func TestGroupInfoKey(t *testing.T) {
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("I")})
 	m = nm.(Model)
 	msg, ok := cmd().(aiMsg)
-	if !ok || msg.err != nil || !strings.Contains(msg.text, "4 people") || !strings.Contains(msg.text, "Ravi Kulkarni") {
+	if !ok || msg.err != nil || !strings.Contains(msg.text, "4 people") || !strings.Contains(msg.text, "Ravi Kulkarni") || !strings.Contains(msg.text, "You +919876500000 · owner") {
 		t.Fatalf("%+v", msg)
 	}
 }

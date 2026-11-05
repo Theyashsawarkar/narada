@@ -271,15 +271,15 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `e` (picking) | Toggle a reaction on the picked message (yours are marked ✓; picking one removes it) |
 | `E` (picking) | Edit your picked message in the message box (WhatsApp: within 15 minutes) |
 | `d d` (picking) | Delete your picked message, for everyone (WhatsApp: someone else's is deleted for you, here only) |
-| `f` (picking, WhatsApp) | Forward the picked message to another chat (type a contact, group or number) |
-| `P` (picking, WhatsApp poll) | Vote in the picked poll (type the option numbers; empty takes your vote back) |
+| `f` (picking, WhatsApp) | Send the picked message to another chat (forward; type a contact, group or number) |
+| `P` (picking, WhatsApp poll) | Set your vote in the picked poll (type the option numbers; empty takes it back) |
 | `R` (picking, WhatsApp group) | Send a private reply to the picked group message (in your chat with its sender, quoting it) |
 | `p` | Toggle the chat pinned on top of the list (WhatsApp: on your phone too, three at most) |
 | `e` (WhatsApp) | Move the chat into Archived, or back out of it (archive; your phone follows) |
-| `Z` (WhatsApp) | Mute the chat for 8 hours (again: a week, then always, then unmuted) |
+| `Z` (WhatsApp) | Set the chat muted for 8 hours (mute; again: a week, then always, then unmuted) |
 | `X` (WhatsApp) | Set the chat's messages to disappear after 24 hours (again: 7 days, 90 days, then off) |
 | `I` (WhatsApp group) | Show the group's people, admins and description |
-| `B` (WhatsApp) | Block the person in this chat (B twice; again unblocks) |
+| `B` (WhatsApp) | Set the person in this chat as blocked (block; B twice; again unblocks) |
 | `p` (picking, WhatsApp) | Toggle the picked message pinned in the chat, for everyone, for a week |
 | `*` (picking, WhatsApp) | Toggle a star on the picked message (your phone follows) |
 | `[` / `]` | Switch to the previous / next chat (staying in the conversation) |
@@ -565,6 +565,9 @@ line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
 notify like chat DMs. The background service keeps WhatsApp online; without
 it, whichever narada is open (the screen, `narada mcp`) holds the
 connection.
+
+[docs/whatsapp-parity.md](docs/whatsapp-parity.md) lists what narada does
+next to WhatsApp Web, what's left and what a linked device can't do.
 
 **Know the risk.** WhatsApp doesn't allow programs other than its own to
 link to an account. This works the same way WhatsApp Web does (through
