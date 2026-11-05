@@ -11,6 +11,7 @@ import (
 
 	"github.com/Theyashsawarkar/narada/internal/app"
 	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/render"
 	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
@@ -419,6 +420,10 @@ func (m Model) outgoingView(kind string, out store.Outgoing, note string, w int)
 		lines = append(lines, ansi.Truncate(s.muted.Render(fmt.Sprintf("%-8s", "File"))+s.peach.Render("📎 "+name)+s.muted.Render(info), w, "…"))
 	}
 	lines = append(lines, s.muted.Render(strings.Repeat("─", min(w, 60))))
+	if strings.TrimSpace(out.HTML) != "" { // as it will show: its tables and formatting
+		lines = append(lines, render.HTML(out.HTML, w, renderStylesOf(s), true).Lines...)
+		return strings.Join(lines, "\n")
+	}
 	for _, l := range wrap(out.Body, w) {
 		if strings.HasPrefix(l, ">") {
 			lines = append(lines, s.muted.Render(l))

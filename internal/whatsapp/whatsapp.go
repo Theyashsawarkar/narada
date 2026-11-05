@@ -69,16 +69,23 @@ type Chat struct {
 
 // Event is what the connection hears. Exactly one part is set.
 type Event struct {
-	Messages []Message // new ones, or a page of history
-	History  bool      // Messages came from the phone's history
-	Progress int       // with History: how far the phone's sending of it is, 0-100 (0: unknown)
-	Chats    []Chat    // names and unread counts
-	Read     string    // a chat read on another device ...
-	ReadAt   time.Time // ... up to this time
-	Contacts map[string]string
-	Ticks    *Ticks // receipts for messages you sent
-	State    string // connected, disconnected, logged-out, replaced, banned
-	Err      error
+	Messages  []Message // new ones, or a page of history
+	History   bool      // Messages came from the phone's history
+	Progress  int       // with History: how far the phone's sending of it is, 0-100 (0: unknown)
+	Chats     []Chat    // names and unread counts
+	Read      string    // a chat read on another device ...
+	ReadAt    time.Time // ... up to this time
+	Contacts  map[string]string
+	Ticks     *Ticks     // receipts for messages you sent
+	Reactions []Reaction // someone reacted, or took a reaction back
+	State     string     // connected, disconnected, logged-out, replaced, banned
+	Err       error
+}
+
+// Reaction is one person's reaction to a message; an empty Emoji takes it back.
+type Reaction struct {
+	Chat, Msg, Reactor, Emoji string
+	FromMe                    bool
 }
 
 // Client is a WhatsApp account linked to this machine.
@@ -267,6 +274,21 @@ func (cl *Client) Send(ctx context.Context, chat, text string, quote *Message) (
 	return resp.ID, nil
 }
 
+// React puts your reaction on a message: sender is who wrote it. An empty
+// emoji takes your reaction back.
+func (cl *Client) React(ctx context.Context, chat, sender, id, emoji string) error {
+	to, err := types.ParseJID(chat)
+	if err != nil {
+		return fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
+	}
+	from, err := types.ParseJID(sender)
+	if err != nil {
+		return fmt.Errorf("%q is not a WhatsApp sender: %w", sender, err)
+	}
+	_, err = cl.c.SendMessage(ctx, to, cl.c.BuildReaction(to, from, id, emoji))
+	return err
+}
+
 // MarkRead tells the sender (and your other devices) that these
 // messages of one chat were read.
 func (cl *Client) MarkRead(ctx context.Context, chat string, msgs []Message) error {
@@ -359,7 +381,9 @@ func (cl *Client) event(evt any) {
 	case *events.TemporaryBan:
 		cl.emit(Event{State: "banned", Err: errors.New(e.String())})
 	case *events.Message:
-		if m, ok := cl.convert(ctx, e); ok {
+		if r, ok := cl.reaction(ctx, e); ok {
+			cl.emit(Event{Reactions: []Reaction{r}})
+		} else if m, ok := cl.convert(ctx, e); ok {
 			cl.emit(Event{Messages: []Message{m}})
 		}
 	case *events.HistorySync:
@@ -472,6 +496,7 @@ func (cl *Client) contacts(ctx context.Context) map[string]string {
 func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 	var chats []Chat
 	var msgs []Message
+	var reactions []Reaction
 	for _, conv := range e.Data.GetConversations() {
 		jid, err := types.ParseJID(conv.GetID())
 		if err != nil || Hidden(jid.String()) || jid.Server == types.BroadcastServer || jid.Server == types.NewsletterServer {
@@ -490,6 +515,16 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 					m.Ticks = historyTicks(int(hm.GetMessage().GetStatus()), ch.Group)
 				}
 				msgs = append(msgs, m)
+				for _, r := range hm.GetMessage().GetReactions() { // the reactions it had
+					reactor, fromMe := r.GetKey().GetParticipant(), r.GetKey().GetFromMe()
+					if !ch.Group && reactor == "" {
+						reactor = ch.JID
+					}
+					if j, err := types.ParseJID(reactor); err == nil && reactor != "" {
+						reactor = cl.chatJID(ctx, j)
+					}
+					reactions = append(reactions, Reaction{Chat: m.Chat, Msg: m.ID, Reactor: reactor, Emoji: r.GetText(), FromMe: fromMe})
+				}
 			}
 		}
 	}
@@ -500,7 +535,30 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 	if len(msgs) > 0 || len(chats) == 0 {
 		cl.emit(Event{Messages: msgs, History: true, Progress: pct})
 	}
+	if len(reactions) > 0 {
+		cl.emit(Event{Reactions: reactions})
+	}
 	cl.emit(Event{Contacts: cl.contacts(ctx)})
+}
+
+// reaction is a message that's someone's reaction, as ours.
+func (cl *Client) reaction(ctx context.Context, e *events.Message) (Reaction, bool) {
+	r := e.Message.GetReactionMessage()
+	if r == nil {
+		return Reaction{}, false
+	}
+	info := e.Info
+	sender, chat := info.Sender, info.Chat
+	if sender.Server == types.HiddenUserServer && info.SenderAlt.Server == types.DefaultUserServer {
+		sender = info.SenderAlt
+	}
+	if chat.Server == types.HiddenUserServer {
+		if alt := firstPN(info.SenderAlt, info.RecipientAlt); !alt.IsEmpty() && !info.IsGroup {
+			chat = alt
+		}
+	}
+	return Reaction{Chat: cl.chatJID(ctx, chat), Msg: r.GetKey().GetID(), Reactor: cl.chatJID(ctx, sender),
+		Emoji: r.GetText(), FromMe: info.IsFromMe}, true
 }
 
 // convert turns a whatsmeow message into ours; ok is false for what

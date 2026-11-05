@@ -32,6 +32,7 @@ type WhatsApp struct {
 
 	Sent    []whatsapp.Message // what narada sent, in order
 	Read    []string           // chats narada sent read receipts for
+	Reacted []string           // reactions sent: "chat/id sender emoji"
 	ReadErr error              // MarkRead fails with this
 	SendErr error              // Send fails with this
 	Groups  map[string]string  // group JID → name
@@ -226,6 +227,16 @@ func (c *WhatsAppConn) Download(ctx context.Context, raw []byte) ([]byte, error)
 	return nil, errors.New("no such file on the fake WhatsApp")
 }
 
+func (c *WhatsAppConn) React(ctx context.Context, chat, sender, id, emoji string) error {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	if c.w.SendErr != nil {
+		return c.w.SendErr
+	}
+	c.w.Reacted = append(c.w.Reacted, chat+"/"+id+" "+sender+" "+emoji)
+	return nil
+}
+
 func (c *WhatsAppConn) MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error {
 	c.w.mu.Lock()
 	defer c.w.mu.Unlock()
@@ -348,4 +359,14 @@ func demoGIF() []byte {
 	var b bytes.Buffer
 	_ = gif.EncodeAll(&b, &g)
 	return b.Bytes()
+}
+
+// ReceiveReaction is someone reacting to a message (or taking a reaction back).
+func (w *WhatsApp) ReceiveReaction(r whatsapp.Reaction) {
+	w.mu.Lock()
+	h := w.handler
+	w.mu.Unlock()
+	if h != nil {
+		h(whatsapp.Event{Reactions: []whatsapp.Reaction{r}})
+	}
 }

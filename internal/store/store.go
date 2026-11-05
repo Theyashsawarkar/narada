@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS outbox (
   status TEXT NOT NULL, send_at INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, origin TEXT NOT NULL DEFAULT 'you',
   reason TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS notified (account TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY (account, key));
+CREATE TABLE IF NOT EXISTS whatsapp_reactions (space TEXT NOT NULL, msg TEXT NOT NULL, reactor TEXT NOT NULL, emoji TEXT NOT NULL,
+  sender TEXT NOT NULL DEFAULT '', pending INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (space, msg, reactor));
 CREATE TABLE IF NOT EXISTS whatsapp_reads (space TEXT NOT NULL, msg TEXT NOT NULL, sender TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL,
   PRIMARY KEY (space, msg));
 `
@@ -957,6 +960,89 @@ func PendingOutboxID(name string) (int64, bool) {
 // SetTicks sets a message's ticks (RaiseTicks is for receipts).
 func (s *Store) SetTicks(account, name string, level int) error {
 	_, err := s.db.Exec(`UPDATE chat_messages SET ticks=? WHERE account=? AND name=?`, level, account, name)
+	return err
+}
+
+// WhatsAppReaction is one person's reaction to a message (WhatsApp allows one
+// each). Sender is who wrote the message, and Pending says it hasn't reached
+// WhatsApp yet: only the process holding the connection can send it. An
+// empty Emoji is a reaction being taken back.
+type WhatsAppReaction struct {
+	Space, Msg, Reactor, Emoji, Sender string
+	Pending                            bool
+}
+
+// SetWhatsAppReaction stores a reaction, or forgets one taken back.
+func (s *Store) SetWhatsAppReaction(r WhatsAppReaction) error {
+	if r.Emoji == "" && !r.Pending {
+		_, err := s.db.Exec(`DELETE FROM whatsapp_reactions WHERE space=? AND msg=? AND reactor=?`, r.Space, r.Msg, r.Reactor)
+		return err
+	}
+	_, err := s.db.Exec(`INSERT INTO whatsapp_reactions(space,msg,reactor,emoji,sender,pending,created) VALUES(?,?,?,?,?,?,?)
+	  ON CONFLICT(space,msg,reactor) DO UPDATE SET emoji=excluded.emoji, sender=excluded.sender, pending=excluded.pending, created=excluded.created`,
+		r.Space, r.Msg, r.Reactor, r.Emoji, r.Sender, r.Pending, time.Now().UnixMilli())
+	return err
+}
+
+// WhatsAppReactionOf is one person's reaction to a message ("" when none).
+func (s *Store) WhatsAppReactionOf(space, msg, reactor string) (string, error) {
+	var e string
+	err := s.db.QueryRow(`SELECT emoji FROM whatsapp_reactions WHERE space=? AND msg=? AND reactor=?`, space, msg, reactor).Scan(&e)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return e, err
+}
+
+// WhatsAppReactionSummary is a message's reactions as chats show them:
+// "👍 2 · 😂 1", most used first.
+func (s *Store) WhatsAppReactionSummary(space, msg string) (string, error) {
+	rows, err := s.db.Query(`SELECT emoji, COUNT(*) FROM whatsapp_reactions WHERE space=? AND msg=? AND emoji!='' GROUP BY emoji ORDER BY COUNT(*) DESC, MIN(created)`, space, msg)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var parts []string
+	for rows.Next() {
+		var e string
+		var n int
+		if err := rows.Scan(&e, &n); err != nil {
+			return "", err
+		}
+		parts = append(parts, fmt.Sprintf("%s %d", e, n))
+	}
+	return strings.Join(parts, " · "), rows.Err()
+}
+
+// PendingWhatsAppReactions are your reactions still to send, dropping those
+// older than maxAge.
+func (s *Store) PendingWhatsAppReactions(maxAge time.Duration) ([]WhatsAppReaction, error) {
+	if _, err := s.db.Exec(`DELETE FROM whatsapp_reactions WHERE pending=1 AND created<?`, time.Now().Add(-maxAge).UnixMilli()); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT space,msg,reactor,emoji,sender FROM whatsapp_reactions WHERE pending=1 ORDER BY created`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WhatsAppReaction
+	for rows.Next() {
+		r := WhatsAppReaction{Pending: true}
+		if err := rows.Scan(&r.Space, &r.Msg, &r.Reactor, &r.Emoji, &r.Sender); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// WhatsAppReactionSent: it reached WhatsApp, unless you changed it since.
+func (s *Store) WhatsAppReactionSent(r WhatsAppReaction) error {
+	if r.Emoji == "" {
+		_, err := s.db.Exec(`DELETE FROM whatsapp_reactions WHERE space=? AND msg=? AND reactor=? AND emoji='' AND pending=1`, r.Space, r.Msg, r.Reactor)
+		return err
+	}
+	_, err := s.db.Exec(`UPDATE whatsapp_reactions SET pending=0 WHERE space=? AND msg=? AND reactor=? AND emoji=?`, r.Space, r.Msg, r.Reactor, r.Emoji)
 	return err
 }
 

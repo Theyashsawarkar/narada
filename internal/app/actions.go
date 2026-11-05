@@ -282,6 +282,13 @@ func chatWrite(err error) error {
 
 // MyReactions: the emoji you've reacted with on a message.
 func (a *App) MyReactions(ctx context.Context, account, msg string) ([]string, error) {
+	if account == store.WhatsAppAccount {
+		_, _, mine, err := a.myWhatsAppReaction(msg)
+		if err != nil || mine == "" {
+			return nil, err
+		}
+		return []string{mine}, nil
+	}
 	acc, err := a.Store.Account(account)
 	if err != nil {
 		return nil, err
@@ -304,6 +311,9 @@ func (a *App) MyReactions(ctx context.Context, account, msg string) ([]string, e
 // ToggleReaction adds the emoji to a message, or takes yours away when
 // you had already reacted with it. Reports whether it was added.
 func (a *App) ToggleReaction(ctx context.Context, account, msg, emoji string) (bool, error) {
+	if account == store.WhatsAppAccount {
+		return a.toggleWhatsAppReaction(ctx, msg, emoji)
+	}
 	acc, err := a.Store.Account(account)
 	if err != nil {
 		return false, err

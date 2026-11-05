@@ -2159,8 +2159,6 @@ func (m Model) notOnWhatsApp(s string) string {
 	}
 	if m.pickingMsg() {
 		switch s {
-		case "e":
-			return "reacting"
 		case "E":
 			return "editing"
 		case "d":

@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Theyashsawarkar/narada/internal/app"
 	"github.com/Theyashsawarkar/narada/internal/store"
@@ -303,5 +304,19 @@ func TestAIRequestsSection(t *testing.T) {
 	nm, _ = m.normalKey("A")
 	if !strings.Contains(nm.View(), "No AI requests") {
 		t.Fatal("A with nothing waiting moved away")
+	}
+}
+
+// A scheduled mail shows as it will arrive: its table, not flattened text.
+func TestOutgoingViewRendersHTML(t *testing.T) {
+	m := model(t)
+	out := ansi.Strip(m.outgoingView("mail", store.Outgoing{To: []string{"a@example.com"}, Subject: "Report", Body: "Time Tasks 09:00 Standup",
+		HTML: `<table border="1"><tr><th>Time</th><th>Tasks</th></tr><tr><td>09:00</td><td>Standup</td></tr></table>`}, "", 100))
+	if !strings.Contains(out, "│") || !strings.Contains(out, "Standup") || strings.Contains(out, "Time Tasks 09:00") {
+		t.Fatalf("not rendered:\n%s", out)
+	}
+	plain := ansi.Strip(m.outgoingView("mail", store.Outgoing{Body: "just text"}, "", 100))
+	if !strings.Contains(plain, "just text") {
+		t.Fatal(plain)
 	}
 }

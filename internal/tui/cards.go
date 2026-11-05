@@ -74,15 +74,15 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 		row := gutter + fit(l, w+2)
 		if sel {
 			row = " " + fit(l, w+2) // the border takes the gutter's place
-			edge := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
-			row = edge.Render("│") + row + strings.Repeat(" ", max(0, w+2-ansi.StringWidth(row))) + edge.Render("│")
+			edge := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
+			row = edge.Render("┃") + row + strings.Repeat(" ", max(0, w+2-ansi.StringWidth(row))) + edge.Render("┃")
 		}
 		out = append(out, row)
 	}
 	if sel {
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
 		rw := ansi.StringWidth(out[0])
-		return append(out, c.Render("╰"+strings.Repeat("─", max(0, rw-2))+"╯")) // the card's rounded bottom
+		return append(out, c.Render("╰"+strings.Repeat("━", max(0, rw-2))+"╯")) // the card's heavy bottom
 	}
 	return append(out, m.hairline(w))
 }
@@ -95,14 +95,14 @@ func (m Model) appendItem(out, lines []string, w int, border string, sel, dot bo
 		out = append(out, " "+l)
 	}
 	if sel && m.panelList() && start > 0 && (out[start-1] == " "+m.hairline(w) || strings.TrimSpace(ansi.Strip(out[start-1])) == "") {
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
 		rw := ansi.StringWidth(out[start]) - 1
-		out[start-1] = " " + c.Render("╭"+strings.Repeat("─", max(0, rw-2))+"╮") // the card's rounded top
+		out[start-1] = " " + c.Render("╭"+strings.Repeat("━", max(0, rw-2))+"╮") // the card's heavy top
 	} else if sel && m.panelList() {
 		// first in the list or under a label: the top goes in a row of its own
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge()))
+		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
 		rw := ansi.StringWidth(out[start]) - 1
-		top := " " + c.Render("╭"+strings.Repeat("─", max(0, rw-2))+"╮")
+		top := " " + c.Render("╭"+strings.Repeat("━", max(0, rw-2))+"╮")
 		out = append(out[:start], append([]string{top}, out[start:]...)...)
 	}
 	return out
@@ -134,7 +134,7 @@ func (m Model) cardBox(lines []string, w int, border string, sel, dot bool) []st
 	tl, tr, bl, br, hz, vt := "╭", "╮", "╰", "╯", "─", "│"
 	if sel {
 		b = b.Bold(true)
-		vt = "┃" // rounded corners still; heavier sides mark the selection
+		hz, vt = "━", "┃" // heavy lines mark the selection; corners stay round
 	}
 	out := []string{b.Render(tl + strings.Repeat(hz, w+2) + tr)}
 	for i, l := range lines {
@@ -281,7 +281,7 @@ func (m Model) tickText(level int) string {
 }
 
 // chatBubble draws a message in a rounded outline: a soft border for
-// theirs, the accent for yours, brighter when picked. The time (and your
+// theirs, the accent for yours; the picked one is a heavy frame in the bright accent. The time (and your
 // ticks, blue once read) sit at the bottom right inside it.
 func (m Model) chatBubble(lines []string, maxW int, mine, sel bool, stamp string, read bool) []string {
 	s := m.styles
@@ -813,7 +813,7 @@ var reMention = regexp.MustCompile(`@[\p{L}\p{N}_.-]+`)
 // (name and time once), each message a rounded bubble: theirs on the left,
 // yours on the right in the accent colour. Inside: the quote a reply
 // answers, the text (mentions marked, links numbered for o), files, and
-// "edited"; reactions under it. The picked message has a bold border.
+// "edited"; reactions under it. The picked message has a heavy frame and a ▶ beside it.
 func (m *Model) chatLines(w int) []string {
 	m.chatMsgLine = map[string]int{}
 	s := m.styles
@@ -943,12 +943,19 @@ func (m *Model) chatLines(w int) []string {
 			if g.Mine {
 				stamp += m.tickText(g.Ticks)
 			}
-			box := m.chatBubble(lines, bw, g.Mine, sel || g.Name == m.flashMsg, stamp, g.Mine && g.Ticks == 3)
-			for _, l := range box {
+			lit := sel || g.Name == m.flashMsg
+			box := m.chatBubble(lines, bw, g.Mine, lit, stamp, g.Mine && g.Ticks == 3)
+			for n, l := range box {
+				// ▶ beside its first line, in the space left of the frame
+				mark := "  "
+				if lit && n == 1 {
+					mark = s.accent.Bold(true).Render("▶") + " "
+				}
 				if g.Mine {
-					out = append(out, padLeft(l, w))
+					out = append(out, padLeft(mark+l, w))
 				} else {
-					out = append(out, m.indent()+l)
+					ind := m.indent()
+					out = append(out, ind[:len(ind)-min(2, len(ind))]+mark+l)
 				}
 			}
 			if g.Reactions != "" {
@@ -1034,11 +1041,15 @@ func bubble(lines []string, max_ int, color string, bold bool) []string {
 		iw = max(iw, lipgloss.Width(l))
 	}
 	iw = min(iw, max_-4)
-	out := []string{b.Render("╭" + strings.Repeat("─", iw+2) + "╮")}
-	for _, l := range lines {
-		out = append(out, b.Render("│")+" "+fit(l, iw)+" "+b.Render("│"))
+	tl, tr, bl, br, hz, vt := "╭", "╮", "╰", "╯", "─", "│"
+	if bold { // the picked one: heavy lines, seen at a glance; corners stay round (Unicode has no heavy arc)
+		hz, vt = "━", "┃"
 	}
-	return append(out, b.Render("╰"+strings.Repeat("─", iw+2)+"╯"))
+	out := []string{b.Render(tl + strings.Repeat(hz, iw+2) + tr)}
+	for _, l := range lines {
+		out = append(out, b.Render(vt)+" "+fit(l, iw)+" "+b.Render(vt))
+	}
+	return append(out, b.Render(bl+strings.Repeat(hz, iw+2)+br))
 }
 
 func divider(label string, w int, st lipgloss.Style) string {

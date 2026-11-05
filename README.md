@@ -516,6 +516,8 @@ device in and sent your recent chats (up to two minutes), then hands over
 to the background service. `Tab` in the screen now
 goes Mail → Chat → WhatsApp, with sections All, Unread, People, Groups and
 Scheduled; `i` types a message, `r` on a picked message replies quoting it,
+`e` reacts to it (one reaction each, as on the phone: another replaces yours,
+picking yours again takes it back, and other people's show under their messages),
 and opening a chat marks it read (the sender sees blue ticks). The status
 line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
 notify like chat DMs. The background service keeps WhatsApp online; without
@@ -563,7 +565,7 @@ Photos from before this feature carry no download details, so they stay a
 "📷 Photo: caption" line until WhatsApp sends them again, which it may do
 when you link anew.
 
-Not yet: reactions, editing and deleting, starting groups.
+Not yet: editing and deleting, starting groups.
 `narada whatsapp unlink` logs this machine out and forgets the chats.
 WhatsApp unlinks devices whose phone has been offline for about two weeks;
 link again then.

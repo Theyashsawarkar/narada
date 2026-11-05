@@ -312,6 +312,7 @@ func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 	_ = a.Store.RecoverSending()
 	a.fetchAsked(ctx)
 	a.flushWhatsAppReads(ctx)
+	a.flushWhatsAppReactions(ctx)
 	due, err := a.Store.DueOutbox()
 	if err != nil {
 		return nil

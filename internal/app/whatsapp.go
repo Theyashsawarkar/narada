@@ -29,6 +29,7 @@ type WhatsAppConn interface {
 	SendFile(ctx context.Context, chat, path, name, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error)
 	Download(ctx context.Context, raw []byte) ([]byte, error)
 	MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error
+	React(ctx context.Context, chat, sender, id, emoji string) error
 	Resolve(ctx context.Context, phone string) (string, error)
 	GroupName(ctx context.Context, chat string) (string, error)
 	Logout(ctx context.Context) error
@@ -250,6 +251,18 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 	const acc = store.WhatsAppAccount
 	wa, _ := a.Store.WhatsApp()
 	switch {
+	case len(e.Reactions) > 0:
+		for _, r := range e.Reactions {
+			reactor := r.Reactor
+			if r.FromMe {
+				reactor = wa.ChatUser
+			}
+			if r.Msg == "" || reactor == "" {
+				continue
+			}
+			_ = a.Store.SetWhatsAppReaction(store.WhatsAppReaction{Space: r.Chat, Msg: r.Msg, Reactor: reactor, Emoji: r.Emoji})
+			a.showWhatsAppReactions(r.Chat, r.Msg)
+		}
 	case e.State != "":
 		switch e.State {
 		case "connected":
@@ -322,6 +335,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			}
 			cm := store.ChatMessage{Account: acc, Name: name, Space: m.Chat, Sender: m.Sender, SenderName: a.waPerson(m.Chat, m.Sender, m.SenderName),
 				Text: m.Text, Created: m.Time.UnixMilli(), Edited: m.Edit}
+			cm.Reactions, _ = a.Store.WhatsAppReactionSummary(m.Chat, m.ID) // putting it again mustn't wipe them
 			if m.FromMe {
 				cm.Sender, cm.SenderName = wa.ChatUser, "You"
 				// sent from the phone: the server has it at least
@@ -462,6 +476,7 @@ func (a *App) markWhatsAppRead(ctx context.Context, space string) error {
 		case <-ctx.Done():
 		}
 		a.flushWhatsAppReads(ctx)
+		a.flushWhatsAppReactions(ctx)
 	}
 	return nil
 }
@@ -477,6 +492,89 @@ func (a *App) queueWhatsAppReads(space string) error {
 		reads = append(reads, store.WhatsAppRead{Space: space, Msg: id, Sender: m.Sender})
 	}
 	return a.Store.AddWhatsAppReads(reads)
+}
+
+// showWhatsAppReactions puts a message's reactions on it, as chats show them.
+func (a *App) showWhatsAppReactions(chat, id string) {
+	if sum, err := a.Store.WhatsAppReactionSummary(chat, id); err == nil {
+		_ = a.Store.SetReactions(store.WhatsAppAccount, waName(chat, id), sum)
+	}
+}
+
+// myWhatsAppReaction is your reaction to a WhatsApp message ("" when none).
+func (a *App) myWhatsAppReaction(msg string) (m store.ChatMessage, id, mine string, err error) {
+	if m, err = a.Store.ChatMessage(store.WhatsAppAccount, msg); err != nil {
+		return m, "", "", err
+	}
+	if store.IsPending(msg) {
+		return m, "", "", errors.New("wait until it has gone out to react to it")
+	}
+	wa, _ := a.Store.WhatsApp()
+	_, id, _ = strings.Cut(strings.TrimPrefix(msg, m.Space), "/")
+	mine, err = a.Store.WhatsAppReactionOf(m.Space, id, wa.ChatUser)
+	return m, id, mine, err
+}
+
+// toggleWhatsAppReaction shows your reaction at once and queues it for the
+// process holding the connection, as read receipts are. WhatsApp allows one
+// reaction each, so a new one replaces yours, and picking yours takes it back.
+func (a *App) toggleWhatsAppReaction(ctx context.Context, msg, emoji string) (bool, error) {
+	m, id, mine, err := a.myWhatsAppReaction(msg)
+	if err != nil {
+		return false, err
+	}
+	wa, _ := a.Store.WhatsApp()
+	add := mine != emoji
+	r := store.WhatsAppReaction{Space: m.Space, Msg: id, Reactor: wa.ChatUser, Sender: m.Sender, Pending: true}
+	if add {
+		r.Emoji = emoji
+	}
+	if err := a.Store.SetWhatsAppReaction(r); err != nil {
+		return false, err
+	}
+	a.showWhatsAppReactions(m.Space, id)
+	if a.whatsApp() != nil {
+		a.waMu.Lock()
+		ready := a.waReady
+		a.waMu.Unlock()
+		select { // a command that just went online is still connecting
+		case <-ready:
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+		}
+		a.flushWhatsAppReactions(ctx)
+	}
+	return add, nil
+}
+
+// flushWhatsAppReactions sends your queued reactions, when this process is
+// online. One that fails stays queued for the next try.
+func (a *App) flushWhatsAppReactions(ctx context.Context) {
+	c := a.whatsApp()
+	if c == nil {
+		return
+	}
+	a.waMu.Lock()
+	ready := a.waReady
+	a.waMu.Unlock()
+	select {
+	case <-ready:
+	default:
+		return // still connecting
+	}
+	rs, err := a.Store.PendingWhatsAppReactions(waReadsKept)
+	if err != nil {
+		return
+	}
+	for _, r := range rs {
+		if err := c.React(ctx, r.Space, r.Sender, r.Msg, r.Emoji); err != nil {
+			if a.waReadErr.Swap(err.Error()) != err.Error() {
+				log.Printf("whatsapp: reaction: %v (will retry)", err)
+			}
+			continue
+		}
+		_ = a.Store.WhatsAppReactionSent(r)
+	}
 }
 
 // waReadsKept: a receipt that couldn't go out for this long is dropped.

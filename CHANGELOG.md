@@ -2,6 +2,17 @@
 
 Newest first.
 
+## v0.9.0 -- 2026-11-05
+
+- **React on WhatsApp**: `e` on a picked message. One reaction each, as on the phone:
+  another replaces yours, and picking yours again takes it back. Other people's
+  reactions now show under their messages too. Yours shows at once and waits for the
+  process holding the connection, retrying if it fails.
+- **You can see which message you're on**: the picked message in a chat or on WhatsApp has a heavy rounded frame in the accent colour and a `▶` beside it, and the picked item in a list has the same frame.
+- Every corner is rounded, on the website's callouts too.
+- **Scheduled and queued mail shows as it will arrive**: its tables and formatting,
+  not flattened text.
+
 ## v0.8.0 -- 2026-11-03
 
 - **Your chat message shows the moment you send it**, in Google Chat and WhatsApp:

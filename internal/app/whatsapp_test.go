@@ -554,3 +554,102 @@ func TestWhatsAppNotOptimistic(t *testing.T) {
 		t.Fatalf("shown: %+v", got)
 	}
 }
+
+// Reacting: yours shows at once and goes out; another replaces it; picking
+// yours takes it back; other people's are counted beside it.
+func TestWhatsAppReactions(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	chat, them, other := "15550001111@s.whatsapp.net", "15550001111@s.whatsapp.net", "15550002222@s.whatsapp.net"
+	w.Receive(whatsapp.Message{ID: "R1", Chat: chat, Sender: them, SenderName: "Courier", Text: "At your door"})
+	name := waName(chat, "R1")
+	const acc = store.WhatsAppAccount
+	summary := func() string {
+		m, err := a.Store.ChatMessage(acc, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m.Reactions
+	}
+	added, err := a.ToggleReaction(ctx, acc, name, "👍")
+	if err != nil || !added || summary() != "👍 1" {
+		t.Fatalf("react: %v %v %q", added, err, summary())
+	}
+	if mine, _ := a.MyReactions(ctx, acc, name); len(mine) != 1 || mine[0] != "👍" {
+		t.Fatalf("mine: %v", mine)
+	}
+	if len(w.Reacted) != 1 || w.Reacted[0] != chat+"/R1 "+them+" 👍" {
+		t.Fatalf("sent: %v", w.Reacted)
+	}
+	// someone else's counts beside it
+	w.ReceiveReaction(whatsapp.Reaction{Chat: chat, Msg: "R1", Reactor: other, Emoji: "👍"})
+	if summary() != "👍 2" {
+		t.Fatalf("theirs: %q", summary())
+	}
+	// another emoji replaces yours: one each, as on the phone
+	if added, err = a.ToggleReaction(ctx, acc, name, "🔥"); err != nil || !added || summary() != "👍 1 · 🔥 1" {
+		t.Fatalf("replace: %v %v %q", added, err, summary())
+	}
+	// the message arriving again (an edit, history) doesn't wipe them
+	w.Receive(whatsapp.Message{ID: "R1", Chat: chat, Sender: them, SenderName: "Courier", Text: "At your door!", Edit: true})
+	if summary() != "👍 1 · 🔥 1" {
+		t.Fatalf("after an edit: %q", summary())
+	}
+	// picking yours takes it back: WhatsApp gets an empty reaction
+	if added, err = a.ToggleReaction(ctx, acc, name, "🔥"); err != nil || added || summary() != "👍 1" {
+		t.Fatalf("take back: %v %v %q", added, err, summary())
+	}
+	if last := w.Reacted[len(w.Reacted)-1]; !strings.HasSuffix(last, " ") {
+		t.Fatalf("not taken back: %q", last)
+	}
+	// they take theirs back, from their phone
+	w.ReceiveReaction(whatsapp.Reaction{Chat: chat, Msg: "R1", Reactor: other})
+	if summary() != "" {
+		t.Fatalf("all gone: %q", summary())
+	}
+	if pend, _ := a.Store.PendingWhatsAppReactions(waReadsKept); len(pend) != 0 {
+		t.Fatalf("still pending: %v", pend)
+	}
+}
+
+// Without the connection (the daemon holds it) a reaction waits, and a failure retries.
+func TestWhatsAppReactionWaits(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	chat := "15550001111@s.whatsapp.net"
+	w.Receive(whatsapp.Message{ID: "R2", Chat: chat, Sender: chat, SenderName: "Courier", Text: "Hi"})
+	w.SendErr = errors.New("offline")
+	if _, err := a.ToggleReaction(ctx, store.WhatsAppAccount, waName(chat, "R2"), "❤️"); err != nil {
+		t.Fatal(err)
+	}
+	if pend, _ := a.Store.PendingWhatsAppReactions(waReadsKept); len(pend) != 1 {
+		t.Fatalf("not kept for later: %v", pend)
+	}
+	w.SendErr = nil
+	a.flushWhatsAppReactions(ctx)
+	if pend, _ := a.Store.PendingWhatsAppReactions(waReadsKept); len(pend) != 0 || len(w.Reacted) != 1 {
+		t.Fatalf("not sent: %v %v", pend, w.Reacted)
+	}
+}
+
+func waitReady(t *testing.T, a *App) {
+	t.Helper()
+	a.waMu.Lock()
+	ready := a.waReady
+	a.waMu.Unlock()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("WhatsApp didn't connect")
+	}
+}
