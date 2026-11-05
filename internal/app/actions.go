@@ -16,6 +16,7 @@ import (
 
 	"github.com/Theyashsawarkar/narada/internal/config"
 	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 // Mail actions change the local copy first (the screen reacts at once),
@@ -107,7 +108,8 @@ func (a *App) MarkSpaceUnread(ctx context.Context, account, space string) error 
 		return err
 	}
 	if account == store.WhatsAppAccount {
-		return nil // only here: linked devices can't mark unread
+		_, err := a.WhatsAppDo(ctx, whatsapp.DoUnread, space, "1", 0) // your phone shows it unread too
+		return err
 	}
 	c, err := a.Client(account)
 	if err != nil {

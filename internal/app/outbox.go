@@ -329,6 +329,7 @@ func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 	a.fetchAsked(ctx)
 	a.flushWhatsAppReads(ctx)
 	a.flushWhatsAppReactions(ctx)
+	a.flushWhatsAppActions(ctx)
 	due, err := a.Store.DueOutbox()
 	if err != nil {
 		return nil

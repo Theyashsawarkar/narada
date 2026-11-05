@@ -3,6 +3,7 @@ package fake
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -30,16 +31,19 @@ type WhatsApp struct {
 	handler func(whatsapp.Event)
 	nextID  int
 
-	Sent    []whatsapp.Message // what narada sent, in order
-	Read    []string           // chats narada sent read receipts for
-	Reacted []string           // reactions sent: "chat/id sender emoji"
-	Edited  []string           // edits sent: "chat/id new text"
-	Revoked []string           // deleted for everyone: "chat/id"
-	Quotes  []whatsapp.Message // what each send that replied quoted
-	ReadErr error              // MarkRead fails with this
-	SendErr error              // Send fails with this
-	Groups  map[string]string  // group JID → name
-	People  map[string]string  // JID → contact name
+	Sent    []whatsapp.Message  // what narada sent, in order
+	Read    []string            // chats narada sent read receipts for
+	Reacted []string            // reactions sent: "chat/id sender emoji"
+	Edited  []string            // edits sent: "chat/id new text"
+	Revoked []string            // deleted for everyone: "chat/id"
+	Quotes  []whatsapp.Message  // what each send that replied quoted
+	Did     []string            // chat-state, presence and group actions: "action chat arg"
+	DoErr   error               // Do fails with this
+	Members map[string][]string // group JID → its people
+	ReadErr error               // MarkRead fails with this
+	SendErr error               // Send fails with this
+	Groups  map[string]string   // group JID → name
+	People  map[string]string   // JID → contact name
 	// History is played when narada connects for the first time.
 	History []whatsapp.Message
 	Chats   []whatsapp.Chat
@@ -56,7 +60,8 @@ type WhatsApp struct {
 
 // NewWhatsApp is a fake account with the phone number +91 98765 00000.
 func NewWhatsApp() *WhatsApp {
-	return &WhatsApp{Me: "919876500000@s.whatsapp.net", Groups: map[string]string{}, People: map[string]string{}, Files: map[string][]byte{}}
+	return &WhatsApp{Me: "919876500000@s.whatsapp.net", Groups: map[string]string{}, People: map[string]string{}, Files: map[string][]byte{},
+		Members: map[string][]string{}}
 }
 
 // Conn is what app.DialWhatsApp returns: one linked device of this
@@ -284,6 +289,60 @@ func (c *WhatsAppConn) Forward(ctx context.Context, chat string, m whatsapp.Mess
 	return fw.ID, nil
 }
 
+// Do records the action and answers as WhatsApp would.
+func (c *WhatsAppConn) Do(ctx context.Context, action, chat, arg string) (string, error) {
+	w := c.w
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.DoErr != nil {
+		return "", w.DoErr
+	}
+	w.Did = append(w.Did, strings.TrimSpace(action+" "+chat+" "+arg))
+	if w.Members == nil {
+		w.Members = map[string][]string{}
+	}
+	switch action {
+	case whatsapp.DoGroupNew:
+		var g whatsapp.NewGroup
+		_ = json.Unmarshal([]byte(arg), &g)
+		w.nextID++
+		jid := fmt.Sprintf("1203639000000%05d@g.us", w.nextID)
+		w.Groups[jid] = g.Name
+		w.Members[jid] = append([]string{w.Me}, g.People...)
+		return jid, nil
+	case whatsapp.DoGroupName:
+		w.Groups[chat] = arg
+	case whatsapp.DoGroupAdd:
+		w.Members[chat] = append(w.Members[chat], strings.Split(arg, ",")...)
+	case whatsapp.DoGroupKick:
+		var keep []string
+		for _, p := range w.Members[chat] {
+			if !strings.Contains(","+arg+",", ","+p+",") {
+				keep = append(keep, p)
+			}
+		}
+		w.Members[chat] = keep
+	case whatsapp.DoGroupLink:
+		return "https://chat.whatsapp.com/FAKEINVITE" + map[bool]string{true: "2", false: "1"}[arg == "reset"], nil
+	case whatsapp.DoGroupJoin:
+		jid := "120363000000000777@g.us"
+		w.Groups[jid] = "Joined by link"
+		return jid, nil
+	case whatsapp.DoGroupInfo:
+		name, ok := w.Groups[chat]
+		if !ok {
+			return "", errors.New("no such group")
+		}
+		g := whatsapp.GroupInfo{JID: chat, Name: name}
+		for i, p := range w.Members[chat] {
+			g.People = append(g.People, whatsapp.GroupPerson{JID: p, Admin: i == 0, Owner: i == 0})
+		}
+		b, _ := json.Marshal(g)
+		return string(b), nil
+	}
+	return "", nil
+}
+
 func (c *WhatsAppConn) MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error {
 	c.w.mu.Lock()
 	defer c.w.mu.Unlock()
@@ -328,6 +387,7 @@ func (w *WhatsApp) SeedWhatsApp() {
 	w.People[amma] = "Amma"
 	w.People[ravi] = "Ravi Kulkarni"
 	w.Groups[group] = "Weekend trek"
+	w.Members[group] = []string{w.Me, ravi, "919800000003@s.whatsapp.net", "919800000004@s.whatsapp.net"}
 	at := func(d time.Duration) time.Time { return now.Add(-d) }
 	w.Chats = []whatsapp.Chat{
 		{JID: amma, Last: at(20 * time.Minute), Unread: 2},

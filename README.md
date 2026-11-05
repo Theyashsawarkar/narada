@@ -273,7 +273,11 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `d d` (picking) | Delete your picked message, for everyone (WhatsApp: someone else's is deleted for you, here only) |
 | `f` (picking, WhatsApp) | Forward the picked message to another chat (type a contact, group or number) |
 | `R` (picking, WhatsApp group) | Send a private reply to the picked group message (in your chat with its sender, quoting it) |
-| `p` | Toggle the chat pinned on top of the list |
+| `p` | Toggle the chat pinned on top of the list (WhatsApp: on your phone too, three at most) |
+| `e` (WhatsApp) | Move the chat into Archived, or back out of it (archive; your phone follows) |
+| `Z` (WhatsApp) | Mute the chat for 8 hours (again: a week, then always, then unmuted) |
+| `B` (WhatsApp) | Block the person in this chat (B twice; again unblocks) |
+| `*` (picking, WhatsApp) | Toggle a star on the picked message (your phone follows) |
 | `[` / `]` | Switch to the previous / next chat (staying in the conversation) |
 | `Ctrl+k` | Open the chat switcher (search chats, people and messages) |
 | `Ctrl+o` (typing) | Add a file to the chat message you're typing |
@@ -531,7 +535,15 @@ they gave themselves, and their number only when neither is known,
 deletes it for everyone (someone else's: for you, here only), `f` forwards
 the picked message to another chat, and `R` on someone's message in a group
 replies to them privately, quoting it,
-and opening a chat marks it read (the sender sees blue ticks). The status
+and opening a chat marks it read (the sender sees blue ticks). `e` archives
+a chat (the Archived section has them), `p` pins it (three at most, as
+WhatsApp allows), `M` marks it unread, `Z` mutes it (8 hours, again a week,
+again always, again unmuted; muted chats don't notify), `B B` blocks the
+person, and `*` stars the picked message; all of it reaches your phone, and
+what you change on the phone shows here. While a chat is open, its top line
+says when they're typing (or recording a voice note), online, or when they
+were last seen (if they share it), and they see you typing, as with
+WhatsApp Web. The status
 line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
 notify like chat DMs. The background service keeps WhatsApp online; without
 it, whichever narada is open (the screen, `narada mcp`) holds the
@@ -698,6 +710,10 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
 | `narada whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
 | `narada whatsapp send <to> [text] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--at WHEN] [--link]` | Send one message (`--reply-to`: quoting a message; a group's message sent to a person is a private reply), with files (`--attach`, repeatable, up to 2 GB each; each its own message, the text the first one's caption) and voice notes (`--voice`: an audio file, made Ogg Opus with ffmpeg when it isn't); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
+| `narada whatsapp archive\|unarchive\|pin\|unpin\|unread\|block\|unblock <chat>` | Change a chat, here and on your phone |
+| `narada whatsapp mute <chat> [--for 8h\|1w\|always]` / `unmute <chat>` | Silence a chat's notifications (always by default) |
+| `narada whatsapp star\|unstar <message>` / `starred` | Star a message; list the starred ones |
+| `narada whatsapp list --archived` | The archived chats (left out of `list` otherwise) |
 | `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |
 | `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |
 | `narada whatsapp forward <message> <to>` | Forward a message (text, photo, video, voice note, document); it shows as forwarded |

@@ -48,3 +48,16 @@ func TestParseWhen(t *testing.T) {
 		t.Errorf("SendTime: %q", s)
 	}
 }
+
+func TestParseLength(t *testing.T) {
+	for in, want := range map[string]time.Duration{"8h": 8 * time.Hour, "1w": 7 * 24 * time.Hour, "3d": 72 * time.Hour, "90m": 90 * time.Minute} {
+		if got, err := ParseLength(in); err != nil || got != want {
+			t.Errorf("%s: %v %v", in, got, err)
+		}
+	}
+	for _, bad := range []string{"", "soon", "-1h", "0d"} {
+		if _, err := ParseLength(bad); err == nil {
+			t.Errorf("%q passed", bad)
+		}
+	}
+}

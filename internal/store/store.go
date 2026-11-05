@@ -97,7 +97,7 @@ func Open(path string) (*Store, error) {
 }
 
 // schemaVersion: bump it with a step in migrate.
-const schemaVersion = 15
+const schemaVersion = 16
 
 func migrate(db *sql.DB) error {
 	var v int
@@ -228,6 +228,27 @@ func migrate(db *sql.DB) error {
 		// approval of a send to it
 		if _, err := db.Exec(`ALTER TABLE spaces ADD COLUMN members INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return err
+		}
+	}
+	if v < 16 {
+		// v16: WhatsApp chat state (archived, muted until, ms, -1 for
+		// ever), starred messages, and the queue of WhatsApp actions the
+		// process holding the connection does (ADR 7)
+		for _, q := range []string{
+			`ALTER TABLE spaces ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE spaces ADD COLUMN muted_until INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE chat_messages ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE spaces ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`,
+			`CREATE TABLE IF NOT EXISTS whatsapp_presence (jid TEXT PRIMARY KEY, online INTEGER NOT NULL DEFAULT 0,
+			  last_seen INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL DEFAULT 0, typing_in TEXT NOT NULL DEFAULT '',
+			  typing TEXT NOT NULL DEFAULT '', typing_at INTEGER NOT NULL DEFAULT 0)`,
+			`CREATE TABLE IF NOT EXISTS whatsapp_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, chat TEXT NOT NULL,
+			  arg TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, done INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
+			  result TEXT NOT NULL DEFAULT '')`,
+		} {
+			if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+				return err
+			}
 		}
 	}
 	_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version=%d`, schemaVersion))
@@ -907,11 +928,14 @@ type Space struct {
 	Account     string `json:"account"`
 	Name        string `json:"id"`
 	DisplayName string `json:"name"`
-	Alias       string `json:"alias,omitempty"`    // your own name for it, on this machine
-	Threaded    bool   `json:"threaded,omitempty"` // replies go in threads (else inline)
-	Pinned      bool   `json:"pinned,omitempty"`   // kept on top of the list (on this machine)
-	Type        string `json:"type"`               // SPACE, GROUP_CHAT, DIRECT_MESSAGE
-	Members     int    `json:"members,omitempty"`  // people in it, when known
+	Alias       string `json:"alias,omitempty"`       // your own name for it, on this machine
+	Threaded    bool   `json:"threaded,omitempty"`    // replies go in threads (else inline)
+	Pinned      bool   `json:"pinned,omitempty"`      // kept on top of the list (on this machine; WhatsApp: everywhere)
+	Archived    bool   `json:"archived,omitempty"`    // WhatsApp: out of the list, in Archived
+	MutedUntil  int64  `json:"muted_until,omitempty"` // WhatsApp: no notifications until (ms; -1 for ever)
+	Blocked     bool   `json:"blocked,omitempty"`     // WhatsApp: you blocked them
+	Type        string `json:"type"`                  // SPACE, GROUP_CHAT, DIRECT_MESSAGE
+	Members     int    `json:"members,omitempty"`     // people in it, when known
 	LastActive  int64  `json:"last_active"`
 	LastRead    int64  `json:"-"`
 	SyncedTo    int64  `json:"-"`
@@ -935,6 +959,7 @@ type ChatMessage struct {
 	Reactions  string     `json:"reactions,omitempty"` // "👍 2 · 😂 1"
 	Edited     bool       `json:"edited,omitempty"`
 	Ticks      int        `json:"ticks,omitempty"` // WhatsApp, yours: 1 sent, 2 delivered, 3 read
+	Starred    bool       `json:"starred,omitempty"`
 }
 
 // Ticks of a message of yours that only exists here so far: it shows in
@@ -1287,8 +1312,8 @@ func (s *Store) RaiseTicks(account string, names []string, level int) error {
 func (s *Store) ChatMessage(account, name string) (ChatMessage, error) {
 	var m ChatMessage
 	var files string
-	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks FROM chat_messages WHERE account=? AND name=?`, account, name).
-		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks)
+	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,starred FROM chat_messages WHERE account=? AND name=?`, account, name).
+		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred)
 	if err != nil {
 		return m, err
 	}
@@ -1337,6 +1362,194 @@ func (s *Store) OldestChat(account, space string) (int64, error) {
 // SetPinned keeps a chat on top of the list (on this machine).
 func (s *Store) SetPinned(account, space string, on bool) error {
 	_, err := s.db.Exec(`UPDATE spaces SET pinned=? WHERE account=? AND name=?`, on, account, space)
+	return err
+}
+
+// SetArchived, SetMuted, SetStarred: WhatsApp chat and message state.
+func (s *Store) SetArchived(account, space string, on bool) error {
+	_, err := s.db.Exec(`UPDATE spaces SET archived=? WHERE account=? AND name=?`, on, account, space)
+	return err
+}
+
+func (s *Store) SetMuted(account, space string, until int64) error {
+	_, err := s.db.Exec(`UPDATE spaces SET muted_until=? WHERE account=? AND name=?`, until, account, space)
+	return err
+}
+
+func (s *Store) SetBlocked(account, space string, on bool) error {
+	_, err := s.db.Exec(`UPDATE spaces SET blocked=? WHERE account=? AND name=?`, on, account, space)
+	return err
+}
+
+// Muted: the chat's notifications are off now.
+func (sp Space) Muted() bool {
+	return sp.MutedUntil < 0 || sp.MutedUntil > time.Now().UnixMilli()
+}
+
+// Presence is what WhatsApp last said about someone: online (or when
+// last seen), and typing in a chat.
+type Presence struct {
+	JID      string
+	Online   bool
+	LastSeen int64 // ms; 0 unknown (hidden)
+	At       int64 // when this was heard
+	TypingIn string
+	Typing   string // composing, recording or ""
+	TypingAt int64
+}
+
+// SetPresence records someone's online state.
+func (s *Store) SetPresence(jid string, online bool, lastSeen int64) error {
+	_, err := s.db.Exec(`INSERT INTO whatsapp_presence(jid,online,last_seen,at) VALUES(?,?,?,?)
+	  ON CONFLICT(jid) DO UPDATE SET online=excluded.online, last_seen=CASE WHEN excluded.last_seen>0 THEN excluded.last_seen ELSE last_seen END, at=excluded.at`,
+		jid, online, lastSeen, now())
+	return err
+}
+
+// SetTyping records someone typing (or stopping, typing "") in a chat;
+// typing means they're online.
+func (s *Store) SetTyping(jid, chat, typing string) error {
+	_, err := s.db.Exec(`INSERT INTO whatsapp_presence(jid,online,at,typing_in,typing,typing_at) VALUES(?,1,?,?,?,?)
+	  ON CONFLICT(jid) DO UPDATE SET online=1, at=excluded.at, typing_in=excluded.typing_in, typing=excluded.typing, typing_at=excluded.typing_at`,
+		jid, now(), chat, typing, now())
+	return err
+}
+
+// PresenceOf is what's known about someone ("" JID when nothing is).
+func (s *Store) PresenceOf(jid string) Presence {
+	p := Presence{}
+	_ = s.db.QueryRow(`SELECT jid,online,last_seen,at,typing_in,typing,typing_at FROM whatsapp_presence WHERE jid=?`, jid).
+		Scan(&p.JID, &p.Online, &p.LastSeen, &p.At, &p.TypingIn, &p.Typing, &p.TypingAt)
+	return p
+}
+
+// TypingIn lists who is typing in a chat now (heard in the last 15 seconds).
+func (s *Store) TypingIn(chat string) []Presence {
+	rows, err := s.db.Query(`SELECT jid,online,last_seen,at,typing_in,typing,typing_at FROM whatsapp_presence
+	  WHERE typing_in=? AND typing<>'' AND typing_at>?`, chat, now()-15000)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []Presence
+	for rows.Next() {
+		var p Presence
+		if rows.Scan(&p.JID, &p.Online, &p.LastSeen, &p.At, &p.TypingIn, &p.Typing, &p.TypingAt) == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (s *Store) SetStarred(account, name string, on bool) error {
+	_, err := s.db.Exec(`UPDATE chat_messages SET starred=? WHERE account=? AND name=?`, on, account, name)
+	return err
+}
+
+// Starred lists starred messages, newest first.
+func (s *Store) Starred(account string, limit int) ([]ChatMessage, error) {
+	rows, err := s.db.Query(`SELECT name FROM chat_messages WHERE account=? AND starred=1 ORDER BY created DESC LIMIT ?`, account, limit)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+	var out []ChatMessage
+	for _, n := range names {
+		if m, err := s.ChatMessage(account, n); err == nil {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// WhatsAppAction is something only the process holding WhatsApp can do,
+// queued for it (ADR 7): Done once it has, with its Result or Error.
+type WhatsAppAction struct {
+	ID      int64
+	Action  string
+	Chat    string
+	Arg     string
+	Created int64
+	Done    bool
+	Error   string
+	Result  string
+}
+
+func (s *Store) AddWhatsAppAction(action, chat, arg string) (int64, error) {
+	res, err := s.db.Exec(`INSERT INTO whatsapp_actions(action,chat,arg,created) VALUES(?,?,?,?)`, action, chat, arg, now())
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func scanActions(rows *sql.Rows, err error) ([]WhatsAppAction, error) {
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WhatsAppAction
+	for rows.Next() {
+		var a WhatsAppAction
+		var done int
+		if err := rows.Scan(&a.ID, &a.Action, &a.Chat, &a.Arg, &a.Created, &done, &a.Error, &a.Result); err != nil {
+			return nil, err
+		}
+		a.Done = done == 1
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+const actionCols = `id,action,chat,arg,created,done,error,result`
+
+// PendingWhatsAppActions lists what's waiting, oldest first; older than
+// maxAge is dropped (and finished ones a day old are cleared).
+func (s *Store) PendingWhatsAppActions(maxAge time.Duration) ([]WhatsAppAction, error) {
+	if _, err := s.db.Exec(`DELETE FROM whatsapp_actions WHERE (done<>1 AND created<?) OR (done=1 AND created<?)`,
+		time.Now().Add(-maxAge).UnixMilli(), time.Now().Add(-24*time.Hour).UnixMilli()); err != nil {
+		return nil, err
+	}
+	// one claimed by a process that died doing it goes back
+	_, _ = s.db.Exec(`UPDATE whatsapp_actions SET done=0 WHERE done=2 AND created<?`, time.Now().Add(-5*time.Minute).UnixMilli())
+	return scanActions(s.db.Query(`SELECT ` + actionCols + ` FROM whatsapp_actions WHERE done=0 ORDER BY id`))
+}
+
+func (s *Store) WhatsAppActionByID(id int64) (WhatsAppAction, error) {
+	as, err := scanActions(s.db.Query(`SELECT `+actionCols+` FROM whatsapp_actions WHERE id=?`, id))
+	if err != nil {
+		return WhatsAppAction{}, err
+	}
+	if len(as) == 0 {
+		return WhatsAppAction{}, ErrNotFound
+	}
+	return as[0], nil
+}
+
+// ClaimWhatsAppAction takes an action to do; false when another process
+// (or another flush in this one) has it.
+func (s *Store) ClaimWhatsAppAction(id int64) bool {
+	res, err := s.db.Exec(`UPDATE whatsapp_actions SET done=2 WHERE id=? AND done=0`, id)
+	if err != nil {
+		return false
+	}
+	n, _ := res.RowsAffected()
+	return n == 1
+}
+
+// FinishWhatsAppAction records how it went; a failure that may pass
+// (offline) leaves it waiting when retry is set.
+func (s *Store) FinishWhatsAppAction(id int64, result, errText string) error {
+	_, err := s.db.Exec(`UPDATE whatsapp_actions SET done=1, result=?, error=? WHERE id=?`, result, errText, id)
 	return err
 }
 
@@ -1447,7 +1660,7 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 // (messages from others after the space's read time). No accounts means
 // every Google account: WhatsApp's chats only come when asked by name.
 func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error) {
-	q := `SELECT s.account,s.name,s.display_name,s.alias,s.threaded,s.pinned,s.type,s.last_active,s.last_read,s.synced_to,s.members,
+	q := `SELECT s.account,s.name,s.display_name,s.alias,s.threaded,s.pinned,s.archived,s.muted_until,s.blocked,s.type,s.last_active,s.last_read,s.synced_to,s.members,
 	  (SELECT COUNT(*) FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=s.account AND c.space=s.name AND c.created>s.last_read AND c.sender<>a.chat_user),
 	  COALESCE((SELECT c.text FROM chat_messages c WHERE c.account=s.account AND c.space=s.name ORDER BY c.created DESC LIMIT 1),''),
 	  COALESCE((SELECT CASE WHEN c.sender<>'' AND c.sender=(SELECT chat_user FROM accounts WHERE name=s.account) THEN 'You' ELSE c.sender_name END
@@ -1471,7 +1684,7 @@ func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error)
 	var out []Space
 	for rows.Next() {
 		var sp Space
-		if err := rows.Scan(&sp.Account, &sp.Name, &sp.DisplayName, &sp.Alias, &sp.Threaded, &sp.Pinned, &sp.Type, &sp.LastActive, &sp.LastRead, &sp.SyncedTo, &sp.Members, &sp.Unread, &sp.LastText, &sp.LastSender); err != nil {
+		if err := rows.Scan(&sp.Account, &sp.Name, &sp.DisplayName, &sp.Alias, &sp.Threaded, &sp.Pinned, &sp.Archived, &sp.MutedUntil, &sp.Blocked, &sp.Type, &sp.LastActive, &sp.LastRead, &sp.SyncedTo, &sp.Members, &sp.Unread, &sp.LastText, &sp.LastSender); err != nil {
 			return nil, err
 		}
 		out = append(out, sp)
@@ -1496,7 +1709,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited, c.ticks
+	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited, c.ticks, c.starred
 	  FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=? AND c.space=? ORDER BY c.created DESC LIMIT ?`, account, space, limit)
 	if err != nil {
 		return nil, err
@@ -1506,7 +1719,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	for rows.Next() {
 		var m ChatMessage
 		var files string
-		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks); err != nil {
+		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(files), &m.Files)

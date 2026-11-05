@@ -52,7 +52,7 @@ const (
 	tabChat
 )
 
-var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled", aiSection}
+var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled", aiSection, "Archived"} // Archived: WhatsApp only
 
 // aiSection is where an agent's sends wait for your answer, in mail, chat
 // and WhatsApp alike.
@@ -219,13 +219,15 @@ type Model struct {
 	chatFiles     []store.File      // files for the message being typed
 	rec           *recording        // a voice note being recorded
 	forwarding    string            // the WhatsApp message f forwards
-	editingMsg    string            // the message of yours being edited in the box
-	armDelete     string            // d pressed once on this message
-	reactSel      int               // the emoji picked in the reaction window
-	reactMine     map[string]bool   // the reactions on the picked message that are yours
-	chatLimit     int               // how many messages of this chat to show (grows as older ones load)
-	jumpBack      []string          // replies you jumped from to their originals (Backspace goes back)
-	newLine       int               // where the "new" line is in the preview (0: none)
+	typedAt       time.Time         // when WhatsApp was last told you're typing
+	watched       map[string]time.Time
+	editingMsg    string          // the message of yours being edited in the box
+	armDelete     string          // d pressed once on this message
+	reactSel      int             // the emoji picked in the reaction window
+	reactMine     map[string]bool // the reactions on the picked message that are yours
+	chatLimit     int             // how many messages of this chat to show (grows as older ones load)
+	jumpBack      []string        // replies you jumped from to their originals (Backspace goes back)
+	newLine       int             // where the "new" line is in the preview (0: none)
 	scrollToNew   bool
 	replyTo       *store.ChatMessage // the message the one being typed replies to
 	pickMode      mode               // where the picker goes back to
@@ -271,8 +273,12 @@ func Run(a *app.App, launch string) error {
 	defer cancel()
 	go func() { _, _ = a.StartWhatsApp(ctx) }()
 	program = tea.NewProgram(first, tea.WithAltScreen())
-	_, err := program.Run()
+	final, err := program.Run()
 	imgs.forget()
+	if fm, ok := final.(Model); ok && len(fm.watched) > 0 && !a.WhatsAppOnline() {
+		// you've left: the daemon holding WhatsApp shows you away again
+		_, _ = a.WhatsAppDo(context.Background(), whatsapp.DoOnline, "", "", 0)
+	}
 	if err == nil && demoWanted {
 		demoWanted = false
 		return app.ErrDemo
@@ -465,6 +471,9 @@ func (m *Model) reload() {
 		}
 		var out []store.Space
 		for _, s := range sps {
+			if archived := chatSections[m.sec%len(chatSections)] == "Archived"; s.Archived != archived {
+				continue // archived WhatsApp chats show only in Archived
+			}
 			switch chatSections[m.sec%len(chatSections)] {
 			case "Unread":
 				if s.Unread == 0 {
@@ -672,6 +681,9 @@ func (m *Model) loadPreview(reset bool) {
 		m.chatLimit, m.armDelete, m.jumpBack = 0, "", nil
 	}
 	m.curKey = key
+	if reset && m.wa {
+		m.waHere()
+	}
 	m.msgs, m.chatMsgs = nil, nil
 	if t, ok := m.curThread(); ok {
 		m.msgs, _ = m.a.Store.Messages(t.Account, t.ID)
@@ -1353,6 +1365,14 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeChatMsg && m.tagKey(k.String()) {
 		return m, nil
 	}
+	if m.mode == modeChatMsg && m.wa && m.editingMsg == "" {
+		switch k.Type {
+		case tea.KeyRunes, tea.KeySpace:
+			m.waTyping(false)
+		case tea.KeyEnter, tea.KeyEsc:
+			m.waTyping(true)
+		}
+	}
 	// a new line in a chat message: alt+enter or ctrl+j (enter sends)
 	if m.mode == modeChatMsg && (k.Type == tea.KeyEnter && k.Alt || k.Type == tea.KeyCtrlJ) {
 		m.insert('\n')
@@ -1585,6 +1605,9 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		m.say(what + " isn't on WhatsApp in narada yet")
 		return m, nil
 	}
+	if mm, cmd, ok := m.waChatKey(s); ok {
+		return mm, cmd
+	}
 	switch s {
 	case "q", "esc":
 		switch {
@@ -1660,6 +1683,10 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		n := len(m.sections)
 		if m.tab == tabChat {
 			n = len(chatSections)
+			if !m.wa {
+				n-- // Google Chat has no archive
+				m.sec %= n
+			}
 		}
 		if m.search != nil {
 			m.search = nil

@@ -19,7 +19,7 @@ import (
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward")
+		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -84,6 +84,7 @@ func whatsApp(a *app.App, args []string) error {
 	case "list", "ls":
 		fs := flags("narada whatsapp list", "narada whatsapp list [--unread] [--json]\n\nWhatsApp chats, most recent first.")
 		unread := fs.Bool("unread", false, "only chats with unread messages")
+		archived := fs.Bool("archived", false, "the archived chats (left out otherwise)")
 		asJSON := fs.Bool("json", false, "JSON output")
 		if _, err := parse(fs, rest); err != nil {
 			return err
@@ -97,7 +98,7 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		out := []store.Space{}
 		for _, s := range sps {
-			if !*unread || s.Unread > 0 {
+			if (!*unread || s.Unread > 0) && s.Archived == *archived {
 				out = append(out, s)
 			}
 		}
@@ -109,7 +110,17 @@ func whatsApp(a *app.App, args []string) error {
 			if s.Unread > 0 {
 				n = fmt.Sprintf("%-2d", s.Unread)
 			}
-			fmt.Printf("%s %-8s %-24.24s %s  [%s]\n", n, When(s.LastActive), SpaceTitle(s), oneLine(s.LastText, 60), s.Name)
+			marks := ""
+			if s.Pinned {
+				marks += " 📌"
+			}
+			if s.Muted() {
+				marks += " 🔕"
+			}
+			if s.Blocked {
+				marks += " ⊘"
+			}
+			fmt.Printf("%s %-8s %-24.24s %s  [%s]%s\n", n, When(s.LastActive), SpaceTitle(s), oneLine(s.LastText, 60), s.Name, marks)
 		}
 		return nil
 	case "read", "show":
@@ -185,6 +196,95 @@ func whatsApp(a *app.App, args []string) error {
 			fmt.Println(p)
 		}
 		return err
+	case "archive", "unarchive", "pin", "unpin", "unread", "block", "unblock", "mute", "unmute":
+		help := map[string]string{
+			"archive": "Move a chat into Archived (out of the list); your phone follows.", "unarchive": "Bring a chat back from Archived.",
+			"pin": "Pin a chat on top, here and on your phone (three at most).", "unpin": "Unpin a chat.",
+			"unread": "Mark a chat unread, here and on your phone.",
+			"block":  "Block a person: they can't call or message you.", "unblock": "Unblock a person.",
+			"mute": "Silence a chat's notifications: --for 8h, 1w (a week) or always (the default).", "unmute": "Turn a chat's notifications back on.",
+		}[sub]
+		fs := flags("narada whatsapp "+sub, "narada whatsapp "+sub+" <chat>\n\n"+help+"\n<chat> is a name, a phone number or its id.")
+		dur := fs.String("for", "always", "mute: 8h, 1w, always, or any duration (90m, 3d)")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) == 0 {
+			return usageError("whatsapp %s needs a chat", sub)
+		}
+		ctx, cancel := ctxSignal()
+		defer cancel()
+		startWhatsApp(ctx, a)
+		sp, err := a.WhatsAppChat(ctx, strings.Join(pos, " "))
+		if err != nil {
+			return err
+		}
+		switch sub {
+		case "archive", "unarchive":
+			err = a.ArchiveWhatsApp(ctx, sp.Name, sub == "archive")
+		case "pin", "unpin":
+			err = a.PinWhatsApp(ctx, sp.Name, sub == "pin")
+		case "unread":
+			err = a.MarkSpaceUnread(ctx, sp.Account, sp.Name)
+		case "block", "unblock":
+			err = a.BlockWhatsApp(ctx, sp.Name, sub == "block")
+		case "mute", "unmute":
+			var d time.Duration
+			if sub == "mute" && *dur != "always" {
+				if d, err = app.ParseLength(*dur); err != nil {
+					return usageError("--for is 8h, 1w, always or a duration like 90m")
+				}
+			}
+			err = a.MuteWhatsApp(ctx, sp.Name, d, sub == "unmute")
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "narada: %s: %s\n", SpaceTitle(sp), map[string]string{"archive": "archived", "unarchive": "unarchived", "pin": "pinned",
+			"unpin": "unpinned", "unread": "marked unread", "block": "blocked", "unblock": "unblocked", "mute": "muted", "unmute": "unmuted"}[sub])
+		return nil
+	case "star", "unstar":
+		fs := flags("narada whatsapp "+sub, "narada whatsapp "+sub+" <message-id>\n\nStar a message (or unstar it), here and on your phone. whatsapp starred lists them.")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) != 1 {
+			return usageError("whatsapp %s needs one message id", sub)
+		}
+		ctx, cancel := ctxSignal()
+		defer cancel()
+		startWhatsApp(ctx, a)
+		if err := a.StarWhatsApp(ctx, pos[0], sub == "star"); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "narada: "+sub+"red")
+		return nil
+	case "starred":
+		fs := flags("narada whatsapp starred", "narada whatsapp starred [--json]\n\nYour starred WhatsApp messages, newest first.")
+		asJSON := fs.Bool("json", false, "JSON output")
+		if _, err := parse(fs, rest); err != nil {
+			return err
+		}
+		msgs, err := a.Store.Starred(store.WhatsAppAccount, 200)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			if msgs == nil {
+				msgs = []store.ChatMessage{}
+			}
+			return printJSON(msgs)
+		}
+		for _, m := range msgs {
+			chat := m.Space
+			if sp, err := a.Store.Space(store.WhatsAppAccount, m.Space); err == nil {
+				chat = SpaceTitle(sp)
+			}
+			fmt.Printf("★ %s · %s  %s  [%s]\n%s\n\n", chat, m.SenderName, When(m.Created), m.Name, m.Text)
+		}
+		return nil
 	case "edit":
 		fs := flags("narada whatsapp edit", "narada whatsapp edit <message-id> <new text...>\n\nChange the text of a message you sent (whatsapp read shows the ids). WhatsApp\nallows it for 15 minutes after sending.")
 		pos, err := parse(fs, rest)

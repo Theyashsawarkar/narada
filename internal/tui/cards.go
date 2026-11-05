@@ -528,6 +528,12 @@ func (m *Model) listView(w, h int) string {
 			if sp.Pinned {
 				title += s.accent.Render(" 📌")
 			}
+			if sp.Muted() {
+				title += s.muted.Render(" 🔕")
+			}
+			if sp.Blocked {
+				title += s.red.Render(" ⊘ blocked")
+			}
 			if m.selected[sp.Account+"/"+sp.Name] {
 				title = s.accent2.Render("✓ ") + title
 			}
@@ -841,10 +847,15 @@ func (m *Model) chatLines(w int) []string {
 	if sp, ok := m.curSpace(); ok && sp.Type == "DIRECT_MESSAGE" {
 		// one to one: who it is says it all; WhatsApp adds their number
 		if sp.Account == store.WhatsAppAccount && strings.HasSuffix(sp.Name, "@s.whatsapp.net") {
-			head = []string{s.muted.Render("+" + strings.TrimSuffix(sp.Name, "@s.whatsapp.net"))}
+			head = []string{s.muted.Render("+"+strings.TrimSuffix(sp.Name, "@s.whatsapp.net")) + m.presenceLine(sp)}
 		}
 	} else {
 		head = []string{s.muted.Render(ansi.Truncate(strings.Join(people, ", "), w-14, "…") + fmt.Sprintf(" · %d people", len(people)))}
+		if sp, ok := m.curSpace(); ok && sp.Account == store.WhatsAppAccount {
+			if t := m.presenceLine(sp); t != "" {
+				head = append(head, t)
+			}
+		}
 	}
 	newSince := int64(0)
 	if sp, ok := m.curSpace(); ok {
@@ -938,6 +949,9 @@ func (m *Model) chatLines(w int) []string {
 			}
 			if g.Edited && len(lines) > 0 {
 				lines[len(lines)-1] += s.muted.Render(" (edited)")
+			}
+			if g.Starred && len(lines) > 0 {
+				lines[len(lines)-1] += s.yellow.Render(" ★")
 			}
 			for _, f := range files {
 				lines = append(lines, "📎 "+s.peach.Render(ansi.Truncate(f, bw-16, "…"))+s.muted.Render(" · v opens"))

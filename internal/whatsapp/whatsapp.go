@@ -80,8 +80,36 @@ type Event struct {
 	Contacts  map[string]string
 	Ticks     *Ticks     // receipts for messages you sent
 	Reactions []Reaction // someone reacted, or took a reaction back
+	ChatState *ChatState // a chat archived, pinned, muted or marked unread (on another device)
+	Star      *Star      // a message starred or unstarred (on another device)
+	Presence  *Presence  // someone online, away or typing
 	State     string     // connected, disconnected, logged-out, replaced, banned
 	Err       error
+}
+
+// ChatState is a change to a chat made on another device; nil parts
+// didn't change.
+type ChatState struct {
+	Chat       string
+	Archived   *bool
+	Pinned     *bool
+	MutedUntil *int64 // ms; -1 for ever, 0 unmuted
+	Unread     *bool
+}
+
+// Star: a message starred (On) or unstarred.
+type Star struct {
+	Chat, ID string
+	On       bool
+}
+
+// Presence is someone's online state, or their typing in a chat.
+type Presence struct {
+	Who      string
+	Chat     string // with Typing: where
+	Online   bool
+	LastSeen time.Time
+	Typing   string // composing, recording or "" (stopped); only with Chat
 }
 
 // Reaction is one person's reaction to a message; an empty Emoji takes it back.
@@ -120,6 +148,7 @@ func Open(ctx context.Context, path string) (*Client, error) {
 	}
 	cl := &Client{store: sc}
 	cl.c = whatsmeow.NewClient(dev, waLog.Noop)
+	cl.c.EmitAppStateEventsOnFullSync = true // archived, pinned and muted chats from the phone, at linking too
 	cl.c.AddEventHandler(cl.event)
 	return cl, nil
 }
@@ -406,7 +435,34 @@ func (cl *Client) event(evt any) {
 	case *events.MarkChatAsRead:
 		if e.Action.GetRead() {
 			cl.emit(Event{Read: cl.chatJID(ctx, e.JID), ReadAt: e.Timestamp})
+		} else {
+			cl.emit(Event{ChatState: &ChatState{Chat: cl.chatJID(ctx, e.JID), Unread: new(true)}})
 		}
+	case *events.Archive:
+		cl.emit(Event{ChatState: &ChatState{Chat: cl.chatJID(ctx, e.JID), Archived: new(e.Action.GetArchived())}})
+	case *events.Pin:
+		cl.emit(Event{ChatState: &ChatState{Chat: cl.chatJID(ctx, e.JID), Pinned: new(e.Action.GetPinned())}})
+	case *events.Mute:
+		until := int64(0)
+		if e.Action.GetMuted() {
+			if until = e.Action.GetMuteEndTimestamp(); until == 0 {
+				until = -1
+			}
+		}
+		cl.emit(Event{ChatState: &ChatState{Chat: cl.chatJID(ctx, e.JID), MutedUntil: &until}})
+	case *events.Star:
+		cl.emit(Event{Star: &Star{Chat: cl.chatJID(ctx, e.ChatJID), ID: e.MessageID, On: e.Action.GetStarred()}})
+	case *events.ChatPresence:
+		typing := ""
+		if e.State == types.ChatPresenceComposing {
+			typing = "composing"
+			if e.Media == types.ChatPresenceMediaAudio {
+				typing = "recording"
+			}
+		}
+		cl.emit(Event{Presence: &Presence{Who: cl.chatJID(ctx, e.Sender), Chat: cl.chatJID(ctx, e.Chat), Online: true, Typing: typing}})
+	case *events.Presence:
+		cl.emit(Event{Presence: &Presence{Who: cl.chatJID(ctx, e.From), Online: !e.Unavailable, LastSeen: e.LastSeen}})
 	case *events.PushName:
 		cl.emit(Event{Contacts: map[string]string{cl.chatJID(ctx, e.JID): e.NewPushName}})
 	case *events.GroupInfo:

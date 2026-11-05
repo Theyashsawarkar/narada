@@ -136,3 +136,35 @@ func TestWhatsAppEditDeleteForwardCommands(t *testing.T) {
 		t.Fatalf("quoted %+v", q)
 	}
 }
+
+func TestWhatsAppChatStateCommands(t *testing.T) {
+	a, w := waApp(t)
+	for _, args := range [][]string{{"archive", "Ravi"}, {"pin", "Amma"}, {"mute", "trek", "--for", "1w"}, {"block", "Ravi"}, {"star", "919800000001@s.whatsapp.net/H2"}} {
+		if _, err := run(t, a, args...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	did := strings.Join(w.Did, "\n")
+	for _, x := range []string{"archive 919800000002@s.whatsapp.net 1", "pin 919800000001@s.whatsapp.net 1", "mute 120363000000000001@g.us ",
+		"block 919800000002@s.whatsapp.net 1", "star 919800000001@s.whatsapp.net H2"} {
+		if !strings.Contains(did, x) {
+			t.Errorf("WhatsApp wasn't told %q:\n%s", x, did)
+		}
+	}
+	out, _ := run(t, a, "list")
+	if strings.Contains(out, "Ravi") || !strings.Contains(out, "📌") || !strings.Contains(out, "🔕") {
+		t.Fatalf("list:\n%s", out)
+	}
+	if out, _ = run(t, a, "list", "--archived"); !strings.Contains(out, "Ravi") || !strings.Contains(out, "⊘") {
+		t.Fatalf("list --archived:\n%s", out)
+	}
+	if out, _ = run(t, a, "starred"); !strings.Contains(out, "Did you eat?") {
+		t.Fatalf("starred:\n%s", out)
+	}
+	if _, err := run(t, a, "mute", "trek", "--for", "soon"); err == nil {
+		t.Fatal("--for soon")
+	}
+	if _, err := run(t, a, "block", "trek"); err == nil {
+		t.Fatal("blocked a group")
+	}
+}

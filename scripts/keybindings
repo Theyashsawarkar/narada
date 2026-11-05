@@ -41,7 +41,11 @@
 # keybind: Tmux/narada | d d (picking) | Delete your picked message, for everyone (WhatsApp: someone else's is deleted for you, here only)
 # keybind: Tmux/narada | f (picking, WhatsApp) | Forward the picked message to another chat (type a contact, group or number)
 # keybind: Tmux/narada | R (picking, WhatsApp group) | Send a private reply to the picked group message (in your chat with its sender, quoting it)
-# keybind: Tmux/narada | p | Toggle the chat pinned on top of the list
+# keybind: Tmux/narada | p | Toggle the chat pinned on top of the list (WhatsApp: on your phone too, three at most)
+# keybind: Tmux/narada | e (WhatsApp) | Move the chat into Archived, or back out of it (archive; your phone follows)
+# keybind: Tmux/narada | Z (WhatsApp) | Mute the chat for 8 hours (again: a week, then always, then unmuted)
+# keybind: Tmux/narada | B (WhatsApp) | Block the person in this chat (B twice; again unblocks)
+# keybind: Tmux/narada | * (picking, WhatsApp) | Toggle a star on the picked message (your phone follows)
 # keybind: Tmux/narada | [ / ] | Switch to the previous / next chat (staying in the conversation)
 # keybind: Tmux/narada | Ctrl+k | Open the chat switcher (search chats, people and messages)
 # keybind: Tmux/narada | Ctrl+o (typing) | Add a file to the chat message you're typing

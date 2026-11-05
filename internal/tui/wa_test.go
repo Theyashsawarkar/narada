@@ -4,12 +4,15 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Theyashsawarkar/narada/internal/app"
 	"github.com/Theyashsawarkar/narada/internal/fake"
 	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 // waModel is the screen on a linked fake WhatsApp, in the chat named
@@ -132,5 +135,106 @@ func TestEditFromTheScreen(t *testing.T) {
 	m.a.DeliverDue(context.Background())
 	if len(w.Edited) != 1 || !strings.HasSuffix(w.Edited[0], " at 6") {
 		t.Fatalf("edited %v", w.Edited)
+	}
+}
+
+func TestChatStateKeys(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	m.focus = 0
+	sp := func() store.Space {
+		s, _ := m.a.Store.Space(store.WhatsAppAccount, "919800000002@s.whatsapp.net")
+		return s
+	}
+	run := func(keys ...string) {
+		for _, k := range keys {
+			nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)})
+			m = nm.(Model)
+			if cmd != nil {
+				if msg := cmd(); msg != nil {
+					nm, _ = m.Update(msg)
+					m = nm.(Model)
+				}
+			}
+		}
+	}
+	run("Z")
+	if !sp().Muted() || sp().MutedUntil < 0 {
+		t.Fatalf("Z: %+v", sp())
+	}
+	run("Z", "Z")
+	if sp().MutedUntil != -1 {
+		t.Fatalf("Z Z Z is always: %d", sp().MutedUntil)
+	}
+	run("Z")
+	if sp().Muted() {
+		t.Fatal("Z after always unmutes")
+	}
+	run("B")
+	if sp().Blocked {
+		t.Fatal("one B blocked at once")
+	}
+	run("B")
+	if !sp().Blocked {
+		t.Fatalf("B B didn't block: %q", m.toast)
+	}
+	run("p")
+	if !sp().Pinned {
+		t.Fatal("p pins")
+	}
+	run("e")
+	if !sp().Archived || sp().Pinned {
+		t.Fatal("e archives (and unpins)")
+	}
+	for _, s := range m.spaces {
+		if s.Name == "919800000002@s.whatsapp.net" {
+			t.Fatal("an archived chat still shows in All")
+		}
+	}
+	m.sec = len(chatSections) - 1 // Archived
+	m.reload()
+	if len(m.spaces) != 1 || m.spaces[0].Name != "919800000002@s.whatsapp.net" {
+		t.Fatalf("Archived shows %+v", m.spaces)
+	}
+	m.a.DeliverDue(context.Background())
+	did := strings.Join(w.Did, "\n")
+	for _, x := range []string{"mute ", "block 919800000002@s.whatsapp.net 1", "pin 919800000002@s.whatsapp.net 1", "archive 919800000002@s.whatsapp.net 1"} {
+		if !strings.Contains(did, x) {
+			t.Errorf("WhatsApp wasn't told %q:\n%s", x, did)
+		}
+	}
+	// * stars the picked message
+	m.focus = 1
+	m.loadPreview(true)
+	m = pickMsg(t, m, "H4")
+	run("*")
+	if msg, _ := m.a.Store.ChatMessage(store.WhatsAppAccount, "919800000002@s.whatsapp.net/H4"); !msg.Starred {
+		t.Fatal("* didn't star it")
+	}
+}
+
+func TestTypingAndPresence(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	sp, _ := m.curSpace()
+	w.Emit(whatsapp.Event{Presence: &whatsapp.Presence{Who: sp.Name, Chat: sp.Name, Online: true, Typing: "composing"}})
+	if got := ansi.Strip(m.presenceLine(sp)); !strings.Contains(got, "typing…") {
+		t.Fatalf("presence %q", got)
+	}
+	_ = m.a.Store.SetTyping(sp.Name, sp.Name, "")
+	if got := ansi.Strip(m.presenceLine(sp)); !strings.Contains(got, "online") {
+		t.Fatalf("presence %q", got)
+	}
+	// typing tells them, once
+	m.mode = modeChatMsg
+	m = typeText(m, "hel")
+	m.a.DeliverDue(context.Background())
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(strings.Join(w.Did, "\n"), "typing "+sp.Name+" composing") {
+		if time.Now().After(deadline) {
+			t.Fatalf("WhatsApp wasn't told you're typing: %q", w.Did)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if n := strings.Count(strings.Join(w.Did, "\n"), "composing"); n != 1 {
+		t.Fatalf("told %d times: %q", n, w.Did)
 	}
 }

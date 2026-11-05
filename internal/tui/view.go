@@ -239,6 +239,9 @@ func (m Model) tabsView() string {
 			unread = m.waN
 		}
 		for i, name := range chatSections {
+			if name == "Archived" && !m.wa {
+				continue
+			}
 			label := name
 			switch {
 			case name == "Unread" && unread > 0:

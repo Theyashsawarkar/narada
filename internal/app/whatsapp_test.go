@@ -886,3 +886,143 @@ func TestWhatsAppForwardedShows(t *testing.T) {
 		t.Fatalf("shows %q", m.Text)
 	}
 }
+
+func TestWhatsAppChatState(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	const amma, ravi, trek = "919800000001@s.whatsapp.net", "919800000002@s.whatsapp.net", "120363000000000001@g.us"
+	sp := func(chat string) store.Space {
+		s, err := a.Store.Space(store.WhatsAppAccount, chat)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	if err := a.ArchiveWhatsApp(ctx, ravi, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.PinWhatsApp(ctx, amma, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.MuteWhatsApp(ctx, trek, 8*time.Hour, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.StarWhatsApp(ctx, waName(amma, "H2"), true); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.BlockWhatsApp(ctx, ravi, true); err != nil {
+		t.Fatal(err)
+	}
+	if !sp(ravi).Archived || !sp(amma).Pinned || !sp(trek).Muted() || !sp(ravi).Blocked {
+		t.Fatalf("not shown here: %+v %+v %+v", sp(ravi), sp(amma), sp(trek))
+	}
+	if m, _ := a.Store.ChatMessage(store.WhatsAppAccount, waName(amma, "H2")); !m.Starred {
+		t.Fatal("not starred here")
+	}
+	want := []string{"archive " + ravi + " 1", "pin " + amma + " 1", "mute " + trek, "star " + amma + " H2 " + amma + " 0 1", "block " + ravi + " 1"}
+	if len(w.Did) != len(want) {
+		t.Fatalf("WhatsApp got %q", w.Did)
+	}
+	for i, x := range want {
+		if !strings.HasPrefix(w.Did[i], x) {
+			t.Errorf("action %d: %q, want %q…", i, w.Did[i], x)
+		}
+	}
+	// a group can't be blocked; a fourth pin is refused, as WhatsApp does
+	if err := a.BlockWhatsApp(ctx, trek, true); err == nil {
+		t.Fatal("blocked a group")
+	}
+	_ = a.Store.PutSpace(store.Space{Account: store.WhatsAppAccount, Name: "919800000009@s.whatsapp.net", Type: "DIRECT_MESSAGE"})
+	_ = a.PinWhatsApp(ctx, trek, true)
+	_ = a.PinWhatsApp(ctx, ravi, true)
+	if err := a.PinWhatsApp(ctx, "919800000009@s.whatsapp.net", true); err == nil {
+		t.Fatal("a fourth pin")
+	}
+	// archiving unpins; unarchive and unmute come back
+	_ = a.ArchiveWhatsApp(ctx, amma, true)
+	if sp(amma).Pinned {
+		t.Fatal("archiving should unpin")
+	}
+	_ = a.ArchiveWhatsApp(ctx, amma, false)
+	_ = a.MuteWhatsApp(ctx, trek, 0, true)
+	if sp(amma).Archived || sp(trek).Muted() {
+		t.Fatal("unarchive / unmute")
+	}
+	_ = a.MuteWhatsApp(ctx, trek, 0, false)
+	if sp(trek).MutedUntil != -1 {
+		t.Fatal("muted for ever is -1")
+	}
+}
+
+// What other devices change arrives: archived, pinned, muted, unread,
+// starred; and who's online or typing.
+func TestWhatsAppStateFromThePhone(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	const amma, ravi = "919800000001@s.whatsapp.net", "919800000002@s.whatsapp.net"
+	yes, until := true, int64(-1)
+	w.Emit(whatsapp.Event{ChatState: &whatsapp.ChatState{Chat: ravi, Archived: &yes, MutedUntil: &until}})
+	w.Emit(whatsapp.Event{ChatState: &whatsapp.ChatState{Chat: amma, Pinned: &yes, Unread: &yes}})
+	w.Emit(whatsapp.Event{Star: &whatsapp.Star{Chat: amma, ID: "H2", On: true}})
+	_ = a.Store.SetSpaceRead(store.WhatsAppAccount, amma, time.Now().UnixMilli())
+	w.Emit(whatsapp.Event{ChatState: &whatsapp.ChatState{Chat: amma, Unread: &yes}})
+	r, _ := a.Store.Space(store.WhatsAppAccount, ravi)
+	m, _ := a.Store.Space(store.WhatsAppAccount, amma)
+	if !r.Archived || !r.Muted() || !m.Pinned || m.Unread == 0 {
+		t.Fatalf("ravi %+v amma %+v", r, m)
+	}
+	if msg, _ := a.Store.ChatMessage(store.WhatsAppAccount, waName(amma, "H2")); !msg.Starred {
+		t.Fatal("star from the phone")
+	}
+	w.Emit(whatsapp.Event{Presence: &whatsapp.Presence{Who: ravi, Chat: ravi, Online: true, Typing: "composing"}})
+	if ty := a.Store.TypingIn(ravi); len(ty) != 1 || ty[0].Typing != "composing" {
+		t.Fatalf("typing: %+v", ty)
+	}
+	w.Receive(whatsapp.Message{Chat: ravi, Sender: ravi, Text: "done"})
+	if ty := a.Store.TypingIn(ravi); len(ty) != 0 {
+		t.Fatal("a message came: they've stopped typing")
+	}
+	seen := time.Now().Add(-time.Hour).Truncate(time.Millisecond)
+	w.Emit(whatsapp.Event{Presence: &whatsapp.Presence{Who: amma, LastSeen: seen}})
+	if p := a.Store.PresenceOf(amma); p.Online || p.LastSeen != seen.UnixMilli() {
+		t.Fatalf("presence %+v", p)
+	}
+}
+
+// A command beside the daemon: the action waits for the holder, which does it.
+func TestWhatsAppActionThroughTheHolder(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	other, err := Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	done := make(chan error, 1)
+	go func() { done <- other.BlockWhatsApp(ctx, "919800000002@s.whatsapp.net", true) }()
+	for {
+		a.DeliverDue(ctx)
+		select {
+		case err := <-done:
+			if err != nil || len(w.Did) != 1 {
+				t.Fatalf("%v %q", err, w.Did)
+			}
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}

@@ -1,0 +1,169 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Theyashsawarkar/narada/internal/cli"
+	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
+)
+
+// presenceLine says who is typing in a WhatsApp chat, else whether the
+// person is online or when they were last seen ("" when unknown).
+func (m *Model) presenceLine(sp store.Space) string {
+	s := m.styles
+	if typing := m.a.Store.TypingIn(sp.Name); len(typing) > 0 {
+		var who []string
+		rec := false
+		for _, p := range typing {
+			rec = rec || p.Typing == "recording"
+			if whatsapp.IsGroup(sp.Name) {
+				name, _, _ := m.a.Store.User(store.WhatsAppAccount, p.JID)
+				who = append(who, strings.TrimPrefix(firstNonEmpty(name, "+"+strings.TrimSuffix(p.JID, "@s.whatsapp.net")), "~"))
+			}
+		}
+		what := "typing…"
+		if rec {
+			what = "recording audio…"
+		}
+		if len(who) > 0 {
+			what = strings.Join(who, ", ") + " " + what
+		}
+		return s.green.Render(" · " + what)
+	}
+	if whatsapp.IsGroup(sp.Name) {
+		return ""
+	}
+	p := m.a.Store.PresenceOf(sp.Name)
+	switch {
+	case p.JID == "" || time.Since(time.UnixMilli(p.At)) > 10*time.Minute && p.Online:
+		return ""
+	case p.Online:
+		return s.green.Render(" · online")
+	case p.LastSeen > 0:
+		return s.muted.Render(" · last seen " + strings.ToLower(cli.When(p.LastSeen)))
+	}
+	return ""
+}
+
+// waTyping tells the chat you're typing (at most every 8 seconds), or
+// that you stopped.
+func (m *Model) waTyping(stopped bool) {
+	sp, ok := m.curSpace()
+	if !ok || !m.wa || store.IsPending(sp.Name) {
+		return
+	}
+	if stopped {
+		if m.typedAt.IsZero() {
+			return
+		}
+		m.typedAt = time.Time{}
+		go m.a.WhatsAppDo(context.Background(), whatsapp.DoTyping, sp.Name, "paused", 0)
+		return
+	}
+	if time.Since(m.typedAt) < 8*time.Second {
+		return
+	}
+	m.typedAt = time.Now()
+	state := "composing"
+	if m.rec != nil {
+		state = "recording"
+	}
+	go m.a.WhatsAppDo(context.Background(), whatsapp.DoTyping, sp.Name, state, 0)
+}
+
+// waHere says you're on WhatsApp now (and asks to hear whether the person
+// in this chat is online), once per chat every few minutes, as WhatsApp
+// Web does while it's open.
+func (m *Model) waHere() {
+	sp, ok := m.curSpace()
+	if !ok || !m.wa || sp.Account != store.WhatsAppAccount {
+		return
+	}
+	if m.watched == nil {
+		m.watched = map[string]time.Time{}
+	}
+	if time.Since(m.watched[sp.Name]) < 5*time.Minute {
+		return
+	}
+	m.watched[sp.Name] = time.Now()
+	a := m.a
+	go func() {
+		ctx := context.Background()
+		_, _ = a.WhatsAppDo(ctx, whatsapp.DoOnline, "", "1", 0)
+		if !whatsapp.IsGroup(sp.Name) {
+			_, _ = a.WhatsAppDo(ctx, whatsapp.DoWatch, sp.Name, "", 0)
+		}
+	}()
+}
+
+// waChatKey is a key on a WhatsApp chat in the list (or the chat open):
+// e archives, p pins, M marks unread, Z mutes (8 hours, a week, always,
+// then unmuted, as WhatsApp offers), B blocks; * stars the
+// picked message. ok is false for other keys.
+func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
+	if !m.wa || m.tab != tabChat {
+		return m, nil, false
+	}
+	sp, ok := m.curSpace()
+	if !ok {
+		return m, nil, false
+	}
+	a := m.a
+	switch s {
+	case "*":
+		if !m.pickingMsg() {
+			return m, nil, false
+		}
+		c := m.chatMsgs[m.chatSel]
+		on := !c.Starred
+		return m, m.act(map[bool]string{true: "starred", false: "unstarred"}[on], func(ctx context.Context) error { return a.StarWhatsApp(ctx, c.Name, on) }), true
+	case "e":
+		if m.pickingMsg() {
+			return m, nil, false // e reacts to the picked message
+		}
+		on := !sp.Archived
+		return m, m.act(map[bool]string{true: "archived (Archived section has it)", false: "back from the archive"}[on],
+			func(ctx context.Context) error { return a.ArchiveWhatsApp(ctx, sp.Name, on) }), true
+	case "p":
+		on := !sp.Pinned
+		return m, m.act(map[bool]string{true: "pinned on top, everywhere", false: "unpinned"}[on],
+			func(ctx context.Context) error { return a.PinWhatsApp(ctx, sp.Name, on) }), true
+	case "M":
+		if len(m.selected) > 0 {
+			return m, nil, false
+		}
+		return m, m.act("marked unread", func(ctx context.Context) error { return a.MarkSpaceUnread(ctx, sp.Account, sp.Name) }), true
+	case "Z":
+		left := time.Until(time.UnixMilli(sp.MutedUntil))
+		switch {
+		case sp.MutedUntil < 0: // always → unmuted
+			return m, m.act("unmuted", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 0, true) }), true
+		case !sp.Muted():
+			return m, m.act("muted for 8 hours (Z again: a week, always, then unmuted)",
+				func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 8*time.Hour, false) }), true
+		case left <= 8*time.Hour+time.Minute:
+			return m, m.act("muted for a week", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 7*24*time.Hour, false) }), true
+		}
+		return m, m.act("muted always", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 0, false) }), true
+	case "B":
+		if whatsapp.IsGroup(sp.Name) {
+			m.say("B blocks a person; leave a group with narada whatsapp group leave")
+			return m, nil, true
+		}
+		on := !sp.Blocked
+		if on && m.armDelete != "block:"+sp.Name {
+			m.armDelete = "block:" + sp.Name
+			m.say(fmt.Sprintf("B again blocks %s: they can't call or message you", cli.SpaceTitle(sp)))
+			return m, nil, true
+		}
+		m.armDelete = ""
+		return m, m.act(map[bool]string{true: "blocked", false: "unblocked"}[on], func(ctx context.Context) error { return a.BlockWhatsApp(ctx, sp.Name, on) }), true
+	}
+	return m, nil, false
+}

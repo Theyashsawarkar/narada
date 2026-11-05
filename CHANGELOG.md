@@ -31,6 +31,17 @@ Newest first.
   approval. Edits and deletions go through the outbox like sends (ADR 7), so an
   agent's wait for you and each counts against `whatsapp_per_hour`. Forwarded messages
   you receive say so.
+- **Archive, pin, mute, mark unread, star and block on WhatsApp**, synced with your
+  phone both ways: `e` archives a chat (into a new Archived section), `p` pins it on
+  your phone too, `M` marks it unread there too, `Z` mutes it (8 hours, a week,
+  always; muted chats don't notify), `B B` blocks, `*` stars a message. From the
+  shell: `whatsapp archive|unarchive|pin|unpin|unread|mute [--for]|unmute|block|
+  unblock|star|unstar|starred`, and `whatsapp list --archived`.
+- **Typing and online on WhatsApp**: an open chat says when they're typing or
+  recording, online, or last seen; they see you typing. Only while you have a chat
+  open, as WhatsApp Web, so your phone keeps its notifications otherwise.
+- These go through a queue that the narada holding WhatsApp works off (ADR 7), so they
+  work beside the daemon.
 
 ## v0.10.0 -- 2026-11-05
 

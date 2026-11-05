@@ -34,6 +34,7 @@ type WhatsAppConn interface {
 	Edit(ctx context.Context, chat, id, text string) error
 	Revoke(ctx context.Context, chat, sender, id string) error
 	Forward(ctx context.Context, chat string, m whatsapp.Message) (string, error)
+	Do(ctx context.Context, action, chat, arg string) (string, error)
 	Resolve(ctx context.Context, phone string) (string, error)
 	GroupName(ctx context.Context, chat string) (string, error)
 	Logout(ctx context.Context) error
@@ -255,6 +256,8 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 	const acc = store.WhatsAppAccount
 	wa, _ := a.Store.WhatsApp()
 	switch {
+	case e.ChatState != nil || e.Star != nil || e.Presence != nil:
+		a.onWhatsAppState(e)
 	case len(e.Reactions) > 0:
 		for _, r := range e.Reactions {
 			reactor := r.Reactor
@@ -363,10 +366,13 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			}
 			put = append(put, cm)
 			touched[m.Chat] = max(touched[m.Chat], cm.Created)
+			if !e.History && !m.FromMe {
+				_ = a.Store.SetTyping(m.Sender, m.Chat, "") // it came: they've stopped typing
+			}
 			if !m.FromMe && m.Sender == m.Chat && m.SenderName != "" {
 				self[m.Chat] = "~" + m.SenderName
 			}
-			if !e.History && !m.FromMe && a.Config.Notify && a.Store.FirstNotify(acc, name) {
+			if !e.History && !m.FromMe && a.Config.Notify && !a.waMuted(m.Chat) && a.Store.FirstNotify(acc, name) {
 				title := a.waChatName(m.Chat, "")
 				if whatsapp.IsGroup(m.Chat) {
 					title = cm.SenderName + " in " + title
@@ -399,6 +405,12 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			a.waUnreadMu.Unlock()
 		}
 	}
+}
+
+// waMuted: you muted the chat (no notifications).
+func (a *App) waMuted(chat string) bool {
+	sp, err := a.Store.Space(store.WhatsAppAccount, chat)
+	return err == nil && sp.Muted()
 }
 
 // waGroupName asks WhatsApp for a group's name, once a day at most.

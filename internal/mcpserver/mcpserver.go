@@ -462,7 +462,16 @@ func (s *server) chatSpaces(ctx context.Context, _ *mcp.CallToolRequest, in spac
 		if sp.Type == "DIRECT_MESSAGE" {
 			kind = "DM"
 		}
-		fmt.Fprintf(&b, "- id=%s  %s %q  unread=%d  last %s: %s: %s\n", sp.Name, kind, s.h.SpaceTitle(sp), sp.Unread, s.h.When(sp.LastActive), sp.LastSender, oneLine(sp.LastText, 120))
+		flags := ""
+		for _, f := range []struct {
+			name string
+			on   bool
+		}{{" pinned", sp.Pinned}, {" archived", sp.Archived}, {" muted", sp.Muted()}, {" blocked", sp.Blocked}} {
+			if f.on {
+				flags += f.name
+			}
+		}
+		fmt.Fprintf(&b, "- id=%s  %s %q  unread=%d%s  last %s: %s: %s\n", sp.Name, kind, s.h.SpaceTitle(sp), sp.Unread, flags, s.h.When(sp.LastActive), sp.LastSender, oneLine(sp.LastText, 120))
 	}
 	if b.Len() == 0 {
 		return text("no spaces"), nil, nil
@@ -690,7 +699,16 @@ func (s *server) waChats(ctx context.Context, _ *mcp.CallToolRequest, in waChats
 		if sp.Type == "GROUP_CHAT" {
 			kind = "group"
 		}
-		fmt.Fprintf(&b, "- id=%s  %s %q  unread=%d  last %s: %s: %s\n", sp.Name, kind, s.h.SpaceTitle(sp), sp.Unread, s.h.When(sp.LastActive), sp.LastSender, oneLine(sp.LastText, 120))
+		flags := ""
+		for _, f := range []struct {
+			name string
+			on   bool
+		}{{" pinned", sp.Pinned}, {" archived", sp.Archived}, {" muted", sp.Muted()}, {" blocked", sp.Blocked}} {
+			if f.on {
+				flags += f.name
+			}
+		}
+		fmt.Fprintf(&b, "- id=%s  %s %q  unread=%d%s  last %s: %s: %s\n", sp.Name, kind, s.h.SpaceTitle(sp), sp.Unread, flags, s.h.When(sp.LastActive), sp.LastSender, oneLine(sp.LastText, 120))
 	}
 	if b.Len() == 0 {
 		return text("no chats"), nil, nil

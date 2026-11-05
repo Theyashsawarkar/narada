@@ -216,3 +216,22 @@ func SendTime(t, now time.Time) string {
 	}
 	return t.Format("02 Jan 2006 15:04")
 }
+
+// ParseLength reads a length of time: 90m, 8h, 3d, 1w (and Go's 1h30m).
+func ParseLength(s string) (time.Duration, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	for suffix, unit := range map[string]time.Duration{"w": 7 * 24 * time.Hour, "d": 24 * time.Hour} {
+		if n, ok := strings.CutSuffix(s, suffix); ok {
+			v, err := strconv.ParseFloat(n, 64)
+			if err != nil || v <= 0 {
+				return 0, fmt.Errorf("%q isn't a length of time", s)
+			}
+			return time.Duration(v * float64(unit)), nil
+		}
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("%q isn't a length of time", s)
+	}
+	return d, nil
+}
