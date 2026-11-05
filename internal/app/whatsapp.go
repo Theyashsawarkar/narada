@@ -31,6 +31,9 @@ type WhatsAppConn interface {
 	Download(ctx context.Context, raw []byte) ([]byte, error)
 	MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error
 	React(ctx context.Context, chat, sender, id, emoji string) error
+	Edit(ctx context.Context, chat, id, text string) error
+	Revoke(ctx context.Context, chat, sender, id string) error
+	Forward(ctx context.Context, chat string, m whatsapp.Message) (string, error)
 	Resolve(ctx context.Context, phone string) (string, error)
 	GroupName(ctx context.Context, chat string) (string, error)
 	Logout(ctx context.Context) error
@@ -337,8 +340,12 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 					continue
 				}
 			}
+			text := m.Text
+			if m.Forwarded {
+				text = "↪ Forwarded · " + text
+			}
 			cm := store.ChatMessage{Account: acc, Name: name, Space: m.Chat, Sender: m.Sender, SenderName: a.waPerson(m.Chat, m.Sender, m.SenderName),
-				Text: m.Text, Created: m.Time.UnixMilli(), Edited: m.Edit}
+				Text: text, Created: m.Time.UnixMilli(), Edited: m.Edit}
 			cm.Reactions, _ = a.Store.WhatsAppReactionSummary(m.Chat, m.ID) // putting it again mustn't wipe them
 			if m.FromMe {
 				cm.Sender, cm.SenderName = wa.ChatUser, "You"
@@ -654,7 +661,8 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 	if out.Quote != "" {
 		if q, err := a.Store.ChatMessage(store.WhatsAppAccount, out.Quote); err == nil {
 			_, id, _ := strings.Cut(strings.TrimPrefix(q.Name, q.Space), "/")
-			quote = &whatsapp.Message{ID: id, Sender: q.Sender, Text: q.Text}
+			// Chat: a group's message quoted in a DM is a private reply
+			quote = &whatsapp.Message{ID: id, Chat: q.Space, Sender: q.Sender, Text: q.Text}
 		}
 	}
 	wa, _ := a.Store.WhatsApp()
@@ -668,6 +676,9 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files, Ticks: whatsapp.TickSent}})
 		_ = a.queueWhatsAppReads(out.Space) // answering a chat reads it, as on the phone
 		_ = a.Store.SetSpaceRead(store.WhatsAppAccount, out.Space, time.Now().UnixMilli())
+	}
+	if out.Action != "" {
+		return a.deliverWhatsAppAction(ctx, c, it, keep)
 	}
 	if len(out.Files) == 0 {
 		id, err := c.Send(ctx, out.Space, out.Body, quote)

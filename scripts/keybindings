@@ -37,8 +37,10 @@
 # keybind: Tmux/narada | Space (picking) | Open the picked photo or GIF full size (h/l previous / next, v opens it, Esc back)
 # keybind: Tmux/narada | Backspace (picking) | Jump back to the reply you came from
 # keybind: Tmux/narada | e (picking) | Toggle a reaction on the picked message (yours are marked ✓; picking one removes it)
-# keybind: Tmux/narada | E (picking) | Edit your picked message in the message box
-# keybind: Tmux/narada | d d (picking) | Delete your picked message, for everyone
+# keybind: Tmux/narada | E (picking) | Edit your picked message in the message box (WhatsApp: within 15 minutes)
+# keybind: Tmux/narada | d d (picking) | Delete your picked message, for everyone (WhatsApp: someone else's is deleted for you, here only)
+# keybind: Tmux/narada | f (picking, WhatsApp) | Forward the picked message to another chat (type a contact, group or number)
+# keybind: Tmux/narada | R (picking, WhatsApp group) | Send a private reply to the picked group message (in your chat with its sender, quoting it)
 # keybind: Tmux/narada | p | Toggle the chat pinned on top of the list
 # keybind: Tmux/narada | [ / ] | Switch to the previous / next chat (staying in the conversation)
 # keybind: Tmux/narada | Ctrl+k | Open the chat switcher (search chats, people and messages)

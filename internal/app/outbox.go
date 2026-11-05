@@ -96,7 +96,8 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 	if err != nil {
 		return it, err
 	}
-	if origin == OriginYou && it.Status == store.StatusQueued && out.ScheduledFor == 0 && (kind == "chat" || kind == "whatsapp") {
+	if origin == OriginYou && it.Status == store.StatusQueued && out.ScheduledFor == 0 && (kind == "chat" || kind == "whatsapp") &&
+		(out.Action == "" || out.Action == ActForward) {
 		a.showPending(id, account, kind, out)
 	}
 	if origin == OriginAgent {
@@ -158,6 +159,21 @@ func validate(kind string, out store.Outgoing) error {
 	case "whatsapp":
 		if out.Space == "" {
 			return errors.New("no chat")
+		}
+		switch out.Action {
+		case "":
+		case ActEdit:
+			if out.Target == "" || strings.TrimSpace(out.Body) == "" {
+				return errors.New("an edit needs the message and its new text")
+			}
+			return nil
+		case ActDelete, ActForward:
+			if out.Target == "" {
+				return errors.New("which message?")
+			}
+			return nil
+		default:
+			return fmt.Errorf("unknown WhatsApp action %q", out.Action)
 		}
 		if strings.TrimSpace(out.Body) == "" && len(out.Files) == 0 {
 			return errors.New("the message is empty")

@@ -398,6 +398,10 @@ func addReaction(summary, emoji string) string {
 
 // EditChatMessage changes the text of a message you sent.
 func (a *App) EditChatMessage(ctx context.Context, account, msg, text string) error {
+	if account == store.WhatsAppAccount {
+		_, err := a.EditWhatsApp(msg, text, OriginYou)
+		return err
+	}
 	c, err := a.Client(account)
 	if err != nil {
 		return err
@@ -413,6 +417,10 @@ func (a *App) DeleteChatMessage(ctx context.Context, account, msg string) error 
 	if id, ok := store.PendingOutboxID(msg); ok { // not sent yet: stop it, if it still can be
 		_ = a.Cancel(id)
 		return a.Store.DeleteChatMessage(account, msg)
+	}
+	if account == store.WhatsAppAccount {
+		_, err := a.DeleteWhatsApp(msg, true, OriginYou)
+		return err
 	}
 	c, err := a.Client(account)
 	if err != nil {

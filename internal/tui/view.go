@@ -88,7 +88,7 @@ func (m Model) previewHeight() int { return m.bodyHeight() - 2 }
 
 func (m Model) inputMode() bool {
 	switch m.mode {
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward:
 		return true
 	}
 	return false
@@ -451,7 +451,7 @@ func (m Model) inputView() string {
 	s := m.styles
 	prompt := map[mode]string{modeFilter: "/", modeAsk: "@claude ", modeSearch: "search gmail: ", modeSaveName: "section name (Enter: the search itself): ",
 		modeDraftHint: "draft a reply that says (Enter for Claude's pick): ", modeLink: fmt.Sprintf("open link (1-%d): ", len(m.links)), modeRename: m.renamePrompt(),
-		modePhone: "your WhatsApp number, with its country code: "}[m.mode]
+		modePhone: "your WhatsApp number, with its country code: ", modeForward: "forward to (a contact, a group or a number): "}[m.mode]
 	cur := m.cursor()
 	under, rest := " ", ""
 	if cur < len(m.input) {
@@ -463,7 +463,7 @@ func (m Model) inputView() string {
 func (m Model) footerView() string {
 	s := m.styles
 	modeName := map[mode]string{modeNormal: "normal", modeFilter: "filter", modeAsk: "ask", modeSearch: "search", modeSaveName: "save",
-		modeDraftHint: "draft", modePhone: "link", modeReview: "review", modeApprove: "approve", modeHelp: "keys", modeChatMsg: "message", modeLink: "link", modeCompose: "compose", modeFind: "search", modeRename: "rename", modePick: "files", modeWhen: "later", modeConvo: "new chat", modeReact: "react", modeView: "picture"}[m.mode]
+		modeDraftHint: "draft", modePhone: "link", modeReview: "review", modeApprove: "approve", modeHelp: "keys", modeChatMsg: "message", modeLink: "link", modeCompose: "compose", modeFind: "search", modeRename: "rename", modePick: "files", modeWhen: "later", modeConvo: "new chat", modeReact: "react", modeView: "picture", modeForward: "forward"}[m.mode]
 	var keys [][2]string
 	switch m.mode {
 	case modeReview:
@@ -489,7 +489,7 @@ func (m Model) footerView() string {
 		if m.comp != nil && m.comp.approveID > 0 {
 			keys = [][2]string{{"tab", "next"}, {"ctrl+s", "keep changes"}, {"ctrl+e", "editor"}, {"esc", "back"}}
 		}
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward:
 		keys = [][2]string{{"enter", "done"}, {"esc", "cancel"}, {"ctrl+u", "clear"}}
 	case modeView:
 		keys = [][2]string{{"h/l", "previous/next"}, {"v", "open in its app"}, {"esc", "back"}}

@@ -1,0 +1,136 @@
+package tui
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/fake"
+	"github.com/Theyashsawarkar/narada/internal/store"
+)
+
+// waModel is the screen on a linked fake WhatsApp, in the chat named
+// title, picking its last message.
+func waModel(t *testing.T, chat string) (Model, *fake.WhatsApp) {
+	t.Helper()
+	m := model(t)
+	w := fake.NewWhatsApp()
+	w.SeedWhatsApp()
+	m.a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }
+	if err := m.a.Store.AddWhatsApp("+919876500000", w.Me); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if ok, err := m.a.StartWhatsApp(ctx); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	m.a.Config.ChatUndoSeconds = 0
+	m.a.Config.Images = "off" // no pictures being prepared as the test ends
+	sp, err := m.a.Store.Space(store.WhatsAppAccount, chat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.showSpace(sp)
+	m.mode, m.focus = modeNormal, 1
+	m.loadPreview(true)
+	m.chatSel = len(m.chatMsgs) - 1
+	return m, w
+}
+
+func pickMsg(t *testing.T, m Model, id string) Model {
+	t.Helper()
+	for i, c := range m.chatMsgs {
+		if strings.HasSuffix(c.Name, "/"+id) {
+			m.chatSel = i
+			return m
+		}
+	}
+	t.Fatalf("no message %s in %d", id, len(m.chatMsgs))
+	return m
+}
+
+func TestForwardFromTheScreen(t *testing.T) {
+	m, w := waModel(t, "919800000001@s.whatsapp.net")
+	m = pickMsg(t, m, "H3")
+	m = press(m, "f")
+	if m.mode != modeForward {
+		t.Fatalf("f didn't ask where to: mode %d", m.mode)
+	}
+	m = typeText(m, "Ravi")
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if cmd == nil {
+		t.Fatal("nothing queued")
+	}
+	if done, ok := cmd().(doneMsg); !ok || done.err != nil {
+		t.Fatalf("forward: %+v", done)
+	}
+	m.a.DeliverDue(context.Background())
+	if len(w.Sent) != 1 || !w.Sent[0].Forwarded || w.Sent[0].Chat != "919800000002@s.whatsapp.net" {
+		t.Fatalf("sent %+v", w.Sent)
+	}
+}
+
+func TestReplyPrivatelyFromTheScreen(t *testing.T) {
+	m, w := waModel(t, "120363000000000001@g.us")
+	m = pickMsg(t, m, "H6") // Ravi's, in the group
+	m = press(m, "R")
+	sp, ok := m.curSpace()
+	if !ok || sp.Name != "919800000002@s.whatsapp.net" || m.mode != modeChatMsg || m.replyTo == nil {
+		t.Fatalf("R should open the chat with Ravi, replying: %+v %v", sp, m.replyTo)
+	}
+	m = typeText(m, "just us")
+	m = press(m, "enter")
+	m.a.DeliverDue(context.Background())
+	if len(w.Sent) != 1 || w.Sent[0].Quoted != "H6" || w.Quotes[0].Chat != "120363000000000001@g.us" {
+		t.Fatalf("sent %+v quotes %+v", w.Sent, w.Quotes)
+	}
+}
+
+func TestDeleteForMeFromTheScreen(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	m = pickMsg(t, m, "H4") // Ravi's
+	m = press(m, "d")
+	if !strings.Contains(m.toast, "for you") {
+		t.Fatalf("toast %q", m.toast)
+	}
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m = nm.(Model)
+	if cmd != nil {
+		cmd()
+	}
+	if _, err := m.a.Store.ChatMessage(store.WhatsAppAccount, "919800000002@s.whatsapp.net/H4"); err == nil || len(w.Revoked) != 0 {
+		t.Fatal("delete for me must remove it here and tell no one")
+	}
+}
+
+func TestEditFromTheScreen(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	it, err := m.a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: "919800000002@s.whatsapp.net", Body: "at 5"}, app.OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.a.DeliverDue(context.Background())
+	it, _ = m.a.Store.OutboxItem(it.ID)
+	m.loadPreview(true)
+	m = pickMsg(t, m, strings.TrimPrefix(it.Result, "919800000002@s.whatsapp.net/"))
+	m = press(m, "E")
+	if m.editingMsg == "" {
+		t.Fatalf("E didn't start editing: %q", m.toast)
+	}
+	m = press(m, "ctrl+u")
+	m = typeText(m, "at 6")
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if cmd != nil {
+		cmd()
+	}
+	m.a.DeliverDue(context.Background())
+	if len(w.Edited) != 1 || !strings.HasSuffix(w.Edited[0], " at 6") {
+		t.Fatalf("edited %v", w.Edited)
+	}
+}

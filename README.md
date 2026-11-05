@@ -269,8 +269,10 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `Space` (picking) | Open the picked photo or GIF full size (h/l previous / next, v opens it, Esc back) |
 | `Backspace` (picking) | Jump back to the reply you came from |
 | `e` (picking) | Toggle a reaction on the picked message (yours are marked ✓; picking one removes it) |
-| `E` (picking) | Edit your picked message in the message box |
-| `d d` (picking) | Delete your picked message, for everyone |
+| `E` (picking) | Edit your picked message in the message box (WhatsApp: within 15 minutes) |
+| `d d` (picking) | Delete your picked message, for everyone (WhatsApp: someone else's is deleted for you, here only) |
+| `f` (picking, WhatsApp) | Forward the picked message to another chat (type a contact, group or number) |
+| `R` (picking, WhatsApp group) | Send a private reply to the picked group message (in your chat with its sender, quoting it) |
 | `p` | Toggle the chat pinned on top of the list |
 | `[` / `]` | Switch to the previous / next chat (staying in the conversation) |
 | `Ctrl+k` | Open the chat switcher (search chats, people and messages) |
@@ -525,6 +527,10 @@ picking yours again takes it back, and other people's show under their messages)
 `@` while typing lists who you can tag (a group's members and whoever has written
 there; type to narrow it) and tags show as names: the name you saved, else the name
 they gave themselves, and their number only when neither is known,
+`E` edits a message of yours (for 15 minutes, as WhatsApp allows), `d d`
+deletes it for everyone (someone else's: for you, here only), `f` forwards
+the picked message to another chat, and `R` on someone's message in a group
+replies to them privately, quoting it,
 and opening a chat marks it read (the sender sees blue ticks). The status
 line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
 notify like chat DMs. The background service keeps WhatsApp online; without
@@ -618,7 +624,7 @@ claude  → contacts_find → mail_send
 | `chat_send` | Post in a space, DM or thread | **asks you** |
 | `whatsapp_chats` | WhatsApp chats with unread counts | reads |
 | `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
-| `whatsapp_send` | One message to one WhatsApp chat, optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
+| `whatsapp_send` | One message to one WhatsApp chat (or `forward`: a message forwarded there), optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
 | `attachment_save` | Download a mail's attachments or a chat or WhatsApp message's files into `~/Downloads/narada` | saves files |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
@@ -691,7 +697,10 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
 | `narada whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
 | `narada whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
-| `narada whatsapp send <to> [text] [--attach FILE]... [--voice FILE]... [--at WHEN] [--link]` | Send one message, with files (`--attach`, repeatable, up to 2 GB each; each its own message, the text the first one's caption) and voice notes (`--voice`: an audio file, made Ogg Opus with ffmpeg when it isn't); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
+| `narada whatsapp send <to> [text] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--at WHEN] [--link]` | Send one message (`--reply-to`: quoting a message; a group's message sent to a person is a private reply), with files (`--attach`, repeatable, up to 2 GB each; each its own message, the text the first one's caption) and voice notes (`--voice`: an audio file, made Ogg Opus with ffmpeg when it isn't); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
+| `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |
+| `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |
+| `narada whatsapp forward <message> <to>` | Forward a message (text, photo, video, voice note, document); it shows as forwarded |
 | `narada whatsapp save <message> [N\|all] [--dir DIR]` | Download a message's photo, video, voice note or document (`whatsapp read` shows the ids and files); when the daemon holds WhatsApp it downloads it and this waits |
 | `narada status [--json\|--tmux]` | Unread counts |
 | `narada sync` | Sync every account now |

@@ -22,6 +22,15 @@ Newest first.
   holds WhatsApp, it downloads the file and the command waits for it, instead of
   failing with "try again". Big files stream to disk both ways (sending and saving),
   and a long download no longer holds up sends.
+- **Edit, delete, forward and reply privately on WhatsApp**: `E` on your message edits
+  it (within 15 minutes), `d d` deletes it for everyone, or someone else's for you
+  (here only); `f` forwards the picked message, photo or file and all, marked
+  forwarded; `R` on a group message answers its sender privately, quoting it. From
+  the shell: `whatsapp edit|delete [--for-me]|forward`, and `whatsapp send
+  --reply-to`. Agents can forward (`whatsapp_send` with `forward`), behind your
+  approval. Edits and deletions go through the outbox like sends (ADR 7), so an
+  agent's wait for you and each counts against `whatsapp_per_hour`. Forwarded messages
+  you receive say so.
 
 ## v0.10.0 -- 2026-11-05
 

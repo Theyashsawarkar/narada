@@ -99,3 +99,40 @@ func TestWhatsAppSendVoice(t *testing.T) {
 		t.Fatalf("outbox: %+v", items)
 	}
 }
+
+func TestWhatsAppEditDeleteForwardCommands(t *testing.T) {
+	a, w := waApp(t)
+	if _, err := run(t, a, "send", "Ravi", "see you at 5", "--now"); err != nil {
+		t.Fatal(err)
+	}
+	items, _ := a.Store.Outbox(store.StatusSent)
+	sent := items[0].Result
+	if _, err := run(t, a, "edit", sent, "see", "you", "at", "6"); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Edited) != 1 || !strings.HasSuffix(w.Edited[0], "see you at 6") {
+		t.Fatalf("edited %v", w.Edited)
+	}
+	if _, err := run(t, a, "forward", "919800000001@s.whatsapp.net/H3", "Ravi"); err != nil {
+		t.Fatal(err)
+	}
+	if last := w.Sent[len(w.Sent)-1]; !last.Forwarded || last.Chat != "919800000002@s.whatsapp.net" {
+		t.Fatalf("forwarded %+v", last)
+	}
+	if _, err := run(t, a, "delete", "919800000002@s.whatsapp.net/H4"); err == nil {
+		t.Fatal("deleted Ravi's message for everyone")
+	}
+	if _, err := run(t, a, "delete", "919800000002@s.whatsapp.net/H4", "--for-me"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, a, "delete", sent); err != nil || len(w.Revoked) != 1 {
+		t.Fatalf("delete for everyone: %v %v", err, w.Revoked)
+	}
+	// a private reply to the group's message
+	if _, err := run(t, a, "send", "Ravi", "between us", "--reply-to", "120363000000000001@g.us/H6", "--now"); err != nil {
+		t.Fatal(err)
+	}
+	if q := w.Quotes[len(w.Quotes)-1]; q.ID != "H6" || q.Chat != "120363000000000001@g.us" {
+		t.Fatalf("quoted %+v", q)
+	}
+}

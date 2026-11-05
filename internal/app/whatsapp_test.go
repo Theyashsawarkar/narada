@@ -755,3 +755,134 @@ func TestWhatsAppVoiceNote(t *testing.T) {
 		t.Fatalf("shows as %q", m.Text)
 	}
 }
+
+// deliver runs the outbox once and returns the item as it ended.
+func deliver(t *testing.T, a *App, ctx context.Context, it store.OutboxItem) store.OutboxItem {
+	t.Helper()
+	a.DeliverDue(ctx)
+	got, err := a.Store.OutboxItem(it.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func TestWhatsAppEditDeleteForward(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	ravi := "919800000002@s.whatsapp.net"
+	it, _ := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: ravi, Body: "see you at 5"}, OriginYou)
+	sent := deliver(t, a, ctx, it).Result
+
+	// edit: through the outbox, the new text here once it's gone
+	ed, err := a.EditWhatsApp(sent, "see you at 6", OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, ed); got.Status != store.StatusSent {
+		t.Fatalf("edit: %s %s", got.Status, got.Error)
+	}
+	if m, _ := a.Store.ChatMessage(store.WhatsAppAccount, sent); m.Text != "see you at 6" || !m.Edited {
+		t.Fatalf("here it says %q (edited %v)", m.Text, m.Edited)
+	}
+	if len(w.Edited) != 1 || !strings.HasSuffix(w.Edited[0], " see you at 6") {
+		t.Fatalf("WhatsApp got %v", w.Edited)
+	}
+	// abuse: someone else's message, a file, too late, empty text
+	if _, err := a.EditWhatsApp(ravi+"/H4", "mine now", OriginYou); err == nil {
+		t.Fatal("edited someone else's message")
+	}
+	old := waName("919800000001@s.whatsapp.net", "H1") // yours, five hours ago
+	if _, err := a.EditWhatsApp(old, "late", OriginYou); err == nil || !strings.Contains(err.Error(), "15 minutes") {
+		t.Fatalf("edit after 15 minutes: %v", err)
+	}
+	if _, err := a.EditWhatsApp(sent, "  ", OriginYou); err == nil {
+		t.Fatal("edited to nothing")
+	}
+
+	// forward a photo to Ravi: by reference, marked forwarded
+	fw, err := a.ForwardWhatsApp(waName("919800000001@s.whatsapp.net", "H3"), store.Space{Name: ravi, DisplayName: "Ravi"}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, fw); got.Status != store.StatusSent {
+		t.Fatalf("forward: %s %s", got.Status, got.Error)
+	}
+	last := w.Sent[len(w.Sent)-1]
+	if !last.Forwarded || last.Chat != ravi || last.Media == nil || string(last.Media.Raw) != "demo-photo" {
+		t.Fatalf("forwarded as %+v", last)
+	}
+
+	// delete for everyone: yours only
+	if _, err := a.DeleteWhatsApp(ravi+"/H4", true, OriginYou); err == nil {
+		t.Fatal("deleted someone else's message for everyone")
+	}
+	del, err := a.DeleteWhatsApp(sent, true, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, del); got.Status != store.StatusSent {
+		t.Fatalf("delete: %s %s", got.Status, got.Error)
+	}
+	if _, err := a.Store.ChatMessage(store.WhatsAppAccount, sent); err == nil || len(w.Revoked) != 1 {
+		t.Fatalf("still here, or WhatsApp wasn't told: %v", w.Revoked)
+	}
+	// delete for me: someone else's, here only, nothing sent
+	if _, err := a.DeleteWhatsApp(ravi+"/H4", false, OriginYou); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Store.ChatMessage(store.WhatsAppAccount, ravi+"/H4"); err == nil || len(w.Revoked) != 1 {
+		t.Fatal("delete for me must remove it here and tell no one")
+	}
+	// an agent's edit waits for approval, like its sends
+	it2, _ := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: ravi, Body: "typo"}, OriginYou)
+	sent2 := deliver(t, a, ctx, it2).Result
+	if ag, err := a.EditWhatsApp(sent2, "fixed", OriginAgent); err != nil || ag.Status != store.StatusApproval {
+		t.Fatalf("an agent's edit: %v %s", err, ag.Status)
+	}
+}
+
+// Replying privately to a group message: the DM quotes the group's message.
+func TestWhatsAppReplyPrivately(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	it, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: "919800000002@s.whatsapp.net", Body: "just between us",
+		Quote: waName("120363000000000001@g.us", "H6")}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, it); got.Status != store.StatusSent {
+		t.Fatal(got.Error)
+	}
+	if len(w.Sent) != 1 || w.Sent[0].Quoted != "H6" || w.Sent[0].Chat != "919800000002@s.whatsapp.net" {
+		t.Fatalf("sent %+v", w.Sent)
+	}
+	if len(w.Quotes) != 1 || w.Quotes[0].Chat != "120363000000000001@g.us" {
+		t.Fatalf("the quote must name the group (a private reply): %+v", w.Quotes)
+	}
+}
+
+func TestWhatsAppForwardedShows(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	w.Receive(whatsapp.Message{ID: "F1", Chat: "919800000002@s.whatsapp.net", Sender: "919800000002@s.whatsapp.net", Text: "the venue", Forwarded: true})
+	if m, _ := a.Store.ChatMessage(store.WhatsAppAccount, "919800000002@s.whatsapp.net/F1"); !strings.HasPrefix(m.Text, "↪ Forwarded") {
+		t.Fatalf("shows %q", m.Text)
+	}
+}

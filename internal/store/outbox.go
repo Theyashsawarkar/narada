@@ -35,6 +35,11 @@ type Outgoing struct {
 	SpaceName string `json:"space_name,omitempty"`
 	Thread    string `json:"thread,omitempty"`
 	Quote     string `json:"quote,omitempty"` // the message this one replies to (quoting it)
+	// WhatsApp: what the item does besides sending a message (ADR 7):
+	// "edit" or "delete" (for everyone) the message Target, "forward"
+	// Target here; "" sends Body
+	Action string `json:"action,omitempty"`
+	Target string `json:"target,omitempty"`
 	// both
 	Body  string `json:"body"`
 	HTML  string `json:"html,omitempty"` // mail: sent beside Body when set

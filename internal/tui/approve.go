@@ -170,6 +170,12 @@ func (m approver) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func sendTarget(kind string, out store.Outgoing) (verb, target string) {
 	name := firstNonEmpty(out.SpaceName, out.Space)
 	switch {
+	case kind == "whatsapp" && out.Action == app.ActForward:
+		return "forward a message to", name
+	case kind == "whatsapp" && out.Action == app.ActEdit:
+		return "edit your message in", name
+	case kind == "whatsapp" && out.Action == app.ActDelete:
+		return "delete your message, for everyone, in", name
 	case kind == "whatsapp" && strings.HasSuffix(out.Space, "@g.us"):
 		return "message the group", name
 	case kind == "whatsapp":

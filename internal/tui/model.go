@@ -18,6 +18,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/cli"
 	"github.com/Theyashsawarkar/narada/internal/config"
 	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 type mode int
@@ -43,6 +44,7 @@ const (
 	modeCompose // the compose screen
 	modeFind    // the search window
 	modeView    // a picture full size
+	modeForward // typing who to forward a WhatsApp message to
 )
 
 const (
@@ -216,6 +218,7 @@ type Model struct {
 	tagged        map[string]string // names picked for this message, to their numbers
 	chatFiles     []store.File      // files for the message being typed
 	rec           *recording        // a voice note being recorded
+	forwarding    string            // the WhatsApp message f forwards
 	editingMsg    string            // the message of yours being edited in the box
 	armDelete     string            // d pressed once on this message
 	reactSel      int               // the emoji picked in the reaction window
@@ -835,9 +838,29 @@ func (m *Model) replyTarget() *store.ChatMessage {
 // Chat's own reply does: it stays in the conversation, not in a thread
 // (Google reports every space as threaded, so that can't decide it).
 func (m *Model) quoteInto(out *store.Outgoing, sp store.Space) {
-	if r := m.replyTo; r != nil && r.Space == sp.Name {
-		out.Quote = r.Name
+	if r := m.replyTo; r != nil && (r.Space == sp.Name || m.wa && whatsapp.IsGroup(r.Space) && !whatsapp.IsGroup(sp.Name)) {
+		out.Quote = r.Name // (a group's message in a DM: a private reply)
 	}
+}
+
+// replyPrivately answers the picked group message in your chat with its
+// sender, quoting it, as WhatsApp's "Reply privately" does.
+func (m *Model) replyPrivately() tea.Cmd {
+	c := m.chatMsgs[m.chatSel]
+	if !whatsapp.IsGroup(c.Space) || c.Mine {
+		m.say("R replies privately to someone's message in a group")
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	sp, err := m.a.WhatsAppChat(ctx, c.Sender)
+	if err != nil {
+		m.setErr(err.Error())
+		return nil
+	}
+	m.openSpace(sp)
+	m.replyTo = &c
+	return nil
 }
 
 // recolour picks up a theme change (varna's palette, the config or its
@@ -1316,7 +1339,7 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 		}
 		return m, nil
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename, modePhone:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename, modePhone, modeForward:
 		return m.inputKey(k)
 	case modeReview:
 		return m.reviewKey(s)
@@ -1429,6 +1452,24 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case modeLink:
 			m.openLink(text)
+		case modeForward:
+			msg, a := m.forwarding, m.a
+			m.forwarding = ""
+			if text == "" || msg == "" {
+				return m, nil
+			}
+			return m, func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				sp, err := a.WhatsAppChat(ctx, text)
+				if err != nil {
+					return doneMsg{err: err}
+				}
+				if _, err := a.ForwardWhatsApp(msg, sp, app.OriginYou); err != nil {
+					return doneMsg{err: err}
+				}
+				return doneMsg{msg: "forwarding to " + cli.SpaceTitle(sp) + "…"}
+			}
 		case modePhone:
 			if len([]rune(strings.Trim(text, "+ "))) < 7 {
 				m.say("type your number with its country code, like +919876543210")
@@ -1746,6 +1787,9 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 			m.say("only one account (narada auth add <name> adds another)")
 		}
 	case "R":
+		if m.wa && m.pickingMsg() {
+			return m, m.replyPrivately()
+		}
 		if it, ok := m.curOutbox(); ok && it.Status == store.StatusFailed {
 			if err := m.a.Retry(it.ID); err != nil {
 				m.setErr(err.Error())
@@ -1806,17 +1850,24 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 			case "e": // react to it (or take a reaction back)
 				return m, m.openReact()
 			case "d": // delete it (yours), d twice
-				if !c.Mine {
+				forMe := m.wa && !c.Mine // WhatsApp: someone else's goes for you, here
+				if !c.Mine && !forMe {
 					m.say("only your own messages can be deleted")
 					return m, nil
 				}
 				if m.armDelete != c.Name {
 					m.armDelete = c.Name
-					m.say("d again deletes it, for everyone")
+					m.say(map[bool]string{false: "d again deletes it, for everyone", true: "d again deletes it for you (here only)"}[forMe])
 					return m, nil
 				}
 				m.armDelete = ""
 				a := m.a
+				if forMe {
+					return m, m.act("deleted for you", func(ctx context.Context) error {
+						_, err := a.DeleteWhatsApp(c.Name, false, app.OriginYou)
+						return err
+					})
+				}
 				return m, m.act("deleted", func(ctx context.Context) error { return a.DeleteChatMessage(ctx, c.Account, c.Name) })
 			}
 			return m, nil
@@ -1943,6 +1994,16 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 	case "c":
 		return m, m.compose()
 	case "r", "a", "f":
+		if s == "f" && m.wa && m.pickingMsg() {
+			c := m.chatMsgs[m.chatSel]
+			if store.IsPending(c.Name) {
+				m.say("wait until it has gone out")
+				return m, nil
+			}
+			m.forwarding = c.Name
+			m.mode, m.input = modeForward, nil
+			return m, nil
+		}
 		if m.tab == tabChat {
 			// reply to the picked message (or the latest from someone
 			// else), quoting it, right in the message box
@@ -2203,14 +2264,6 @@ func copyText(s string) string {
 func (m Model) notOnWhatsApp(s string) string {
 	if !m.wa || m.tab != tabChat {
 		return ""
-	}
-	if m.pickingMsg() {
-		switch s {
-		case "E":
-			return "editing"
-		case "d":
-			return "deleting"
-		}
 	}
 	switch s {
 	case "N":

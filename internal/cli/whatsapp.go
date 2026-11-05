@@ -19,7 +19,7 @@ import (
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send, save")
+		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -185,11 +185,59 @@ func whatsApp(a *app.App, args []string) error {
 			fmt.Println(p)
 		}
 		return err
+	case "edit":
+		fs := flags("narada whatsapp edit", "narada whatsapp edit <message-id> <new text...>\n\nChange the text of a message you sent (whatsapp read shows the ids). WhatsApp\nallows it for 15 minutes after sending.")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) < 2 {
+			return usageError("whatsapp edit needs a message id and the new text")
+		}
+		return waAct(a, func() (store.OutboxItem, error) {
+			return a.EditWhatsApp(pos[0], strings.Join(pos[1:], " "), app.OriginYou)
+		})
+	case "delete", "rm":
+		fs := flags("narada whatsapp delete", "narada whatsapp delete <message-id> [--for-me]\n\nDelete a message you sent, for everyone (WhatsApp allows it for about two and\na half days). --for-me removes any message from this machine only.")
+		forMe := fs.Bool("for-me", false, "only here: nobody else is told")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) != 1 {
+			return usageError("whatsapp delete needs one message id")
+		}
+		if *forMe {
+			if _, err := a.DeleteWhatsApp(pos[0], false, app.OriginYou); err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stderr, "narada: deleted for you (here)")
+			return nil
+		}
+		return waAct(a, func() (store.OutboxItem, error) { return a.DeleteWhatsApp(pos[0], true, app.OriginYou) })
+	case "forward", "fwd":
+		fs := flags("narada whatsapp forward", "narada whatsapp forward <message-id> <to>\n\nForward a message (its text, photo, video, voice note or document) to another\nchat: a contact, a group or a phone number. It shows as forwarded.")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) < 2 {
+			return usageError("whatsapp forward needs a message id and who to send it to")
+		}
+		ctx, cancel := ctxSignal()
+		defer cancel()
+		startWhatsApp(ctx, a)
+		sp, err := a.WhatsAppChat(ctx, strings.Join(pos[1:], " "))
+		if err != nil {
+			return err
+		}
+		return waAct(a, func() (store.OutboxItem, error) { return a.ForwardWhatsApp(pos[0], sp, app.OriginYou) })
 	case "send":
-		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--voice FILE]... [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more; up to 2 GB each): each is its own\nmessage, the text its first one's caption. --voice sends an audio file as a\nvoice note (made Ogg Opus with ffmpeg when it isn't).\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
+		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more; up to 2 GB each): each is its own\nmessage, the text its first one's caption. --voice sends an audio file as a\nvoice note (made Ogg Opus with ffmpeg when it isn't).\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
 		nowFlag := fs.Bool("now", false, "skip the undo window")
 		link := fs.Bool("link", false, "open the click-to-chat page instead of sending")
 		at := fs.String("at", "", "send later: \"tomorrow 9am\", \"in 2h\"...")
+		replyTo := fs.String("reply-to", "", "a message id to reply to, quoting it (a group's message, sent to a person: a private reply)")
 		var attach, voice listFlag
 		fs.Var(&attach, "attach", "a file to send (repeat for more)")
 		fs.Var(&voice, "voice", "an audio file to send as a voice note (repeat for more)")
@@ -227,7 +275,12 @@ func whatsApp(a *app.App, args []string) error {
 		if *nowFlag {
 			a.Config.ChatUndoSeconds = 0
 		}
-		out := store.Outgoing{Space: sp.Name, SpaceName: SpaceTitle(sp), Body: text}
+		out := store.Outgoing{Space: sp.Name, SpaceName: SpaceTitle(sp), Body: text, Quote: *replyTo}
+		if *replyTo != "" {
+			if _, err := a.Store.ChatMessage(store.WhatsAppAccount, *replyTo); err != nil {
+				return fmt.Errorf("no message %s here (whatsapp read shows the ids)", *replyTo)
+			}
+		}
 		for i, p := range attach {
 			out.Files = append(out.Files, store.File{Source: p, Voice: i >= len(attach)-len(voice)})
 		}
@@ -244,6 +297,19 @@ func whatsApp(a *app.App, args []string) error {
 		return waitSend(a, it)
 	}
 	return usageError("unknown whatsapp command %q", sub)
+}
+
+// waAct queues a change to a message and waits for it to go out, as a
+// send does.
+func waAct(a *app.App, queue func() (store.OutboxItem, error)) error {
+	ctx, cancel := ctxSignal()
+	defer cancel()
+	startWhatsApp(ctx, a)
+	it, err := queue()
+	if err != nil {
+		return err
+	}
+	return waitSend(a, it)
 }
 
 // startWhatsApp goes online for this command when no other narada holds

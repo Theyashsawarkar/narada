@@ -40,6 +40,7 @@ Usage:
   narada whatsapp list|read <chat> WhatsApp chats and messages (--json, --mark-read)
   narada whatsapp send <to> <text> send on WhatsApp (--attach, --voice; --link: click-to-chat)
   narada whatsapp save <message>  download a WhatsApp message's file
+  narada whatsapp edit|delete|forward <message> ...  change or pass on a message
   narada status                   unread counts (--json, --tmux)
   narada sync                     sync every account now
   narada outbox                   sends of the last week (cancel <id> stops one)
@@ -654,9 +655,13 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 	if err != nil {
 		return err
 	}
+	done := map[string]string{"": "sent", app.ActEdit: "edited", app.ActDelete: "deleted for everyone", app.ActForward: "forwarded"}[it.Out.Action]
+	if done == "" {
+		done = "done"
+	}
 	switch got.Status {
 	case store.StatusSent:
-		fmt.Fprintln(os.Stderr, "narada: sent")
+		fmt.Fprintln(os.Stderr, "narada: "+done)
 		return nil
 	case store.StatusFailed:
 		return fmt.Errorf("not sent: %s", got.Error)
@@ -669,7 +674,7 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 	if got.Status != store.StatusSent {
 		return fmt.Errorf("not sent: %s %s", got.Status, got.Error)
 	}
-	fmt.Fprintln(os.Stderr, "narada: sent")
+	fmt.Fprintln(os.Stderr, "narada: "+done)
 	return nil
 }
 

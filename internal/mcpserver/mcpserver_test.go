@@ -260,4 +260,26 @@ func TestWhatsAppTools(t *testing.T) {
 	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek"}); !strings.Contains(out, "empty") {
 		t.Fatalf("nothing to send: %q", out)
 	}
+	// forward Amma's photo to Ravi: waits for approval, goes as a forward
+	approveNext := func() {
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if items, _ := a.Store.Outbox(store.StatusApproval); len(items) > 0 {
+				_ = a.Approve(items[0].ID, nil)
+				return
+			}
+		}
+	}
+	go approveNext()
+	n := len(w.Sent)
+	out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "forward": "919800000001@s.whatsapp.net/H3", "why": "send Ravi the curtains photo"})
+	if out != "Sent." || len(w.Sent) != n+1 || !w.Sent[n].Forwarded || w.Sent[n].Media == nil {
+		t.Fatalf("forward: %q %+v", out, w.Sent[n:])
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "forward": "919800000001@s.whatsapp.net/H3", "text": "look"}); !strings.Contains(out, "leave text") {
+		t.Fatalf("forward with text: %q", out)
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "forward": "nope"}); !strings.Contains(out, "no message") {
+		t.Fatalf("forward of nothing: %q", out)
+	}
 }

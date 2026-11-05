@@ -41,6 +41,7 @@ type Message struct {
 	Revoke     bool   // message ID was deleted for everyone
 	Media      *Media // a photo, GIF, file... it carries
 	Ticks      int    // yours: how far it got (TickSent, TickDelivered, TickRead)
+	Forwarded  bool   // marked "Forwarded"
 }
 
 // How far a message you sent got: the ticks WhatsApp shows beside it.
@@ -616,6 +617,7 @@ func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool
 	}
 	m.Media = media(msg)
 	if ci := contextInfo(msg); ci != nil {
+		m.Forwarded = ci.GetIsForwarded()
 		m.Quoted = ci.GetStanzaID()
 		m.Text = cl.mentions(ctx, m.Text, ci.GetMentionedJID())
 	}

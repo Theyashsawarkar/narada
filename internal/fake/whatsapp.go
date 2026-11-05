@@ -33,6 +33,9 @@ type WhatsApp struct {
 	Sent    []whatsapp.Message // what narada sent, in order
 	Read    []string           // chats narada sent read receipts for
 	Reacted []string           // reactions sent: "chat/id sender emoji"
+	Edited  []string           // edits sent: "chat/id new text"
+	Revoked []string           // deleted for everyone: "chat/id"
+	Quotes  []whatsapp.Message // what each send that replied quoted
 	ReadErr error              // MarkRead fails with this
 	SendErr error              // Send fails with this
 	Groups  map[string]string  // group JID → name
@@ -168,6 +171,7 @@ func (c *WhatsAppConn) Send(ctx context.Context, chat, text string, quote *whats
 	m := whatsapp.Message{ID: fmt.Sprintf("OUT%04d", w.nextID), Chat: chat, Sender: w.Me, Text: text, Time: time.Now(), FromMe: true}
 	if quote != nil {
 		m.Quoted = quote.ID
+		w.Quotes = append(w.Quotes, *quote)
 	}
 	w.Sent = append(w.Sent, m)
 	w.receipts(chat, m.ID)
@@ -239,6 +243,45 @@ func (c *WhatsAppConn) React(ctx context.Context, chat, sender, id, emoji string
 	}
 	c.w.Reacted = append(c.w.Reacted, chat+"/"+id+" "+sender+" "+emoji)
 	return nil
+}
+
+func (c *WhatsAppConn) Edit(ctx context.Context, chat, id, text string) error {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	if c.w.SendErr != nil {
+		return c.w.SendErr
+	}
+	c.w.Edited = append(c.w.Edited, chat+"/"+id+" "+text)
+	return nil
+}
+
+func (c *WhatsAppConn) Revoke(ctx context.Context, chat, sender, id string) error {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	if c.w.SendErr != nil {
+		return c.w.SendErr
+	}
+	c.w.Revoked = append(c.w.Revoked, chat+"/"+id)
+	return nil
+}
+
+// Forward records the forward as a sent message (Forwarded, with the
+// original's media).
+func (c *WhatsAppConn) Forward(ctx context.Context, chat string, m whatsapp.Message) (string, error) {
+	w := c.w
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if c.closed || w.handler == nil {
+		return "", errors.New("offline")
+	}
+	if w.SendErr != nil {
+		return "", w.SendErr
+	}
+	w.nextID++
+	fw := whatsapp.Message{ID: fmt.Sprintf("OUT%04d", w.nextID), Chat: chat, Sender: w.Me, Text: m.Text, Time: time.Now(), FromMe: true,
+		Media: m.Media, Forwarded: true}
+	w.Sent = append(w.Sent, fw)
+	return fw.ID, nil
 }
 
 func (c *WhatsAppConn) MarkRead(ctx context.Context, chat string, msgs []whatsapp.Message) error {
