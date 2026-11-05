@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send")
+		return usageError("whatsapp what? link, unlink, list, read, send, save")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -151,16 +152,47 @@ func whatsApp(a *app.App, args []string) error {
 			if m.Mine {
 				who = "you"
 			}
-			fmt.Printf("%s  %s\n%s\n\n", who, When(m.Created), m.Text)
+			fmt.Printf("%s  %s  [%s]\n%s\n", who, When(m.Created), m.Name, m.Text)
+			for i, f := range m.Files {
+				fmt.Printf("  file %d: %s (%s): narada whatsapp save %s %d\n", i+1, f.Name, app.HumanSize(f.Size), m.Name, i+1)
+			}
+			fmt.Println()
 		}
 		return nil
+	case "save", "download":
+		fs := flags("narada whatsapp save", "narada whatsapp save <message-id> [N|all] [--dir DIR]\n\nDownload a WhatsApp message's photo, video, voice note or document (whatsapp read\nshows the ids) into DIR, default ~/Downloads/narada. When another narada holds\nWhatsApp (the daemon), it downloads the file and this waits for it.")
+		dir := fs.String("dir", "", "where to save")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) < 1 {
+			return usageError("whatsapp save needs a message id (whatsapp read shows them)")
+		}
+		want := 0
+		if len(pos) > 1 && pos[1] != "all" {
+			if want, err = strconv.Atoi(pos[1]); err != nil || want < 1 {
+				return usageError("N is a file number, or all")
+			}
+		}
+		ctx, cancel := ctxSignal()
+		defer cancel()
+		startWhatsApp(ctx, a)
+		ctx, tcancel := context.WithTimeout(ctx, 30*time.Minute)
+		defer tcancel()
+		saved, err := a.SaveChatFiles(ctx, pos[0], want, *dir)
+		for _, p := range saved {
+			fmt.Println(p)
+		}
+		return err
 	case "send":
-		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more): each is its own message, the text\nits first one's caption.\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
+		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--voice FILE]... [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more; up to 2 GB each): each is its own\nmessage, the text its first one's caption. --voice sends an audio file as a\nvoice note (made Ogg Opus with ffmpeg when it isn't).\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
 		nowFlag := fs.Bool("now", false, "skip the undo window")
 		link := fs.Bool("link", false, "open the click-to-chat page instead of sending")
 		at := fs.String("at", "", "send later: \"tomorrow 9am\", \"in 2h\"...")
-		var attach listFlag
+		var attach, voice listFlag
 		fs.Var(&attach, "attach", "a file to send (repeat for more)")
+		fs.Var(&voice, "voice", "an audio file to send as a voice note (repeat for more)")
 		pos, err := parse(fs, rest)
 		if err != nil {
 			return err
@@ -168,6 +200,7 @@ func whatsApp(a *app.App, args []string) error {
 		if len(pos) < 1 {
 			return usageError("whatsapp send needs who to send to")
 		}
+		attach = append(attach, voice...)
 		text := strings.Join(pos[1:], " ")
 		if text == "" && len(attach) == 0 && !term.IsTerminal(int(os.Stdin.Fd())) {
 			b, _ := io.ReadAll(os.Stdin)
@@ -195,8 +228,8 @@ func whatsApp(a *app.App, args []string) error {
 			a.Config.ChatUndoSeconds = 0
 		}
 		out := store.Outgoing{Space: sp.Name, SpaceName: SpaceTitle(sp), Body: text}
-		for _, p := range attach {
-			out.Files = append(out.Files, store.File{Source: p})
+		for i, p := range attach {
+			out.Files = append(out.Files, store.File{Source: p, Voice: i >= len(attach)-len(voice)})
 		}
 		if err := scheduleFlag(&out, *at); err != nil {
 			return err

@@ -42,6 +42,7 @@ type App struct {
 	wa           WhatsAppConn  // set while this process holds the connection
 	waUnlock     func()        // releases the whatsapp lock
 	waReadErr    atomic.Value  // the last read-receipt failure logged
+	fetching     atomic.Bool   // fetchAsked is downloading (it runs beside deliveries)
 	waReady      chan struct{} // closed once it is connected
 	waReadyOnce  *sync.Once
 	waUnreadMu   sync.Mutex

@@ -267,7 +267,7 @@ func (cl *Client) Send(ctx context.Context, chat, text string, quote *Message) (
 	if err != nil {
 		return "", fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
 	}
-	msg := outgoing(text, quote)
+	msg := outgoing(chat, text, quote)
 	resp, err := cl.c.SendMessage(ctx, to, msg)
 	if err != nil {
 		return "", err
@@ -628,7 +628,7 @@ var reMention = regexp.MustCompile(`(?:^|[^\w@])@(\d{7,15})\b`)
 // outgoing is the message Send sends: plain text, or (to tag people or
 // quote a message) an extended text whose context names them, so an
 // "@<phone number>" in the text is a real tag that notifies that person.
-func outgoing(text string, quote *Message) *waE2E.Message {
+func outgoing(chat, text string, quote *Message) *waE2E.Message {
 	var tagged []string
 	seen := map[string]bool{}
 	for _, m := range reMention.FindAllStringSubmatch(text, -1) {
@@ -645,6 +645,9 @@ func outgoing(text string, quote *Message) *waE2E.Message {
 		ci.StanzaID = proto.String(quote.ID)
 		ci.Participant = proto.String(quote.Sender)
 		ci.QuotedMessage = &waE2E.Message{Conversation: proto.String(quote.Text)}
+		if quote.Chat != "" && quote.Chat != chat {
+			ci.RemoteJID = proto.String(quote.Chat) // replying privately to a group's message
+		}
 	}
 	return &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ci}}
 }

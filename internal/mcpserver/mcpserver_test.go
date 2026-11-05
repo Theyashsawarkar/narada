@@ -187,6 +187,16 @@ func TestWhatsAppTools(t *testing.T) {
 	if !strings.Contains(out, "Sneha (message 120363000000000001@g.us/H7): I'm in!") {
 		t.Fatalf("whatsapp_read: %s", out)
 	}
+	// a photo in the chat: listed, and saved on request
+	out = call(t, cs, "whatsapp_read", map[string]any{"chat": "Amma"})
+	if !strings.Contains(out, "file 1: photo.png") || !strings.Contains(out, "chat_message=919800000001@s.whatsapp.net/H3 number=1") {
+		t.Fatalf("whatsapp_read doesn't list the photo: %s", out)
+	}
+	t.Setenv("NARADA_DOWNLOADS", t.TempDir())
+	out = call(t, cs, "attachment_save", map[string]any{"chat_message": "919800000001@s.whatsapp.net/H3"})
+	if !strings.Contains(out, "photo.png") || !strings.Contains(out, "untrusted") {
+		t.Fatalf("attachment_save on WhatsApp: %s", out)
+	}
 	// Google Chat's tools don't see WhatsApp
 	if out := call(t, cs, "chat_spaces", nil); strings.Contains(out, "trek") {
 		t.Fatalf("chat_spaces shows WhatsApp: %s", out)

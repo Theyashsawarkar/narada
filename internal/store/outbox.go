@@ -61,6 +61,8 @@ type File struct {
 	// Ref is a Gmail attachment to fetch instead of a local file
 	// ("account/messageID/index"): a forwarded mail's attachments
 	Ref string `json:"ref,omitempty"`
+	// Voice: WhatsApp sends this audio file as a voice note
+	Voice bool `json:"voice,omitempty"`
 }
 
 type OutboxItem struct {

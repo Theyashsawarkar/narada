@@ -52,17 +52,25 @@ func TestText(t *testing.T) {
 
 // "@<phone number>" in the text tags that person; anything else stays plain.
 func TestOutgoingTags(t *testing.T) {
-	if m := outgoing("hello", nil); m.GetConversation() != "hello" {
+	if m := outgoing("1@s.whatsapp.net", "hello", nil); m.GetConversation() != "hello" {
 		t.Fatalf("plain text: %v", m)
 	}
-	m := outgoing("@919820147460 Sir, please check. Mail me@x.com, call @12", nil)
+	m := outgoing("1@s.whatsapp.net", "@919820147460 Sir, please check. Mail me@x.com, call @12", nil)
 	got := m.GetExtendedTextMessage().GetContextInfo().GetMentionedJID()
 	if len(got) != 1 || got[0] != "919820147460@s.whatsapp.net" {
 		t.Fatalf("tagged: %v", got)
 	}
-	q := outgoing("ok @919820147460 @919820147460", &Message{ID: "A", Sender: "1@s.whatsapp.net", Text: "hi"})
+	q := outgoing("1@s.whatsapp.net", "ok @919820147460 @919820147460", &Message{ID: "A", Sender: "1@s.whatsapp.net", Text: "hi"})
 	ci := q.GetExtendedTextMessage().GetContextInfo()
 	if ci.GetStanzaID() != "A" || len(ci.GetMentionedJID()) != 1 {
 		t.Fatalf("quote and tag: %v", ci)
+	}
+	if ci.RemoteJID != nil {
+		t.Fatal("a reply in the same chat names no other chat")
+	}
+	// replying privately: the quoted message is in a group
+	p := outgoing("1@s.whatsapp.net", "about this", &Message{ID: "G1", Chat: "120363000000000001@g.us", Sender: "2@s.whatsapp.net", Text: "plan?"})
+	if got := p.GetExtendedTextMessage().GetContextInfo().GetRemoteJID(); got != "120363000000000001@g.us" {
+		t.Fatalf("a private reply must name the group it quotes, got %q", got)
 	}
 }

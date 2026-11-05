@@ -1,9 +1,11 @@
 package whatsapp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -64,30 +66,39 @@ func media(msg *waE2E.Message) *Media {
 
 // Download fetches and decrypts media described by Media.Raw.
 func (cl *Client) Download(ctx context.Context, raw []byte) ([]byte, error) {
+	d, err := downloadable(raw)
+	if err != nil {
+		return nil, err
+	}
+	b, err := cl.c.Download(ctx, d)
+	return b, expired(err)
+}
+
+func downloadable(raw []byte) (whatsmeow.DownloadableMessage, error) {
 	var msg waE2E.Message
 	if err := proto.Unmarshal(raw, &msg); err != nil {
 		return nil, err
 	}
-	var d whatsmeow.DownloadableMessage
 	switch {
 	case msg.GetImageMessage() != nil:
-		d = msg.GetImageMessage()
+		return msg.GetImageMessage(), nil
 	case msg.GetStickerMessage() != nil:
-		d = msg.GetStickerMessage()
+		return msg.GetStickerMessage(), nil
 	case msg.GetVideoMessage() != nil:
-		d = msg.GetVideoMessage()
+		return msg.GetVideoMessage(), nil
 	case msg.GetAudioMessage() != nil:
-		d = msg.GetAudioMessage()
+		return msg.GetAudioMessage(), nil
 	case msg.GetDocumentMessage() != nil:
-		d = msg.GetDocumentMessage()
-	default:
-		return nil, errors.New("nothing to download in this message")
+		return msg.GetDocumentMessage(), nil
 	}
-	b, err := cl.c.Download(ctx, d)
+	return nil, errors.New("nothing to download in this message")
+}
+
+func expired(err error) error {
 	if errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith404) || errors.Is(err, whatsmeow.ErrMediaDownloadFailedWith410) {
-		return nil, errors.New("WhatsApp no longer has this file (it expires after a while; it's still on the phone)")
+		return errors.New("WhatsApp no longer has this file (it expires after a while; it's still on the phone)")
 	}
-	return b, err
+	return err
 }
 
 // KindOf says how a file goes on WhatsApp: image, gif, video, audio,
@@ -109,31 +120,72 @@ func KindOf(name, mime string) string {
 	return "document"
 }
 
-// SendFile sends a file to chat as name (what the other side sees; empty:
-// the file's own) with an optional caption; quote is the
+// File is a file to send.
+type File struct {
+	Path    string
+	Name    string // what the other side sees ("": the file's own name)
+	Caption string
+	Voice   bool // an audio file as a voice note (made Ogg Opus with ffmpeg when it isn't)
+}
+
+// sniff is a file's type from its first bytes.
+func sniff(path string) (string, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return "", 0, err
+	}
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(f, head)
+	return http.DetectContentType(head[:n]), st.Size(), nil
+}
+
+// SendFile sends a file to chat with an optional caption; quote is the
 // message it replies to. A .gif becomes the MP4 WhatsApp plays as a GIF
-// (it needs ffmpeg); other images go as photos, videos as videos, the
-// rest as documents. Returns the new message's id and what was sent.
-func (cl *Client) SendFile(ctx context.Context, chat, path, name, caption string, quote *Message) (string, *Media, error) {
+// (it needs ffmpeg); other images go as photos, videos as videos, audio
+// as audio (or a voice note), the rest as documents. The file is
+// streamed, so a 2 GB document doesn't sit in memory. Returns the new
+// message's id and what was sent.
+func (cl *Client) SendFile(ctx context.Context, chat string, f File, quote *Message) (string, *Media, error) {
 	to, err := types.ParseJID(chat)
 	if err != nil {
 		return "", nil, fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
 	}
-	data, err := os.ReadFile(path)
+	name := f.Name
+	if name == "" {
+		name = filepath.Base(f.Path)
+	}
+	mime, _, err := sniff(f.Path)
 	if err != nil {
 		return "", nil, err
 	}
-	if name == "" {
-		name = filepath.Base(path)
-	}
-	mime := http.DetectContentType(data)
 	kind := KindOf(name, mime)
-	if kind == "gif" {
-		mp4, err := gifToMP4(ctx, path)
+	if f.Voice {
+		kind = "voice"
+	}
+	path := f.Path
+	switch kind {
+	case "gif":
+		mp4, err := convert(ctx, f.Path, ".mp4", "-movflags", "faststart", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-an")
 		if err != nil {
-			return "", nil, err
+			return "", nil, fmt.Errorf("sending a GIF: %w", err)
 		}
-		data, mime = mp4, "video/mp4"
+		defer os.Remove(mp4)
+		path, mime = mp4, "video/mp4"
+	case "voice":
+		if !isOggOpus(f.Path) {
+			ogg, err := convert(ctx, f.Path, ".ogg", "-vn", "-ac", "1", "-c:a", "libopus", "-b:a", "32k")
+			if err != nil {
+				return "", nil, fmt.Errorf("sending a voice note: %w", err)
+			}
+			defer os.Remove(ogg)
+			path = ogg
+		}
+		mime = "audio/ogg; codecs=opus"
 	}
 	if mime == "application/octet-stream" || strings.HasPrefix(mime, "text/plain") {
 		if t := mimeByExt(name); t != "" {
@@ -141,11 +193,16 @@ func (cl *Client) SendFile(ctx context.Context, chat, path, name, caption string
 		}
 	}
 	mediaType := map[string]whatsmeow.MediaType{"image": whatsmeow.MediaImage, "gif": whatsmeow.MediaVideo, "video": whatsmeow.MediaVideo,
-		"audio": whatsmeow.MediaAudio, "sticker": whatsmeow.MediaImage}[kind]
+		"audio": whatsmeow.MediaAudio, "voice": whatsmeow.MediaAudio, "sticker": whatsmeow.MediaImage}[kind]
 	if mediaType == "" {
 		mediaType = whatsmeow.MediaDocument
 	}
-	up, err := cl.c.Upload(ctx, data, mediaType)
+	in, err := os.Open(path)
+	if err != nil {
+		return "", nil, err
+	}
+	up, err := cl.c.UploadReader(ctx, in, nil, mediaType)
+	in.Close()
 	if err != nil {
 		return "", nil, fmt.Errorf("uploading %s: %w", name, err)
 	}
@@ -153,23 +210,27 @@ func (cl *Client) SendFile(ctx context.Context, chat, path, name, caption string
 	if quote != nil {
 		ci = &waE2E.ContextInfo{StanzaID: proto.String(quote.ID), Participant: proto.String(quote.Sender),
 			QuotedMessage: &waE2E.Message{Conversation: proto.String(quote.Text)}}
+		if quote.Chat != "" && quote.Chat != chat {
+			ci.RemoteJID = proto.String(quote.Chat) // replying privately to a group's message
+		}
 	}
-	n := uint64(len(data))
+	n := up.FileLength
 	msg := &waE2E.Message{}
 	switch kind {
 	case "image", "sticker":
-		msg.ImageMessage = &waE2E.ImageMessage{Caption: optional(caption), Mimetype: proto.String(mime), URL: &up.URL, DirectPath: &up.DirectPath,
+		msg.ImageMessage = &waE2E.ImageMessage{Caption: optional(f.Caption), Mimetype: proto.String(mime), URL: &up.URL, DirectPath: &up.DirectPath,
 			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci}
 		kind = "image"
 	case "gif", "video":
-		msg.VideoMessage = &waE2E.VideoMessage{Caption: optional(caption), Mimetype: proto.String(mime), URL: &up.URL, DirectPath: &up.DirectPath,
+		msg.VideoMessage = &waE2E.VideoMessage{Caption: optional(f.Caption), Mimetype: proto.String(mime), URL: &up.URL, DirectPath: &up.DirectPath,
 			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci,
 			GifPlayback: proto.Bool(kind == "gif")}
-	case "audio":
+	case "audio", "voice":
 		msg.AudioMessage = &waE2E.AudioMessage{Mimetype: proto.String(mime), URL: &up.URL, DirectPath: &up.DirectPath,
-			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci}
+			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci,
+			PTT: proto.Bool(kind == "voice")}
 	default:
-		msg.DocumentMessage = &waE2E.DocumentMessage{Caption: optional(caption), Mimetype: proto.String(firstNonEmpty(mime, "application/octet-stream")),
+		msg.DocumentMessage = &waE2E.DocumentMessage{Caption: optional(f.Caption), Mimetype: proto.String(firstNonEmpty(mime, "application/octet-stream")),
 			FileName: proto.String(name), Title: proto.String(name), URL: &up.URL, DirectPath: &up.DirectPath,
 			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci}
 		kind = "document"
@@ -186,6 +247,40 @@ func (cl *Client) SendFile(ctx context.Context, chat, path, name, caption string
 	return resp.ID, sent, nil
 }
 
+// isOggOpus: the file is already what WhatsApp plays as a voice note.
+func isOggOpus(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	head := make([]byte, 64)
+	n, _ := io.ReadFull(f, head)
+	return bytes.HasPrefix(head[:n], []byte("OggS")) && bytes.Contains(head[:n], []byte("OpusHead"))
+}
+
+// DownloadTo fetches and decrypts media described by Media.Raw into path,
+// streaming (a 2 GB document doesn't sit in memory).
+func (cl *Client) DownloadTo(ctx context.Context, raw []byte, path string) error {
+	d, err := downloadable(raw)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	err = cl.c.DownloadToFile(ctx, d, f)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(path)
+		return expired(err)
+	}
+	return nil
+}
+
 func optional(s string) *string {
 	if s == "" {
 		return nil
@@ -200,23 +295,24 @@ func mimeByExt(name string) string {
 		".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}[strings.ToLower(filepath.Ext(name))]
 }
 
-// gifToMP4 turns a GIF into the silent MP4 WhatsApp sends for GIFs.
-func gifToMP4(ctx context.Context, path string) ([]byte, error) {
+// convert runs ffmpeg on a file (a GIF to the silent MP4 WhatsApp plays
+// as a GIF; audio to the Ogg Opus of a voice note) and returns the new
+// file's path (the caller removes it).
+func convert(ctx context.Context, path, ext string, args ...string) (string, error) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return nil, errors.New("sending a GIF needs ffmpeg (WhatsApp sends GIFs as MP4)")
+		return "", errors.New("it needs ffmpeg")
 	}
-	out, err := os.CreateTemp("", "narada-gif-*.mp4")
+	out, err := os.CreateTemp("", "narada-*"+ext)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	out.Close()
-	defer os.Remove(out.Name())
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-loglevel", "error", "-i", path, "-movflags", "faststart", "-pix_fmt", "yuv420p",
-		"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-an", out.Name())
+	cmd := exec.CommandContext(ctx, "ffmpeg", append(append([]string{"-y", "-loglevel", "error", "-i", path}, args...), out.Name())...)
 	if b, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("ffmpeg: %v %s", err, strings.TrimSpace(string(b)))
+		os.Remove(out.Name())
+		return "", fmt.Errorf("ffmpeg: %v %s", err, strings.TrimSpace(string(b)))
 	}
-	return os.ReadFile(out.Name())
+	return out.Name(), nil
 }
 
 // MediaLabel is the text a message with media shows: "📷 Photo: caption".

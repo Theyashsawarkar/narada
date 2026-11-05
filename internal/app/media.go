@@ -76,20 +76,29 @@ func (a *App) ChatFile(ctx context.Context, account, msgName string, n int) (str
 			if e := a.Store.MediaFetchError(account, msgName, n); e != "" {
 				return "", errors.New(e)
 			}
-			_ = a.Store.AskMedia(account, msgName, n)
+			if !a.Store.MediaPending(account, msgName, n) {
+				_ = a.Store.AskMedia(account, msgName, n)
+			}
 			return "", ErrMediaWaiting
 		}
 		raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(f.Ref, waRef))
 		if err != nil {
 			return "", err
 		}
-		dl, ok := c.(interface {
-			Download(context.Context, []byte) ([]byte, error)
-		})
-		if !ok {
-			return "", errors.New("this WhatsApp can't download files")
+		p := a.mediaPath(account+"/"+msgName+fmt.Sprint(n), f.Name)
+		// big files stream to disk
+		if st, ok := c.(interface {
+			DownloadTo(context.Context, []byte, string) error
+		}); ok {
+			if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+				return "", err
+			}
+			if err := st.DownloadTo(ctx, raw, p+".part"); err != nil {
+				return "", err
+			}
+			return p, os.Rename(p+".part", p)
 		}
-		if data, err = dl.Download(ctx, raw); err != nil {
+		if data, err = c.Download(ctx, raw); err != nil {
 			return "", err
 		}
 	case f.Ref == "":
@@ -150,21 +159,48 @@ func writeCache(p string, data []byte) error {
 }
 
 // fetchAsked downloads what other processes asked for (the holder of
-// WhatsApp calls it with its deliveries).
+// WhatsApp calls it with its deliveries). It works in the background, so
+// a big file doesn't hold up sends.
 func (a *App) fetchAsked(ctx context.Context) {
-	if !a.WhatsAppOnline() {
+	if !a.WhatsAppOnline() || !a.fetching.CompareAndSwap(false, true) {
 		return
 	}
 	asked, _ := a.Store.MediaAsked(4)
-	for _, f := range asked {
-		fctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		_, err := a.ChatFile(fctx, f.Account, f.Msg, f.Idx)
-		cancel()
-		msg := ""
-		if err != nil {
-			msg = err.Error()
+	if len(asked) == 0 {
+		a.fetching.Store(false)
+		return
+	}
+	go func() {
+		defer a.fetching.Store(false)
+		for _, f := range asked {
+			fctx, cancel := context.WithTimeout(ctx, 30*time.Minute) // 2 GB on a slow line
+			_, err := a.ChatFile(fctx, f.Account, f.Msg, f.Idx)
+			cancel()
+			msg := ""
+			if err != nil {
+				msg = err.Error()
+			}
+			_ = a.Store.MediaFetched(f.Account, f.Msg, f.Idx, msg)
 		}
-		_ = a.Store.MediaFetched(f.Account, f.Msg, f.Idx, msg)
+	}()
+}
+
+// WaitChatFile is ChatFile that waits (until ctx ends) while the process
+// holding WhatsApp downloads it. Asking again retries a download that failed.
+func (a *App) WaitChatFile(ctx context.Context, account, msgName string, n int) (string, error) {
+	if _, ok := a.CachedChatFile(account, msgName, n); !ok && account == store.WhatsAppAccount && !a.WhatsAppOnline() {
+		_ = a.Store.AskMedia(account, msgName, n) // clears an old failure
+	}
+	for {
+		p, err := a.ChatFile(ctx, account, msgName, n)
+		if !errors.Is(err, ErrMediaWaiting) {
+			return p, err
+		}
+		select {
+		case <-ctx.Done():
+			return "", errors.New("WhatsApp files download through the narada that is online (the daemon, or an open screen), and it hasn't yet; try again in a moment")
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
 }
 

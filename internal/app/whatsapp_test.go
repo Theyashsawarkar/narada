@@ -678,3 +678,80 @@ func TestWhatsAppTakesFilesOverMailLimit(t *testing.T) {
 		t.Fatal("WhatsApp's limit is 2 GB")
 	}
 }
+
+// A command that doesn't hold WhatsApp saves a received file: it asks the
+// holder (the daemon), waits for it, and gets the bytes.
+func TestWhatsAppSaveFileThroughTheHolder(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if ok, err := a.StartWhatsApp(ctx); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	waitReady(t, a)
+	w.Files["doc-1"] = []byte("%PDF-1.4 the itinerary")
+	w.Receive(whatsapp.Message{ID: "D1", Chat: "919800000002@s.whatsapp.net", Sender: "919800000002@s.whatsapp.net", Text: "📎 plan.pdf",
+		Media: &whatsapp.Media{Kind: "document", Name: "plan.pdf", Mime: "application/pdf", Size: 22, Raw: []byte("doc-1")}})
+	other, err := Open() // the command line, beside the daemon
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if ok, _ := other.StartWhatsApp(ctx); ok {
+		t.Fatal("two processes hold WhatsApp")
+	}
+	dir := t.TempDir()
+	done := make(chan error, 1)
+	var saved []string
+	go func() {
+		var err error
+		saved, err = other.SaveChatFiles(ctx, "919800000002@s.whatsapp.net/D1", 0, dir)
+		done <- err
+	}()
+	deadline := time.After(10 * time.Second)
+	for {
+		a.DeliverDue(ctx) // the daemon's tick
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b, _ := os.ReadFile(saved[0]); len(saved) != 1 || string(b) != "%PDF-1.4 the itinerary" || filepath.Base(saved[0]) != "plan.pdf" {
+				t.Fatalf("saved %v: %q", saved, b)
+			}
+			return
+		case <-deadline:
+			t.Fatal("the file never came")
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+// An audio file sent as a voice note goes as one (push to talk).
+func TestWhatsAppVoiceNote(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	note := filepath.Join(t.TempDir(), "note.ogg")
+	_ = os.WriteFile(note, []byte("OggS\x00\x02 OpusHead fake"), 0o600)
+	it, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: "919800000002@s.whatsapp.net",
+		Files: []store.File{{Source: note, Voice: true}}}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.DeliverDue(ctx)
+	if it, _ = a.Store.OutboxItem(it.ID); it.Status != store.StatusSent {
+		t.Fatalf("status %s %s", it.Status, it.Error)
+	}
+	last := w.Sent[len(w.Sent)-1]
+	if last.Media == nil || last.Media.Kind != "voice" {
+		t.Fatalf("sent as %+v", last.Media)
+	}
+	m, _ := a.Store.ChatMessage(store.WhatsAppAccount, it.Result)
+	if !strings.Contains(m.Text, "Voice message") {
+		t.Fatalf("shows as %q", m.Text)
+	}
+}

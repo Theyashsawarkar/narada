@@ -38,7 +38,8 @@ Usage:
   narada chat send <space> <text> post in a space or DM (--thread T)
   narada whatsapp link            link your WhatsApp to this machine (QR code, or --phone N)
   narada whatsapp list|read <chat> WhatsApp chats and messages (--json, --mark-read)
-  narada whatsapp send <to> <text> send on WhatsApp (--link: open click-to-chat instead)
+  narada whatsapp send <to> <text> send on WhatsApp (--attach, --voice; --link: click-to-chat)
+  narada whatsapp save <message>  download a WhatsApp message's file
   narada status                   unread counts (--json, --tmux)
   narada sync                     sync every account now
   narada outbox                   sends of the last week (cancel <id> stops one)

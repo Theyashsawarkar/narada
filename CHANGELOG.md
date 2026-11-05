@@ -12,6 +12,16 @@ Newest first.
   each) and that they attach only files you asked for. An agent that still sees a
   text-only `whatsapp_send` is talking to an old `narada mcp` (or `sandesh mcp`) left
   running: restart that agent session.
+- **Voice notes on WhatsApp**: `Ctrl+r` while typing records one from the microphone
+  (`Ctrl+r` again adds it, `Enter` sends it, `Esc` drops it); `whatsapp send --voice
+  FILE` sends an audio file as one. Needs `ffmpeg`, which also turns other audio into
+  the Ogg Opus WhatsApp plays.
+- **Download WhatsApp files from the command line and agents**: `narada whatsapp save
+  MESSAGE [N|all]`, and `attachment_save` takes WhatsApp message ids. `whatsapp read`
+  (and the `whatsapp_read` tool) list each message's files and ids. When the daemon
+  holds WhatsApp, it downloads the file and the command waits for it, instead of
+  failing with "try again". Big files stream to disk both ways (sending and saving),
+  and a long download no longer holds up sends.
 
 ## v0.10.0 -- 2026-11-05
 

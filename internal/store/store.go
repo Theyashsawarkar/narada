@@ -1671,6 +1671,13 @@ func (s *Store) MediaAsked(limit int) ([]MediaFetch, error) {
 	return out, rows.Err()
 }
 
+// MediaPending: the file was asked for and hasn't been fetched (or failed) yet.
+func (s *Store) MediaPending(account, msg string, idx int) bool {
+	var n int
+	_ = s.db.QueryRow(`SELECT count(*) FROM media_fetch WHERE account=? AND msg=? AND idx=? AND error=''`, account, msg, idx).Scan(&n)
+	return n > 0
+}
+
 // MediaFetchError is why a download failed ("" when it didn't, or wasn't asked).
 func (s *Store) MediaFetchError(account, msg string, idx int) string {
 	var e string

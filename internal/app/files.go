@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -59,6 +60,12 @@ func DownloadDir() string {
 // writeDownload saves data as name in dir, never overwriting: a clash
 // becomes "name (2).ext". Returns the path.
 func writeDownload(dir, name string, data []byte) (string, error) {
+	return writeDownloadFrom(dir, name, bytes.NewReader(data))
+}
+
+// writeDownloadFrom is writeDownload from a reader (a big file is copied,
+// not read into memory).
+func writeDownloadFrom(dir, name string, data io.Reader) (string, error) {
 	if dir == "" {
 		dir = DownloadDir()
 	}
@@ -80,7 +87,7 @@ func writeDownload(dir, name string, data []byte) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		_, err = f.Write(data)
+		_, err = io.Copy(f, data)
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
@@ -127,18 +134,16 @@ func (a *App) SaveChatAttachment(ctx context.Context, account, msgName string, n
 		return "", fmt.Errorf("that message has no file %d", n+1)
 	}
 	f := m.Files[n]
-	p, err := a.ChatFile(ctx, account, msgName, n)
-	if errors.Is(err, ErrMediaWaiting) {
-		return "", errors.New("WhatsApp files download through the narada that is online (the daemon, or an open screen); try again in a moment")
-	}
+	p, err := a.WaitChatFile(ctx, account, msgName, n)
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(p)
+	src, err := os.Open(p)
 	if err != nil {
 		return "", err
 	}
-	return writeDownload(dir, f.Name, data)
+	defer src.Close()
+	return writeDownloadFrom(dir, f.Name, src)
 }
 
 // AttachFiles makes private copies (0600, under the state folder) of the
@@ -161,6 +166,7 @@ func (a *App) ResolveFiles(files []store.File) ([]store.File, error) {
 func (a *App) ResolveFilesUpTo(files []store.File, max int64) ([]store.File, error) {
 	var keep []store.File
 	var paths []string
+	var voice []bool
 	var total int64
 	for _, f := range files {
 		switch {
@@ -176,6 +182,7 @@ func (a *App) ResolveFilesUpTo(files []store.File, max int64) ([]store.File, err
 			total += got.Size
 		default:
 			paths = append(paths, f.Source)
+			voice = append(voice, f.Voice)
 		}
 	}
 	if total > max {
@@ -187,6 +194,9 @@ func (a *App) ResolveFilesUpTo(files []store.File, max int64) ([]store.File, err
 	fresh, err := a.copyFiles(paths, total, max)
 	if err != nil {
 		return nil, err
+	}
+	for i := range fresh {
+		fresh[i].Voice = voice[i]
 	}
 	return append(keep, fresh...), nil
 }

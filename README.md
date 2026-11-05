@@ -276,6 +276,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `Ctrl+k` | Open the chat switcher (search chats, people and messages) |
 | `Ctrl+o` (typing) | Add a file to the chat message you're typing |
 | `Ctrl+v` (typing) | Paste a copied image (a screenshot) into the chat message as a file |
+| `Ctrl+r` (typing, WhatsApp) | Record a voice note for the message (again stops and adds it; Enter sends it, Esc drops it) |
 | `Enter` (typing) | Send the chat message and keep typing the next one (Esc leaves the box) |
 | `Alt+Enter` / `Ctrl+j` (typing) | Start a new line in the chat message |
 | `@` (typing, WhatsApp) | Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none) |
@@ -488,7 +489,8 @@ threads a minute, with a progress bar in the top bar.
   picker opens (Tab picks more, Ctrl+a all). `V` only saves them. It
   never overwrites: a second copy is `name (2).ext`. Chat files kept in
   Drive open in the browser instead (`b`). From the shell: `narada mail
-  save THREAD [N|all]`, `narada chat save MESSAGE [N|all]`.
+  save THREAD [N|all]`, `narada chat save MESSAGE [N|all]`, `narada whatsapp
+  save MESSAGE [N|all]`.
 - **Upload**: in the mail editor, `Attach: ~/report.pdf, ~/notes.txt`; or `+`
   on the review screen to pick files. In chat, `U` picks files to post in the
   space. From the shell: `--attach FILE` (repeatable) on `mail send` and
@@ -557,7 +559,11 @@ the chat's pictures. To send one, press `Ctrl+o` while typing (or `U` in
 the chat), or `Ctrl+v` to paste a copied image such as a screenshot (needs
 `wl-paste` or `xclip`): a small preview of each file shows above the box,
 what you type becomes the first file's caption, and each file goes as its
-own message.
+own message, up to 2 GB each. `Ctrl+r` while typing records a voice note
+from the microphone (needs `ffmpeg`); `Ctrl+r` again adds it, `Enter` sends
+it. Files of any size download as they're opened (`v`, `V`, `narada
+whatsapp save`, an agent's `attachment_save`), streamed to disk, by
+whichever narada holds WhatsApp; the others wait for it.
 
 **Ticks** beside your messages show how far they got, as on the phone:
 ✓ sent, ✓✓ delivered, blue ✓✓ read. In a group narada shows at most
@@ -613,6 +619,7 @@ claude  → contacts_find → mail_send
 | `whatsapp_chats` | WhatsApp chats with unread counts | reads |
 | `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
 | `whatsapp_send` | One message to one WhatsApp chat, optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
+| `attachment_save` | Download a mail's attachments or a chat or WhatsApp message's files into `~/Downloads/narada` | saves files |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
 
@@ -684,7 +691,8 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
 | `narada whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
 | `narada whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
-| `narada whatsapp send <to> [text] [--attach FILE]... [--at WHEN] [--link]` | Send one message, with files (`--attach`, repeatable; each its own message, the text the first one's caption); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
+| `narada whatsapp send <to> [text] [--attach FILE]... [--voice FILE]... [--at WHEN] [--link]` | Send one message, with files (`--attach`, repeatable, up to 2 GB each; each its own message, the text the first one's caption) and voice notes (`--voice`: an audio file, made Ogg Opus with ffmpeg when it isn't); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
+| `narada whatsapp save <message> [N\|all] [--dir DIR]` | Download a message's photo, video, voice note or document (`whatsapp read` shows the ids and files); when the daemon holds WhatsApp it downloads it and this waits |
 | `narada status [--json\|--tmux]` | Unread counts |
 | `narada sync` | Sync every account now |
 | `narada outbox` / `outbox cancel <id>` | Sends of the last week; stop one in its undo window |

@@ -44,6 +44,7 @@
 # keybind: Tmux/narada | Ctrl+k | Open the chat switcher (search chats, people and messages)
 # keybind: Tmux/narada | Ctrl+o (typing) | Add a file to the chat message you're typing
 # keybind: Tmux/narada | Ctrl+v (typing) | Paste a copied image (a screenshot) into the chat message as a file
+# keybind: Tmux/narada | Ctrl+r (typing, WhatsApp) | Record a voice note for the message (again stops and adds it; Enter sends it, Esc drops it)
 # keybind: Tmux/narada | Enter (typing) | Send the chat message and keep typing the next one (Esc leaves the box)
 # keybind: Tmux/narada | Alt+Enter / Ctrl+j (typing) | Start a new line in the chat message
 # keybind: Tmux/narada | @ (typing, WhatsApp) | Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none)

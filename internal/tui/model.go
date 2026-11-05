@@ -215,6 +215,7 @@ type Model struct {
 	tagOff        int               // an "@" you pressed Esc on: not asked again
 	tagged        map[string]string // names picked for this message, to their numbers
 	chatFiles     []store.File      // files for the message being typed
+	rec           *recording        // a voice note being recorded
 	editingMsg    string            // the message of yours being edited in the box
 	armDelete     string            // d pressed once on this message
 	reactSel      int               // the emoji picked in the reaction window
@@ -1256,6 +1257,29 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeChatMsg && s == "ctrl+v" {
 		return m, m.pasteImage()
+	}
+	if m.mode == modeChatMsg && s == "ctrl+r" {
+		var err error
+		if m.rec == nil {
+			err = m.startRecording()
+		} else {
+			err = m.stopRecording(true)
+		}
+		if err != nil {
+			m.say(err.Error())
+		}
+		return m, nil
+	}
+	if m.rec != nil && s == "enter" && m.mode == modeChatMsg {
+		if err := m.stopRecording(true); err != nil { // Enter sends what was recorded
+			m.say(err.Error())
+			return m, nil
+		}
+	}
+	if m.rec != nil && (s == "esc" || m.mode != modeChatMsg) {
+		_ = m.stopRecording(false)
+		m.say("voice note dropped")
+		return m, nil
 	}
 	if m.mode == modeChatMsg && s == "backspace" && len(m.input) == 0 && len(m.chatFiles) > 0 {
 		m.chatFiles = m.chatFiles[:len(m.chatFiles)-1]

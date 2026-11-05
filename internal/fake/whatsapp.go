@@ -174,11 +174,12 @@ func (c *WhatsAppConn) Send(ctx context.Context, chat, text string, quote *whats
 	return m.ID, nil
 }
 
-func (c *WhatsAppConn) SendFile(ctx context.Context, chat, path, name, caption string, quote *whatsapp.Message) (string, *whatsapp.Media, error) {
+func (c *WhatsAppConn) SendFile(ctx context.Context, chat string, f whatsapp.File, quote *whatsapp.Message) (string, *whatsapp.Media, error) {
+	name, caption := f.Name, f.Caption
 	if name == "" {
-		name = filepath.Base(path)
+		name = filepath.Base(f.Path)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(f.Path)
 	if err != nil {
 		return "", nil, err
 	}
@@ -192,6 +193,9 @@ func (c *WhatsAppConn) SendFile(ctx context.Context, chat, path, name, caption s
 	kind := whatsapp.KindOf(name, http.DetectContentType(data))
 	if kind == "sticker" {
 		kind = "image"
+	}
+	if f.Voice {
+		kind = "voice"
 	}
 	md := &whatsapp.Media{Kind: kind, Name: name, Mime: http.DetectContentType(data), Size: int64(len(data)),
 		Raw: []byte(fmt.Sprintf("sent-%d", w.nextID))}

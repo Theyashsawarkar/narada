@@ -249,6 +249,9 @@ func (m *Model) attachedLines(w int) []string {
 		if len(thumb) > 0 {
 			icon = ""
 		}
+		if f.Voice {
+			icon, name = "🎤 ", "voice note"
+		}
 		label := ansi.Truncate(icon+s.text.Render(name)+s.muted.Render(size), width, "…")
 		tiles = append(tiles, lipgloss.JoinVertical(lipgloss.Left, append(thumb, label)...))
 	}
@@ -1159,6 +1162,9 @@ func (m Model) previewBox(w, h int) string {
 			}
 			if len(m.chatFiles) > 0 {
 				top = append(top, m.attachedLines(tw)...)
+			}
+			if m.rec != nil {
+				top = append(top, m.recordingLine())
 			}
 			bottom = m.chatBoxLines(inner, rows, true, "Message "+cli.SpaceTitle(sp)+"…", "", top...)
 		} else {

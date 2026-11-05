@@ -58,6 +58,7 @@ var Keys = []Key{
 	{"Act", "Ctrl+k", "Open the chat switcher (search chats, people and messages)"},
 	{"Act", "Ctrl+o (typing)", "Add a file to the chat message you're typing"},
 	{"Act", "Ctrl+v (typing)", "Paste a copied image (a screenshot) into the chat message as a file"},
+	{"Act", "Ctrl+r (typing, WhatsApp)", "Record a voice note for the message (again stops and adds it; Enter sends it, Esc drops it)"},
 	{"Act", "Enter (typing)", "Send the chat message and keep typing the next one (Esc leaves the box)"},
 	{"Act", "Alt+Enter / Ctrl+j (typing)", "Start a new line in the chat message"},
 	{"Act", "@ (typing, WhatsApp)", "Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none)"},
