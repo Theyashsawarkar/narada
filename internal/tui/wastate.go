@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Theyashsawarkar/narada/internal/app"
 	"github.com/Theyashsawarkar/narada/internal/cli"
 	"github.com/Theyashsawarkar/narada/internal/store"
 	"github.com/Theyashsawarkar/narada/internal/whatsapp"
@@ -197,4 +198,28 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		return m, m.act(map[bool]string{true: "blocked", false: "unblocked"}[on], func(ctx context.Context) error { return a.BlockWhatsApp(ctx, sp.Name, on) }), true
 	}
 	return m, nil, false
+}
+
+// sendPoll sends what's typed as a poll: the first line asks, each other
+// line is an option (Ctrl+p while typing).
+func (m Model) sendPoll() (tea.Model, tea.Cmd) {
+	sp, ok := m.curSpace()
+	if !ok {
+		return m, nil
+	}
+	lines := strings.Split(strings.TrimSpace(string(m.input)), "\n")
+	if len(lines) < 3 {
+		m.say("a poll: the question on the first line, then one option per line (Alt+Enter), then Ctrl+p")
+		return m, nil
+	}
+	multi := strings.HasSuffix(strings.TrimSpace(lines[0]), "(several)")
+	q := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(lines[0]), "(several)"))
+	it, err := m.a.PollWhatsApp(sp, q, lines[1:], multi, app.OriginYou)
+	if err != nil {
+		m.setErr(err.Error())
+		return m, nil
+	}
+	m.input, m.back = nil, 0
+	m.waTyping(true)
+	return m, m.sent(it)
 }

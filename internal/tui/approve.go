@@ -172,6 +172,10 @@ func sendTarget(kind string, out store.Outgoing) (verb, target string) {
 	switch {
 	case kind == "whatsapp" && out.Action == app.ActForward:
 		return "forward a message to", name
+	case kind == "whatsapp" && out.Action == app.ActPoll:
+		return "ask a poll in", name
+	case kind == "whatsapp" && out.Action == app.ActVote:
+		return "vote in a poll in", name
 	case kind == "whatsapp" && out.Action == app.ActEdit:
 		return "edit your message in", name
 	case kind == "whatsapp" && out.Action == app.ActDelete:

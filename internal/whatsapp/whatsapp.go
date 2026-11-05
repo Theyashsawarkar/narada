@@ -42,6 +42,23 @@ type Message struct {
 	Media      *Media // a photo, GIF, file... it carries
 	Ticks      int    // yours: how far it got (TickSent, TickDelivered, TickRead)
 	Forwarded  bool   // marked "Forwarded"
+	Poll       *Poll  // a poll it asks
+}
+
+// Poll is a poll's question and options; Multi lets people pick several.
+type Poll struct {
+	Question string
+	Options  []string
+	Multi    bool
+}
+
+// Vote is someone's vote in a poll: the options they picked now (none:
+// they took their vote back), as WhatsApp's hashes of the option names
+// (see OptionHash).
+type Vote struct {
+	Chat, Poll, Voter string
+	Hashes            [][]byte
+	FromMe            bool
 }
 
 // How far a message you sent got: the ticks WhatsApp shows beside it.
@@ -80,6 +97,7 @@ type Event struct {
 	Contacts  map[string]string
 	Ticks     *Ticks     // receipts for messages you sent
 	Reactions []Reaction // someone reacted, or took a reaction back
+	Votes     []Vote     // someone voted in a poll
 	ChatState *ChatState // a chat archived, pinned, muted or marked unread (on another device)
 	Star      *Star      // a message starred or unstarred (on another device)
 	Presence  *Presence  // someone online, away or typing
@@ -412,6 +430,12 @@ func (cl *Client) event(evt any) {
 	case *events.TemporaryBan:
 		cl.emit(Event{State: "banned", Err: errors.New(e.String())})
 	case *events.Message:
+		if e.Message.GetPollUpdateMessage() != nil {
+			if v, ok := cl.vote(ctx, e); ok {
+				cl.emit(Event{Votes: []Vote{v}})
+			}
+			return
+		}
 		if r, ok := cl.reaction(ctx, e); ok {
 			cl.emit(Event{Reactions: []Reaction{r}})
 		} else if m, ok := cl.convert(ctx, e); ok {
@@ -672,6 +696,7 @@ func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool
 		return Message{}, false
 	}
 	m.Media = media(msg)
+	m.Poll = poll(msg)
 	if ci := contextInfo(msg); ci != nil {
 		m.Forwarded = ci.GetIsForwarded()
 		m.Quoted = ci.GetStanzaID()

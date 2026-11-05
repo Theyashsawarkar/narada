@@ -44,6 +44,11 @@ Newest first.
   demote|link [--reset]|join|leave`. In the screen `n` renames a group for everyone
   and `I` shows its people, admins and description. A group you leave moves to
   Archived.
+- **WhatsApp polls**: polls show their options and a live tally (yours marked ●);
+  `P` on a poll votes; `Ctrl+p` while typing sends the question and the options
+  under it as a poll. `whatsapp poll <to> <question> <options...> [--multi]` and
+  `whatsapp vote <poll> <option>...`; agents can ask one (`whatsapp_send` with
+  `poll_options`), behind your approval.
 - These go through a queue that the narada holding WhatsApp works off (ADR 7), so they
   work beside the daemon.
 

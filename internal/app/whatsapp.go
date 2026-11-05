@@ -35,6 +35,8 @@ type WhatsAppConn interface {
 	Revoke(ctx context.Context, chat, sender, id string) error
 	Forward(ctx context.Context, chat string, m whatsapp.Message) (string, error)
 	Do(ctx context.Context, action, chat, arg string) (string, error)
+	SendPoll(ctx context.Context, chat string, p whatsapp.Poll) (string, error)
+	SendVote(ctx context.Context, chat, sender, pollID string, fromMe bool, options []string) error
 	Resolve(ctx context.Context, phone string) (string, error)
 	GroupName(ctx context.Context, chat string) (string, error)
 	Logout(ctx context.Context) error
@@ -258,6 +260,8 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 	switch {
 	case e.ChatState != nil || e.Star != nil || e.Presence != nil:
 		a.onWhatsAppState(e)
+	case len(e.Votes) > 0:
+		a.onWhatsAppVotes(e.Votes)
 	case len(e.Reactions) > 0:
 		for _, r := range e.Reactions {
 			reactor := r.Reactor
@@ -357,6 +361,12 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			}
 			if m.Quoted != "" {
 				cm.Quoted = waName(m.Chat, m.Quoted)
+			}
+			if m.Poll != nil {
+				_ = a.Store.PutWhatsAppPoll(store.WhatsAppPoll{Msg: name, Question: m.Poll.Question, Options: m.Poll.Options, Multi: m.Poll.Multi})
+				if p, err := a.Store.WhatsAppPollOf(name); err == nil {
+					cm.Text = pollText(p.Question, p.Options, p.Multi, p.Votes, wa.ChatUser)
+				}
 			}
 			if f, ok := waFile(m.Media); ok {
 				cm.Files = []store.ChatFile{f}

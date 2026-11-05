@@ -19,7 +19,7 @@ import (
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group")
+		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group, poll, vote")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -287,6 +287,40 @@ func whatsApp(a *app.App, args []string) error {
 		return nil
 	case "group", "groups":
 		return waGroup(a, rest)
+	case "poll":
+		fs := flags("narada whatsapp poll", "narada whatsapp poll <to> <question> <option> <option>... [--multi] [--at WHEN]\n\nAsk a poll in a chat: 2 to 12 options. --multi lets people pick several.\nThe votes show in the poll's message as they come.")
+		multi := fs.Bool("multi", false, "people may pick several options")
+		at := fs.String("at", "", "send later")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) < 4 {
+			return usageError("whatsapp poll needs who to ask, a question and at least two options")
+		}
+		ctx, cancel := ctxSignal()
+		defer cancel()
+		startWhatsApp(ctx, a)
+		sp, err := a.WhatsAppChat(ctx, pos[0])
+		if err != nil {
+			return err
+		}
+		return waAct(a, func() (store.OutboxItem, error) {
+			if *at != "" {
+				return store.OutboxItem{}, usageError("--at: polls go now (schedule a message instead)")
+			}
+			return a.PollWhatsApp(sp, pos[1], pos[2:], *multi, app.OriginYou)
+		})
+	case "vote":
+		fs := flags("narada whatsapp vote", "narada whatsapp vote <poll-message-id> [option...]\n\nVote in a poll: options by number (from 1) or by their text. No option takes\nyour vote back. whatsapp read shows the poll and its id.")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) < 1 {
+			return usageError("whatsapp vote needs the poll's message id")
+		}
+		return waAct(a, func() (store.OutboxItem, error) { return a.VoteWhatsApp(pos[0], pos[1:], app.OriginYou) })
 	case "edit":
 		fs := flags("narada whatsapp edit", "narada whatsapp edit <message-id> <new text...>\n\nChange the text of a message you sent (whatsapp read shows the ids). WhatsApp\nallows it for 15 minutes after sending.")
 		pos, err := parse(fs, rest)

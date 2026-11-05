@@ -42,6 +42,7 @@ Usage:
   narada whatsapp save <message>  download a WhatsApp message's file
   narada whatsapp edit|delete|forward <message> ...  change or pass on a message
   narada whatsapp group new|info|rename|add|link|leave ...  WhatsApp groups
+  narada whatsapp poll <to> <question> <options...> / vote <poll> <option>
   narada status                   unread counts (--json, --tmux)
   narada sync                     sync every account now
   narada outbox                   sends of the last week (cancel <id> stops one)
@@ -656,7 +657,8 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 	if err != nil {
 		return err
 	}
-	done := map[string]string{"": "sent", app.ActEdit: "edited", app.ActDelete: "deleted for everyone", app.ActForward: "forwarded"}[it.Out.Action]
+	done := map[string]string{"": "sent", app.ActEdit: "edited", app.ActDelete: "deleted for everyone", app.ActForward: "forwarded",
+		app.ActPoll: "poll sent", app.ActVote: "voted"}[it.Out.Action]
 	if done == "" {
 		done = "done"
 	}

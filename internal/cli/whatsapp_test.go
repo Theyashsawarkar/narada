@@ -225,3 +225,28 @@ func TestWhatsAppGroupCommands(t *testing.T) {
 		t.Fatal("joined a non-WhatsApp link")
 	}
 }
+
+func TestWhatsAppPollCommands(t *testing.T) {
+	a, w := waApp(t)
+	if _, err := run(t, a, "poll", "trek", "When?", "Sat", "Sun", "--multi"); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Sent) != 1 || w.Sent[0].Poll == nil || !w.Sent[0].Poll.Multi {
+		t.Fatalf("sent %+v", w.Sent)
+	}
+	items, _ := a.Store.Outbox(store.StatusSent)
+	poll := items[0].Result
+	if _, err := run(t, a, "vote", poll, "1", "sun"); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Voted) != 1 || !strings.HasSuffix(w.Voted[0], " Sat,Sun") {
+		t.Fatalf("voted %v", w.Voted)
+	}
+	out, _ := run(t, a, "read", "trek")
+	if !strings.Contains(out, "● 1. Sat · 1") || !strings.Contains(out, "● 2. Sun · 1") {
+		t.Fatalf("read:\n%s", out)
+	}
+	if _, err := run(t, a, "poll", "trek", "Only one?", "yes"); err == nil {
+		t.Fatal("a poll with one option")
+	}
+}

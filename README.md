@@ -272,6 +272,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `E` (picking) | Edit your picked message in the message box (WhatsApp: within 15 minutes) |
 | `d d` (picking) | Delete your picked message, for everyone (WhatsApp: someone else's is deleted for you, here only) |
 | `f` (picking, WhatsApp) | Forward the picked message to another chat (type a contact, group or number) |
+| `P` (picking, WhatsApp poll) | Vote in the picked poll (type the option numbers; empty takes your vote back) |
 | `R` (picking, WhatsApp group) | Send a private reply to the picked group message (in your chat with its sender, quoting it) |
 | `p` | Toggle the chat pinned on top of the list (WhatsApp: on your phone too, three at most) |
 | `e` (WhatsApp) | Move the chat into Archived, or back out of it (archive; your phone follows) |
@@ -284,6 +285,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `Ctrl+o` (typing) | Add a file to the chat message you're typing |
 | `Ctrl+v` (typing) | Paste a copied image (a screenshot) into the chat message as a file |
 | `Ctrl+r` (typing, WhatsApp) | Record a voice note for the message (again stops and adds it; Enter sends it, Esc drops it) |
+| `Ctrl+p` (typing, WhatsApp) | Send what you typed as a poll: the question, then one option per line (end the question with (several) to allow several) |
 | `Enter` (typing) | Send the chat message and keep typing the next one (Esc leaves the box) |
 | `Alt+Enter` / `Ctrl+j` (typing) | Start a new line in the chat message |
 | `@` (typing, WhatsApp) | Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none) |
@@ -544,7 +546,10 @@ person, and `*` stars the picked message; all of it reaches your phone, and
 what you change on the phone shows here. In a group, `I` shows its people,
 admins and description, and `n` renames it for everyone; `narada whatsapp
 group` makes groups and adds, removes and promotes people, and gives or
-resets the invite link. While a chat is open, its top line
+resets the invite link. Polls show their options and votes, kept up to
+date as people vote (yours marked ●): `P` on a poll votes, and `Ctrl+p`
+while typing sends the question and the options below it (one per line)
+as a poll. While a chat is open, its top line
 says when they're typing (or recording a voice note), online, or when they
 were last seen (if they share it), and they see you typing, as with
 WhatsApp Web. The status
@@ -640,7 +645,7 @@ claude  → contacts_find → mail_send
 | `chat_send` | Post in a space, DM or thread | **asks you** |
 | `whatsapp_chats` | WhatsApp chats with unread counts | reads |
 | `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
-| `whatsapp_send` | One message to one WhatsApp chat (or `forward`: a message forwarded there), optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
+| `whatsapp_send` | One message to one WhatsApp chat (or `forward`: a message forwarded there; or `poll_options`: a poll), optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
 | `attachment_save` | Download a mail's attachments or a chat or WhatsApp message's files into `~/Downloads/narada` | saves files |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
@@ -718,6 +723,8 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp mute <chat> [--for 8h\|1w\|always]` / `unmute <chat>` | Silence a chat's notifications (always by default) |
 | `narada whatsapp star\|unstar <message>` / `starred` | Star a message; list the starred ones |
 | `narada whatsapp group new\|info\|rename\|about\|add\|remove\|promote\|demote\|link\|join\|leave ...` | Make and run groups: `new <name> <person>...`, `add <group> <person>...`, `link <group> [--reset]` (the invite link), `join <link>`, `leave <group>` |
+| `narada whatsapp poll <to> <question> <option>... [--multi]` | Ask a poll (2 to 12 options; `--multi`: several may be picked) |
+| `narada whatsapp vote <poll> [option...]` | Vote by option number or text; none takes your vote back |
 | `narada whatsapp list --archived` | The archived chats (left out of `list` otherwise) |
 | `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |
 | `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |

@@ -1026,3 +1026,64 @@ func TestWhatsAppActionThroughTheHolder(t *testing.T) {
 		}
 	}
 }
+
+func TestWhatsAppPolls(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	trek := store.Space{Name: "120363000000000001@g.us", DisplayName: "Weekend trek"}
+	if _, err := a.PollWhatsApp(trek, "When?", []string{"Sat"}, false, OriginYou); err == nil {
+		t.Fatal("a poll with one option")
+	}
+	if _, err := a.PollWhatsApp(trek, " ", []string{"Sat", "Sun"}, false, OriginYou); err == nil {
+		t.Fatal("a poll with no question")
+	}
+	it, err := a.PollWhatsApp(trek, "When?", []string{"Sat", "Sun", "Sat"}, false, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := deliver(t, a, ctx, it)
+	if got.Status != store.StatusSent || len(w.Sent) != 1 || w.Sent[0].Poll == nil || len(w.Sent[0].Poll.Options) != 2 {
+		t.Fatalf("poll: %s %s %+v", got.Status, got.Error, w.Sent)
+	}
+	poll := got.Result
+	id := strings.TrimPrefix(poll, trek.Name+"/")
+	w.ReceiveVote(trek.Name, id, "919800000002@s.whatsapp.net", "Sat")
+	w.ReceiveVote(trek.Name, id, "919800000003@s.whatsapp.net", "Sun")
+	w.ReceiveVote(trek.Name, id, "919800000003@s.whatsapp.net", "Sat") // changed their mind
+	m, _ := a.Store.ChatMessage(store.WhatsAppAccount, poll)
+	if !strings.Contains(m.Text, "○ 1. Sat · 2") || strings.Contains(m.Text, "Sun ·") {
+		t.Fatalf("tally:\n%s", m.Text)
+	}
+	if _, err := a.VoteWhatsApp(poll, []string{"1", "2"}, OriginYou); err == nil {
+		t.Fatal("two votes in a single-choice poll")
+	}
+	if _, err := a.VoteWhatsApp(poll, []string{"Mon"}, OriginYou); err == nil {
+		t.Fatal("a vote for no option")
+	}
+	v, err := a.VoteWhatsApp(poll, []string{"2"}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, v); got.Status != store.StatusSent || len(w.Voted) != 1 || !strings.HasSuffix(w.Voted[0], " Sun") {
+		t.Fatalf("vote: %s %s %v", got.Status, got.Error, w.Voted)
+	}
+	m, _ = a.Store.ChatMessage(store.WhatsAppAccount, poll)
+	if !strings.Contains(m.Text, "● 2. Sun · 1") {
+		t.Fatalf("your vote:\n%s", m.Text)
+	}
+	w.Receive(whatsapp.Message{ID: "P1", Chat: trek.Name, Sender: "919800000002@s.whatsapp.net", Text: "📊 Poll: Bus or train?",
+		Poll: &whatsapp.Poll{Question: "Bus or train?", Options: []string{"Bus", "Train"}, Multi: true}})
+	m, _ = a.Store.ChatMessage(store.WhatsAppAccount, trek.Name+"/P1")
+	if !strings.Contains(m.Text, "(pick several)") || !strings.Contains(m.Text, "○ 2. Train") {
+		t.Fatalf("received poll:\n%s", m.Text)
+	}
+	if _, err := a.VoteWhatsApp(trek.Name+"/H6", []string{"1"}, OriginYou); err == nil {
+		t.Fatal("voted in a message that isn't a poll")
+	}
+}

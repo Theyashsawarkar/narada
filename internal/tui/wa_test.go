@@ -268,3 +268,36 @@ func TestGroupInfoKey(t *testing.T) {
 		t.Fatalf("%+v", msg)
 	}
 }
+
+func TestPollFromTheScreen(t *testing.T) {
+	m, w := waModel(t, "120363000000000001@g.us")
+	m.mode = modeChatMsg
+	m.input = []rune("Leave when?\n5am\n6am")
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	m = nm.(Model)
+	m.a.DeliverDue(context.Background())
+	if len(w.Sent) != 1 || w.Sent[0].Poll == nil || w.Sent[0].Poll.Question != "Leave when?" || len(w.Sent[0].Poll.Options) != 2 {
+		t.Fatalf("sent %+v (%s)", w.Sent, m.err)
+	}
+	// vote in it with P
+	m.mode, m.focus = modeNormal, 1
+	m.loadPreview(true)
+	items, _ := m.a.Store.Outbox(store.StatusSent)
+	m = pickMsg(t, m, strings.TrimPrefix(items[0].Result, "120363000000000001@g.us/"))
+	m = press(m, "P")
+	if m.mode != modeVote {
+		t.Fatalf("P: %q", m.toast)
+	}
+	m = typeText(m, "2")
+	m = press(m, "enter")
+	m.a.DeliverDue(context.Background())
+	if len(w.Voted) != 1 || !strings.HasSuffix(w.Voted[0], " 6am") {
+		t.Fatalf("voted %v (%s)", w.Voted, m.err)
+	}
+	// P on a message that isn't a poll
+	m = pickMsg(t, m, "H6")
+	m = press(m, "P")
+	if m.mode == modeVote {
+		t.Fatal("voting in a plain message")
+	}
+}

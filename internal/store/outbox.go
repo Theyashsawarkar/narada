@@ -37,9 +37,11 @@ type Outgoing struct {
 	Quote     string `json:"quote,omitempty"` // the message this one replies to (quoting it)
 	// WhatsApp: what the item does besides sending a message (ADR 7):
 	// "edit" or "delete" (for everyone) the message Target, "forward"
-	// Target here; "" sends Body
+	// Target here, "poll" or "vote" (below); "" sends Body
 	Action string `json:"action,omitempty"`
 	Target string `json:"target,omitempty"`
+	// "poll" asks Poll; "vote" picks Poll.Options in the poll Target
+	Poll *Poll `json:"poll,omitempty"`
 	// both
 	Body  string `json:"body"`
 	HTML  string `json:"html,omitempty"` // mail: sent beside Body when set
@@ -52,6 +54,13 @@ type Outgoing struct {
 	// asked for, in their words; the approval shows both
 	Agent string `json:"agent,omitempty"`
 	Why   string `json:"why,omitempty"`
+}
+
+// Poll is a WhatsApp poll to ask, or (voting) the options picked.
+type Poll struct {
+	Question string   `json:"question,omitempty"`
+	Options  []string `json:"options"`
+	Multi    bool     `json:"multi,omitempty"`
 }
 
 // File is an attachment to send: a private copy made when it was queued

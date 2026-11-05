@@ -38,6 +38,7 @@ type WhatsApp struct {
 	Revoked []string            // deleted for everyone: "chat/id"
 	Quotes  []whatsapp.Message  // what each send that replied quoted
 	Did     []string            // chat-state, presence and group actions: "action chat arg"
+	Voted   []string            // votes sent: "chat/poll option,option"
 	DoErr   error               // Do fails with this
 	Members map[string][]string // group JID → its people
 	ReadErr error               // MarkRead fails with this
@@ -287,6 +288,38 @@ func (c *WhatsAppConn) Forward(ctx context.Context, chat string, m whatsapp.Mess
 		Media: m.Media, Forwarded: true}
 	w.Sent = append(w.Sent, fw)
 	return fw.ID, nil
+}
+
+func (c *WhatsAppConn) SendPoll(ctx context.Context, chat string, p whatsapp.Poll) (string, error) {
+	w := c.w
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if c.closed || w.handler == nil {
+		return "", errors.New("offline")
+	}
+	w.nextID++
+	m := whatsapp.Message{ID: fmt.Sprintf("OUT%04d", w.nextID), Chat: chat, Sender: w.Me, Text: "📊 Poll: " + p.Question, Time: time.Now(), FromMe: true, Poll: &p}
+	w.Sent = append(w.Sent, m)
+	return m.ID, nil
+}
+
+func (c *WhatsAppConn) SendVote(ctx context.Context, chat, sender, pollID string, fromMe bool, options []string) error {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	if c.w.SendErr != nil {
+		return c.w.SendErr
+	}
+	c.w.Voted = append(c.w.Voted, chat+"/"+pollID+" "+strings.Join(options, ","))
+	return nil
+}
+
+// ReceiveVote is someone voting in a poll.
+func (w *WhatsApp) ReceiveVote(chat, poll, voter string, options ...string) {
+	v := whatsapp.Vote{Chat: chat, Poll: poll, Voter: voter}
+	for _, o := range options {
+		v.Hashes = append(v.Hashes, whatsapp.OptionHash(o))
+	}
+	w.Emit(whatsapp.Event{Votes: []whatsapp.Vote{v}})
 }
 
 // Do records the action and answers as WhatsApp would.

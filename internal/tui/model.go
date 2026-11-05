@@ -45,6 +45,7 @@ const (
 	modeFind    // the search window
 	modeView    // a picture full size
 	modeForward // typing who to forward a WhatsApp message to
+	modeVote    // typing the options to vote for in a WhatsApp poll
 )
 
 const (
@@ -218,7 +219,7 @@ type Model struct {
 	tagged        map[string]string // names picked for this message, to their numbers
 	chatFiles     []store.File      // files for the message being typed
 	rec           *recording        // a voice note being recorded
-	forwarding    string            // the WhatsApp message f forwards
+	forwarding    string            // the WhatsApp message f forwards (P: the poll to vote in)
 	typedAt       time.Time         // when WhatsApp was last told you're typing
 	watched       map[string]time.Time
 	editingMsg    string          // the message of yours being edited in the box
@@ -1293,6 +1294,9 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeChatMsg && s == "ctrl+v" {
 		return m, m.pasteImage()
 	}
+	if m.mode == modeChatMsg && s == "ctrl+p" && m.wa {
+		return m.sendPoll()
+	}
 	if m.mode == modeChatMsg && s == "ctrl+r" {
 		var err error
 		if m.rec == nil {
@@ -1351,7 +1355,7 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 		}
 		return m, nil
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename, modePhone, modeForward:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename, modePhone, modeForward, modeVote:
 		return m.inputKey(k)
 	case modeReview:
 		return m.reviewKey(s)
@@ -1475,6 +1479,17 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case modeLink:
 			m.openLink(text)
+		case modeVote:
+			msg, a := m.forwarding, m.a
+			m.forwarding = ""
+			picks := strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' })
+			it, err := a.VoteWhatsApp(msg, picks, app.OriginYou)
+			if err != nil {
+				m.setErr(err.Error())
+				return m, nil
+			}
+			m.say(map[bool]string{true: "voting…", false: "taking your vote back…"}[len(picks) > 0])
+			return m, m.sent(it)
 		case modeForward:
 			msg, a := m.forwarding, m.a
 			m.forwarding = ""
@@ -1831,6 +1846,17 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		}
 		m.say("syncing…")
 		return m, m.syncCmd()
+	case "P":
+		if m.wa && m.pickingMsg() {
+			c := m.chatMsgs[m.chatSel]
+			if _, err := m.a.Store.WhatsAppPollOf(c.Name); err != nil {
+				m.say("P votes in a poll: pick one first")
+				return m, nil
+			}
+			m.forwarding = c.Name
+			m.mode, m.input = modeVote, nil
+			return m, nil
+		}
 	case "ctrl+x":
 		// pick everything in the list, or nothing when it all is
 		all := m.count() > 0

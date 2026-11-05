@@ -239,6 +239,8 @@ func migrate(db *sql.DB) error {
 			`ALTER TABLE spaces ADD COLUMN muted_until INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE chat_messages ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE spaces ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`,
+			`CREATE TABLE IF NOT EXISTS whatsapp_polls (msg TEXT PRIMARY KEY, question TEXT NOT NULL, options TEXT NOT NULL, multi INTEGER NOT NULL DEFAULT 0)`,
+			`CREATE TABLE IF NOT EXISTS whatsapp_votes (msg TEXT NOT NULL, voter TEXT NOT NULL, options TEXT NOT NULL, PRIMARY KEY (msg, voter))`,
 			`CREATE TABLE IF NOT EXISTS whatsapp_presence (jid TEXT PRIMARY KEY, online INTEGER NOT NULL DEFAULT 0,
 			  last_seen INTEGER NOT NULL DEFAULT 0, at INTEGER NOT NULL DEFAULT 0, typing_in TEXT NOT NULL DEFAULT '',
 			  typing TEXT NOT NULL DEFAULT '', typing_at INTEGER NOT NULL DEFAULT 0)`,
@@ -1362,6 +1364,67 @@ func (s *Store) OldestChat(account, space string) (int64, error) {
 // SetPinned keeps a chat on top of the list (on this machine).
 func (s *Store) SetPinned(account, space string, on bool) error {
 	_, err := s.db.Exec(`UPDATE spaces SET pinned=? WHERE account=? AND name=?`, on, account, space)
+	return err
+}
+
+// WhatsAppPoll is a poll asked in a chat (Msg is the message's name) and
+// its votes: voter → the options they picked.
+type WhatsAppPoll struct {
+	Msg      string
+	Question string
+	Options  []string
+	Multi    bool
+	Votes    map[string][]string
+}
+
+func (s *Store) PutWhatsAppPoll(p WhatsAppPoll) error {
+	opts, _ := json.Marshal(p.Options)
+	_, err := s.db.Exec(`INSERT INTO whatsapp_polls(msg,question,options,multi) VALUES(?,?,?,?)
+	  ON CONFLICT(msg) DO UPDATE SET question=excluded.question, options=excluded.options, multi=excluded.multi`, p.Msg, p.Question, string(opts), p.Multi)
+	return err
+}
+
+// SetWhatsAppVote records a vote (no options: taken back).
+func (s *Store) SetWhatsAppVote(msg, voter string, options []string) error {
+	if len(options) == 0 {
+		_, err := s.db.Exec(`DELETE FROM whatsapp_votes WHERE msg=? AND voter=?`, msg, voter)
+		return err
+	}
+	b, _ := json.Marshal(options)
+	_, err := s.db.Exec(`INSERT INTO whatsapp_votes(msg,voter,options) VALUES(?,?,?) ON CONFLICT(msg,voter) DO UPDATE SET options=excluded.options`, msg, voter, string(b))
+	return err
+}
+
+func (s *Store) WhatsAppPollOf(msg string) (WhatsAppPoll, error) {
+	p := WhatsAppPoll{Msg: msg, Votes: map[string][]string{}}
+	var opts string
+	if err := s.db.QueryRow(`SELECT question,options,multi FROM whatsapp_polls WHERE msg=?`, msg).Scan(&p.Question, &opts, &p.Multi); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return p, ErrNotFound
+		}
+		return p, err
+	}
+	_ = json.Unmarshal([]byte(opts), &p.Options)
+	rows, err := s.db.Query(`SELECT voter,options FROM whatsapp_votes WHERE msg=?`, msg)
+	if err != nil {
+		return p, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var voter, o string
+		if rows.Scan(&voter, &o) == nil {
+			var picked []string
+			_ = json.Unmarshal([]byte(o), &picked)
+			p.Votes[voter] = picked
+		}
+	}
+	return p, rows.Err()
+}
+
+// SetChatText changes a stored message's text without marking it edited
+// (a poll's tally).
+func (s *Store) SetChatText(account, name, text string) error {
+	_, err := s.db.Exec(`UPDATE chat_messages SET text=? WHERE account=? AND name=?`, text, account, name)
 	return err
 }
 

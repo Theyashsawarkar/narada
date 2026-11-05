@@ -282,4 +282,14 @@ func TestWhatsAppTools(t *testing.T) {
 	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "forward": "nope"}); !strings.Contains(out, "no message") {
 		t.Fatalf("forward of nothing: %q", out)
 	}
+	// a poll, behind approval
+	go approveNext()
+	n = len(w.Sent)
+	out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek", "text": "Leave when?", "poll_options": []string{"5am", "6am"}})
+	if out != "Sent." || len(w.Sent) != n+1 || w.Sent[n].Poll == nil || w.Sent[n].Poll.Question != "Leave when?" {
+		t.Fatalf("poll: %q %+v", out, w.Sent[n:])
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek", "text": "One?", "poll_options": []string{"yes"}}); !strings.Contains(out, "2 to 12") {
+		t.Fatalf("a one-option poll: %q", out)
+	}
 }
