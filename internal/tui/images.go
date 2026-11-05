@@ -165,6 +165,9 @@ func imageKind(f store.ChatFile) (show, anim, video bool) {
 	return false, false, false
 }
 
+// imgWork counts pictures being prepared in the background.
+var imgWork sync.WaitGroup
+
 // mediaLines draws a chat message's file as an image at most maxCols
 // wide, or nil when it isn't one (or images are off). The first time it
 // starts fetching and preparing it in the background.
@@ -185,7 +188,11 @@ func (m *Model) mediaSized(account, msgName string, idx int, f store.ChatFile, m
 	if e == nil {
 		e = &imgEntry{state: "fetching", video: video, id: imageID(key)}
 		imgs.entries[key] = e
-		go prepareMedia(m.a, e, account, msgName, idx, f, anim, video)
+		imgWork.Add(1)
+		go func() {
+			defer imgWork.Done()
+			prepareMedia(m.a, e, account, msgName, idx, f, anim, video)
+		}()
 	}
 	state, errText := e.state, e.err
 	imgs.mu.Unlock()
@@ -226,7 +233,11 @@ func (m *Model) fileLines(path string, maxCols, maxRows int) []string {
 		e = &imgEntry{state: "preparing", id: imageID(key)}
 		imgs.entries[key] = e
 		dir := filepath.Join(m.a.Paths.Cache, "media", "view")
-		go prepareFrom(e, path, dir, false, isVideo(path))
+		imgWork.Add(1)
+		go func() {
+			defer imgWork.Done()
+			prepareFrom(e, path, dir, false, isVideo(path))
+		}()
 	}
 	defer imgs.mu.Unlock()
 	if e.state != "ready" {

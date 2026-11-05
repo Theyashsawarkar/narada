@@ -185,16 +185,24 @@ func (a *App) fetchAsked(ctx context.Context) {
 	}()
 }
 
-// WaitChatFile is ChatFile that waits (until ctx ends) while the process
-// holding WhatsApp downloads it. Asking again retries a download that failed.
+// WaitChatFile is ChatFile that waits (at most half an hour, for 2 GB on a
+// slow line) while the process holding WhatsApp downloads it. With nobody
+// holding it, it says so instead of waiting. Asking again retries a
+// download that failed.
 func (a *App) WaitChatFile(ctx context.Context, account, msgName string, n int) (string, error) {
 	if _, ok := a.CachedChatFile(account, msgName, n); !ok && account == store.WhatsAppAccount && !a.WhatsAppOnline() {
 		_ = a.Store.AskMedia(account, msgName, n) // clears an old failure
 	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer cancel()
 	for {
 		p, err := a.ChatFile(ctx, account, msgName, n)
 		if !errors.Is(err, ErrMediaWaiting) {
 			return p, err
+		}
+		if unlock, free := a.lock("whatsapp"); free {
+			unlock()
+			return "", errors.New("no narada is online to download it: start the background service (narada service install) or open the screen")
 		}
 		select {
 		case <-ctx.Done():

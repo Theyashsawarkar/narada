@@ -29,11 +29,11 @@ func waModel(t *testing.T, chat string) (Model, *fake.WhatsApp) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	t.Cleanup(imgWork.Wait) // runs first: pictures finish while WhatsApp is online, before the home goes
 	if ok, err := m.a.StartWhatsApp(ctx); !ok || err != nil {
 		t.Fatal(ok, err)
 	}
 	m.a.Config.ChatUndoSeconds = 0
-	m.a.Config.Images = "off" // no pictures being prepared as the test ends
 	sp, err := m.a.Store.Space(store.WhatsAppAccount, chat)
 	if err != nil {
 		t.Fatal(err)

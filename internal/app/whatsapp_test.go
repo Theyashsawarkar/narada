@@ -1254,3 +1254,41 @@ func TestWhatsAppSticker(t *testing.T) {
 		t.Fatalf("%s %s %+v", got.Status, got.Error, w.Sent[0].Media)
 	}
 }
+
+// With nobody holding WhatsApp, saving a file says so instead of hanging.
+func TestWhatsAppSaveFileWithNobodyOnline(t *testing.T) {
+	a, _ := setupWhatsApp(t)
+	done := make(chan error, 1)
+	go func() {
+		_, err := a.SaveChatFiles(context.Background(), "919800000001@s.whatsapp.net/H3", 0, t.TempDir())
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "no narada is online") {
+			t.Fatalf("got %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("it hung with nobody to download the file")
+	}
+}
+
+// A connection ending doesn't take a later one of the same process with it.
+func TestWhatsAppOldContextLeavesNewConnection(t *testing.T) {
+	a, _ := setupWhatsApp(t)
+	first, cancelFirst := context.WithCancel(context.Background())
+	if ok, err := a.StartWhatsApp(first); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	a.StopWhatsApp()
+	second, cancelSecond := context.WithCancel(context.Background())
+	defer cancelSecond()
+	if ok, err := a.StartWhatsApp(second); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	cancelFirst()
+	time.Sleep(100 * time.Millisecond)
+	if !a.WhatsAppOnline() {
+		t.Fatal("the first context's end stopped the second connection")
+	}
+}

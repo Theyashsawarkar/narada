@@ -237,15 +237,23 @@ func (a *App) StartWhatsApp(ctx context.Context) (ok bool, err error) {
 	}
 	go func() {
 		<-ctx.Done()
-		a.StopWhatsApp()
+		a.stopConn(c)
 	}()
 	return true, nil
 }
 
 // StopWhatsApp goes offline and lets another process (or a later
 // StartWhatsApp) take WhatsApp.
-func (a *App) StopWhatsApp() {
+func (a *App) StopWhatsApp() { a.stopConn(nil) }
+
+// stopConn stops the connection, if it is still only (nil: any): the end
+// of one connection's context mustn't take a later one with it.
+func (a *App) stopConn(only WhatsAppConn) {
 	a.waMu.Lock()
+	if only != nil && a.wa != only {
+		a.waMu.Unlock()
+		return
+	}
 	c, unlock := a.wa, a.waUnlock
 	a.wa, a.waUnlock = nil, nil
 	a.waMu.Unlock()
