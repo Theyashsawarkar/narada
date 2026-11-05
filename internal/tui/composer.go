@@ -731,7 +731,7 @@ func (m Model) composerSend() (tea.Model, tea.Cmd) {
 	out := c.outgoing()
 	if c.approveID > 0 {
 		// an agent's message, edited: back to the approval with it
-		files, err := m.a.ResolveFiles(out.Files)
+		files, err := m.a.ResolveFilesUpTo(out.Files, app.MaxAttachFor(c.account))
 		if err != nil {
 			m.setErr(err.Error())
 			return m, nil

@@ -58,7 +58,7 @@ const (
 // window; an agent's go through the send policy and usually wait for
 // your approval first. Returns the outbox item.
 func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (store.OutboxItem, error) {
-	files, err := a.ResolveFiles(out.Files)
+	files, err := a.ResolveFilesUpTo(out.Files, MaxAttachFor(account))
 	if err != nil {
 		return store.OutboxItem{}, err
 	}
@@ -242,7 +242,7 @@ func (a *App) Approve(id int64, edited *store.Outgoing) error {
 		return fmt.Errorf("#%d is %s, not waiting for approval", id, it.Status)
 	}
 	if edited != nil {
-		files, err := a.ResolveFiles(edited.Files)
+		files, err := a.ResolveFilesUpTo(edited.Files, MaxAttachFor(it.Account))
 		if err != nil {
 			return err
 		}

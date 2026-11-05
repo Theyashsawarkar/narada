@@ -2,6 +2,13 @@
 
 Newest first.
 
+## Unreleased
+
+- **WhatsApp takes big files**: up to 2 GB a file, as WhatsApp itself does (an app
+  build of 90 MB goes), from the screen, `whatsapp send --attach` and agents. Mail
+  and Google Chat keep their 25 MB limit, and the file picker's warning says which
+  limit applies.
+
 ## v0.10.0 -- 2026-11-05
 
 - **Tag people on WhatsApp by name**: type `@` and pick from a group's members and

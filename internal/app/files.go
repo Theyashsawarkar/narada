@@ -24,6 +24,24 @@ import (
 // and Chat's 200 MB, but more than this belongs in Drive.
 const MaxAttach = 25 << 20
 
+// MaxWhatsAppAttach is WhatsApp's own limit for a document: 2 GB.
+const MaxWhatsAppAttach = 2 << 30
+
+// MaxAttachFor is the most a message from this account may carry.
+func MaxAttachFor(account string) int64 {
+	if account == store.WhatsAppAccount {
+		return MaxWhatsAppAttach
+	}
+	return MaxAttach
+}
+
+func tooBig(max int64) error {
+	if max == MaxAttach {
+		return fmt.Errorf("attachments are over %d MB: share big files from Drive", max>>20)
+	}
+	return fmt.Errorf("attachments are over %d MB", max>>20)
+}
+
 // DownloadDir is where saved attachments go: $NARADA_DOWNLOADS, else
 // the XDG download folder (or ~/Downloads), in a "narada" folder.
 func DownloadDir() string {
@@ -136,6 +154,11 @@ func (a *App) AttachFiles(paths []string) ([]store.File, error) {
 // ResolveFiles copies every file that has no private copy yet (Path ""),
 // keeping the ones that do. The total stays under MaxAttach.
 func (a *App) ResolveFiles(files []store.File) ([]store.File, error) {
+	return a.ResolveFilesUpTo(files, MaxAttach)
+}
+
+// ResolveFilesUpTo is ResolveFiles with its own limit (see MaxAttachFor).
+func (a *App) ResolveFilesUpTo(files []store.File, max int64) ([]store.File, error) {
 	var keep []store.File
 	var paths []string
 	var total int64
@@ -155,20 +178,20 @@ func (a *App) ResolveFiles(files []store.File) ([]store.File, error) {
 			paths = append(paths, f.Source)
 		}
 	}
-	if total > MaxAttach {
-		return nil, fmt.Errorf("attachments are over %d MB: share big files from Drive", MaxAttach>>20)
+	if total > max {
+		return nil, tooBig(max)
 	}
 	if len(paths) == 0 {
 		return keep, nil
 	}
-	fresh, err := a.copyFiles(paths, total)
+	fresh, err := a.copyFiles(paths, total, max)
 	if err != nil {
 		return nil, err
 	}
 	return append(keep, fresh...), nil
 }
 
-func (a *App) copyFiles(paths []string, total int64) ([]store.File, error) {
+func (a *App) copyFiles(paths []string, total, max int64) ([]store.File, error) {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	dir := filepath.Join(a.Paths.State, "outbox", hex.EncodeToString(b))
@@ -186,8 +209,8 @@ func (a *App) copyFiles(paths []string, total int64) ([]store.File, error) {
 		if !st.Mode().IsRegular() {
 			return fail(fmt.Errorf("%s is not a file", p))
 		}
-		if total += st.Size(); total > MaxAttach {
-			return fail(fmt.Errorf("attachments are over %d MB: share big files from Drive", MaxAttach>>20))
+		if total += st.Size(); total > max {
+			return fail(tooBig(max))
 		}
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fail(err)
@@ -313,9 +336,11 @@ func ExpandPath(p string) string {
 	return os.ExpandEnv(p)
 }
 
-// HumanSize is 1.2 MB, 340 KB, 12 B.
+// HumanSize is 2.0 GB, 1.2 MB, 340 KB, 12 B.
 func HumanSize(n int64) string {
 	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
 	case n >= 1<<20:
 		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
 	case n >= 1<<10:

@@ -492,7 +492,8 @@ threads a minute, with a progress bar in the top bar.
 - **Upload**: in the mail editor, `Attach: ~/report.pdf, ~/notes.txt`; or `+`
   on the review screen to pick files. In chat, `U` picks files to post in the
   space. From the shell: `--attach FILE` (repeatable) on `mail send` and
-  `chat send`. Up to 25 MB per message.
+  `chat send`, and on `whatsapp send`. Up to 25 MB per mail or chat message;
+  WhatsApp takes files up to 2 GB, as WhatsApp itself does.
 - What is attached is copied when you queue the send (privately, 0600), so
   the file you reviewed is the file that goes out. Agents can attach files
   too, but those sends wait for your approval unless `send_policy` is

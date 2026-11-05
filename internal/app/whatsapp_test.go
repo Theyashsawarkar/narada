@@ -653,3 +653,28 @@ func waitReady(t *testing.T, a *App) {
 		t.Fatal("WhatsApp didn't connect")
 	}
 }
+
+// WhatsApp takes documents up to 2 GB: an app build of ~90 MB must go,
+// while mail keeps its 25 MB limit.
+func TestWhatsAppTakesFilesOverMailLimit(t *testing.T) {
+	a, _ := setupWhatsApp(t)
+	big := filepath.Join(t.TempDir(), "app.apk")
+	f, err := os.Create(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(MaxAttach + 1); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if _, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: "919800000001@s.whatsapp.net",
+		Files: []store.File{{Source: big}}}, OriginYou); err != nil {
+		t.Fatalf("WhatsApp refused a file over %d MB: %v", MaxAttach>>20, err)
+	}
+	if _, err := a.AttachFiles([]string{big}); err == nil || !strings.Contains(err.Error(), "Drive") {
+		t.Fatalf("mail should still stop at %d MB, got %v", MaxAttach>>20, err)
+	}
+	if MaxAttachFor(store.WhatsAppAccount) != 2<<30 {
+		t.Fatal("WhatsApp's limit is 2 GB")
+	}
+}

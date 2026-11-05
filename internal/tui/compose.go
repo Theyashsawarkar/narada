@@ -94,7 +94,7 @@ func (m Model) afterEdit(msg editedMsg) (tea.Model, tea.Cmd) {
 	if msg.approveID > 0 {
 		// an agent's message, edited: back to the approval view with it
 		if ok {
-			if files, err := m.a.ResolveFiles(out.Files); err != nil {
+			if files, err := m.a.ResolveFilesUpTo(out.Files, app.MaxAttachFor(msg.account)); err != nil {
 				m.setErr(err.Error())
 				m.mode = modeApprove
 				return m, nil

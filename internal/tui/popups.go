@@ -227,6 +227,23 @@ type pickerFilesMsg struct {
 	err    error
 }
 
+// attachLimit is the most the message the picker attaches to may carry:
+// WhatsApp takes 2 GB, mail and Chat 25 MB.
+func (m Model) attachLimit() int64 {
+	acc := ""
+	switch {
+	case m.pick != nil && m.pick.then == "compose" && m.comp != nil:
+		acc = m.comp.account
+	case m.pick != nil && m.pick.then == "review" && m.review != nil:
+		acc = m.review.account
+	default:
+		if sp, ok := m.curSpace(); ok {
+			acc = sp.Account
+		}
+	}
+	return app.MaxAttachFor(acc)
+}
+
 // pickFiles opens the file picker; what you pick goes to then.
 func (m *Model) pickFiles(then string) tea.Cmd {
 	home, _ := os.UserHomeDir()
@@ -538,8 +555,8 @@ func (m Model) filePreview(path string, w, h int) []string {
 	}
 	out := []string{s.bold.Render(ansi.Truncate(filepath.Base(path), w, "…")),
 		s.muted.Render(app.HumanSize(st.Size()) + " · changed " + st.ModTime().Format("02 Jan 2006 15:04")), ""}
-	if st.Size() > app.MaxAttach {
-		out = append(out, s.red.Render(fmt.Sprintf("over %d MB: too big to attach", app.MaxAttach>>20)), "")
+	if limit := m.attachLimit(); st.Size() > limit {
+		out = append(out, s.red.Render(fmt.Sprintf("over %s: too big to attach", app.HumanSize(limit))), "")
 	}
 	f, err := os.Open(path)
 	if err != nil {
