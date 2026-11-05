@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS notified (account TEXT NOT NULL, key TEXT NOT NULL, P
 CREATE TABLE IF NOT EXISTS whatsapp_reactions (space TEXT NOT NULL, msg TEXT NOT NULL, reactor TEXT NOT NULL, emoji TEXT NOT NULL,
   sender TEXT NOT NULL DEFAULT '', pending INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (space, msg, reactor));
+CREATE TABLE IF NOT EXISTS whatsapp_members (space TEXT NOT NULL, jid TEXT NOT NULL, PRIMARY KEY (space, jid));
 CREATE TABLE IF NOT EXISTS whatsapp_reads (space TEXT NOT NULL, msg TEXT NOT NULL, sender TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL,
   PRIMARY KEY (space, msg));
 `
@@ -961,6 +962,103 @@ func PendingOutboxID(name string) (int64, bool) {
 func (s *Store) SetTicks(account, name string, level int) error {
 	_, err := s.db.Exec(`UPDATE chat_messages SET ticks=? WHERE account=? AND name=?`, level, account, name)
 	return err
+}
+
+// WhatsAppPerson is someone you can tag: their best name ("" when none is
+// known), and their JID.
+type WhatsAppPerson struct {
+	JID, Name string
+}
+
+// SetWhatsAppMembers remembers who's in a group (only the process holding the
+// connection can ask WhatsApp; every other one reads it here).
+func (s *Store) SetWhatsAppMembers(space string, jids []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM whatsapp_members WHERE space=?`, space); err != nil {
+		return err
+	}
+	for _, j := range jids {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO whatsapp_members(space,jid) VALUES(?,?)`, space, j); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// WhatsAppNames is every name known for a WhatsApp number, by JID: your saved
+// name or their own from the contacts, else the one on their latest message.
+func (s *Store) WhatsAppNames() (map[string]string, error) {
+	out := map[string]string{}
+	rows, err := s.db.Query(`SELECT sender, sender_name FROM chat_messages WHERE account=? AND sender<>'' AND sender_name<>'' AND sender_name<>'You' ORDER BY created`, WhatsAppAccount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var j, n string
+		if err := rows.Scan(&j, &n); err != nil {
+			return nil, err
+		}
+		out[j] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	urows, err := s.db.Query(`SELECT id, name FROM users WHERE account=? AND name<>''`, WhatsAppAccount)
+	if err != nil {
+		return nil, err
+	}
+	defer urows.Close()
+	for urows.Next() {
+		var j, n string
+		if err := urows.Scan(&j, &n); err != nil {
+			return nil, err
+		}
+		// a name you saved beats everything; one they gave themselves ("~") only fills a gap
+		if _, have := out[j]; !have || !strings.HasPrefix(n, "~") {
+			out[j] = n
+		}
+	}
+	return out, urows.Err()
+}
+
+// WhatsAppPeople is who you can tag in a chat: its members, everyone who has
+// written there, and the other person of a one-to-one chat.
+func (s *Store) WhatsAppPeople(space string) ([]WhatsAppPerson, error) {
+	names, err := s.WhatsAppNames()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var out []WhatsAppPerson
+	add := func(j string) {
+		if j != "" && !seen[j] && strings.HasSuffix(j, "@s.whatsapp.net") {
+			seen[j] = true
+			out = append(out, WhatsAppPerson{JID: j, Name: strings.TrimPrefix(names[j], "~")})
+		}
+	}
+	add(space)
+	for _, q := range []string{`SELECT jid FROM whatsapp_members WHERE space=?`,
+		`SELECT DISTINCT sender FROM chat_messages WHERE account='` + WhatsAppAccount + `' AND space=?`} {
+		rows, err := s.db.Query(q, space)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var j string
+			if err := rows.Scan(&j); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			add(j)
+		}
+		rows.Close()
+	}
+	return out, nil
 }
 
 // WhatsAppReaction is one person's reaction to a message (WhatsApp allows one

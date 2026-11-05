@@ -2,6 +2,17 @@
 
 Newest first.
 
+## v0.10.0 -- 2026-11-05
+
+- **Tag people on WhatsApp by name**: type `@` and pick from a group's members and
+  whoever has written there; typing narrows the list (name or number), `Enter` or
+  `Tab` tags them, `Esc` leaves the `@` as you typed it. WhatsApp still gets their
+  number underneath, so the tag notifies them.
+- **Tags show as names**, in chats, the chat list, replies and the outbox: the name
+  you saved, else the name they gave themselves, and their number only when neither
+  is known. Group members are now kept, so names can be found for people who haven't
+  written yet.
+
 ## v0.9.0 -- 2026-11-05
 
 - **React on WhatsApp**: `e` on a picked message. One reaction each, as on the phone:

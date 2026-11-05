@@ -59,12 +59,13 @@ type Ticks struct {
 
 // Chat is a conversation: a person or a group.
 type Chat struct {
-	JID    string
-	Name   string
-	Group  bool
-	People int // a group's members, when known
-	Last   time.Time
-	Unread int // from the phone's history: how many are unread
+	JID     string
+	Name    string
+	Group   bool
+	People  int      // a group's members, when known
+	Members []string // who they are, when known
+	Last    time.Time
+	Unread  int // from the phone's history: how many are unread
 }
 
 // Event is what the connection hears. Exactly one part is set.
@@ -414,11 +415,24 @@ func (cl *Client) event(evt any) {
 		if len(e.Join) > 0 || len(e.Leave) > 0 {
 			go func() {
 				if info, err := cl.c.GetGroupInfo(ctx, e.JID); err == nil {
-					cl.emit(Event{Chats: []Chat{{JID: e.JID.String(), Name: info.Name, Group: true, People: len(info.Participants)}}})
+					cl.emit(Event{Chats: []Chat{{JID: e.JID.String(), Name: info.Name, Group: true, Members: cl.members(ctx, info.Participants), People: len(info.Participants)}}})
 				}
 			}()
 		}
 	}
+}
+
+// members are a group's people, by phone number where WhatsApp knows it.
+func (cl *Client) members(ctx context.Context, ps []types.GroupParticipant) []string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		j := p.JID
+		if !p.PhoneNumber.IsEmpty() {
+			j = p.PhoneNumber
+		}
+		out = append(out, cl.chatJID(ctx, j))
+	}
+	return out
 }
 
 // groups tells how many people each of your groups has (one call for all).
@@ -429,7 +443,7 @@ func (cl *Client) groups(ctx context.Context) {
 	}
 	var chats []Chat
 	for _, g := range gs {
-		chats = append(chats, Chat{JID: g.JID.String(), Name: g.Name, Group: true, People: len(g.Participants)})
+		chats = append(chats, Chat{JID: g.JID.String(), Name: g.Name, Group: true, People: len(g.Participants), Members: cl.members(ctx, g.Participants)})
 	}
 	if len(chats) > 0 {
 		cl.emit(Event{Chats: chats})
@@ -645,6 +659,8 @@ func (cl *Client) mentions(ctx context.Context, text string, jids []string) stri
 		}
 		if name := cl.name(ctx, j); name != "" {
 			text = strings.ReplaceAll(text, "@"+j.User, "@"+name)
+		} else if pn := mustJID(cl.chatJID(ctx, j)); pn.User != "" {
+			text = strings.ReplaceAll(text, "@"+j.User, "@"+pn.User) // their number: a name found later shows then
 		}
 	}
 	return text

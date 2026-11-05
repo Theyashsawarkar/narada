@@ -201,17 +201,27 @@ type Model struct {
 	pick          *picker
 	when          *whenPicker
 	convo         *convoPicker
-	chatSel       int              // the message picked in a chat (when the conversation has focus)
-	newMark       map[string]int64 // per chat: what was read when it was opened (the "new" line)
-	mentions      map[string]int   // per chat: unread messages that mention you
-	chatFiles     []store.File     // files for the message being typed
-	editingMsg    string           // the message of yours being edited in the box
-	armDelete     string           // d pressed once on this message
-	reactSel      int              // the emoji picked in the reaction window
-	reactMine     map[string]bool  // the reactions on the picked message that are yours
-	chatLimit     int              // how many messages of this chat to show (grows as older ones load)
-	jumpBack      []string         // replies you jumped from to their originals (Backspace goes back)
-	newLine       int              // where the "new" line is in the preview (0: none)
+	chatSel       int               // the message picked in a chat (when the conversation has focus)
+	newMark       map[string]int64  // per chat: what was read when it was opened (the "new" line)
+	mentions      map[string]int    // per chat: unread messages that mention you
+	waNames       map[string]string // WhatsApp names by JID, to show tags by name
+	waNamesAt     time.Time
+	tagPeople     []store.WhatsAppPerson // who can be tagged in tagPeopleOf
+	tagPeopleOf   string
+	tagPeopleAt   time.Time
+	tagMatches    []store.WhatsAppPerson // who the "@" being typed could be
+	tagStart      int                    // where that "@" is in m.input (-1: none)
+	tagSel        int
+	tagOff        int               // an "@" you pressed Esc on: not asked again
+	tagged        map[string]string // names picked for this message, to their numbers
+	chatFiles     []store.File      // files for the message being typed
+	editingMsg    string            // the message of yours being edited in the box
+	armDelete     string            // d pressed once on this message
+	reactSel      int               // the emoji picked in the reaction window
+	reactMine     map[string]bool   // the reactions on the picked message that are yours
+	chatLimit     int               // how many messages of this chat to show (grows as older ones load)
+	jumpBack      []string          // replies you jumped from to their originals (Backspace goes back)
+	newLine       int               // where the "new" line is in the preview (0: none)
 	scrollToNew   bool
 	replyTo       *store.ChatMessage // the message the one being typed replies to
 	pickMode      mode               // where the picker goes back to
@@ -229,7 +239,7 @@ type Model struct {
 
 func New(a *app.App, launch string) Model {
 	m := Model{a: a, launch: launch, styles: newStyles(a.Config.Colors, a.Config.NerdFont), acct: -1, selected: map[string]bool{}, counts: map[string]int{}, noOlder: map[string]bool{}, olderN: a.Config.OlderPage,
-		expanded: map[string]bool{}}
+		expanded: map[string]bool{}, tagStart: -1, tagOff: -1}
 	m.sections = sectionsWithAI(a.Sections())
 	m.accounts = a.AccountNames()
 	// narada --tab chat (a status bar's chat capsule) opens on chat
@@ -343,6 +353,7 @@ func (m *Model) currentSection() config.Section {
 // reload reads the list from the local copy, keeping the selection on the
 // same item when it is still there.
 func (m *Model) reload() {
+	m.loadWANames()
 	keep := m.curKey
 	accs := m.accountFilter()
 	m.waiting, _ = m.a.Store.Outbox(store.StatusApproval)
@@ -1262,6 +1273,9 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		text := string(m.input)
+		if m.wa {
+			text = m.resolveTags(text)
+		}
 		m.openWhen("chat")
 		m.when.text, m.when.back = text, modeNormal
 		return m, nil
@@ -1289,6 +1303,9 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modeChatMsg && m.tagKey(k.String()) {
+		return m, nil
+	}
 	// a new line in a chat message: alt+enter or ctrl+j (enter sends)
 	if m.mode == modeChatMsg && (k.Type == tea.KeyEnter && k.Alt || k.Type == tea.KeyCtrlJ) {
 		m.insert('\n')
@@ -1298,6 +1315,7 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m.back = 0
 		m.replyTo, m.editingMsg, m.chatFiles = nil, "", nil
+		m.tagged, m.tagOff = nil, -1
 		if m.mode == modeFilter {
 			m.filter = ""
 			m.reload()
@@ -1352,6 +1370,10 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, m.act("edited", func(ctx context.Context) error { return a.EditChatMessage(ctx, sp.Account, name, text) })
 			}
 			if sp, ok := m.curSpace(); ok && (text != "" || len(m.chatFiles) > 0) {
+				if m.wa {
+					text = m.resolveTags(text)
+				}
+				m.tagOff = -1
 				out := store.Outgoing{Space: sp.Name, SpaceName: cli.SpaceTitle(sp), Body: text, Files: m.chatFiles}
 				m.chatFiles = nil
 				m.quoteInto(&out, sp)
@@ -1459,6 +1481,7 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.sel, m.offset = 0, 0
 		m.reload()
 	}
+	m.updateTag()
 	return m, nil
 }
 

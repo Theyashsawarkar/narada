@@ -361,6 +361,16 @@ func demoGIF() []byte {
 	return b.Bytes()
 }
 
+// GroupChanged is WhatsApp saying who's in a group now.
+func (w *WhatsApp) GroupChanged(ch whatsapp.Chat) {
+	w.mu.Lock()
+	h := w.handler
+	w.mu.Unlock()
+	if h != nil {
+		h(whatsapp.Event{Chats: []whatsapp.Chat{ch}})
+	}
+}
+
 // ReceiveReaction is someone reacting to a message (or taking a reaction back).
 func (w *WhatsApp) ReceiveReaction(r whatsapp.Reaction) {
 	w.mu.Lock()

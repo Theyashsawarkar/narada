@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -300,6 +301,9 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 		for _, ch := range e.Chats {
 			_ = a.Store.PutSpace(store.Space{Account: acc, Name: ch.JID, DisplayName: a.waChatName(ch.JID, ch.Name), Type: waType(ch.JID),
 				LastActive: ch.Last.UnixMilli(), Members: ch.People})
+			if len(ch.Members) > 0 {
+				_ = a.Store.SetWhatsAppMembers(ch.JID, ch.Members)
+			}
 			if e.History {
 				a.waUnreadMu.Lock()
 				if a.waUnread == nil {
@@ -492,6 +496,16 @@ func (a *App) queueWhatsAppReads(space string) error {
 		reads = append(reads, store.WhatsAppRead{Space: space, Msg: id, Sender: m.Sender})
 	}
 	return a.Store.AddWhatsAppReads(reads)
+}
+
+// WhatsAppPeople is who you can tag in a chat, without you.
+func (a *App) WhatsAppPeople(space string) []store.WhatsAppPerson {
+	people, err := a.Store.WhatsAppPeople(space)
+	if err != nil {
+		return nil
+	}
+	wa, _ := a.Store.WhatsApp()
+	return slices.DeleteFunc(people, func(p store.WhatsAppPerson) bool { return p.JID == wa.ChatUser })
 }
 
 // showWhatsAppReactions puts a message's reactions on it, as chats show them.

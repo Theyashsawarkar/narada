@@ -504,7 +504,7 @@ func (m *Model) listView(w, h int) string {
 					border = col
 				}
 				lines = []string{row(m.avatar(sp.DisplayName)+" "+s.text.Render("→ "+sp.DisplayName), fg(col).Render(status), cw),
-					m.indent() + ansi.Truncate(s.muted.Render(sp.LastText), cw-lipgloss.Width(m.indent()), "…")}
+					m.indent() + ansi.Truncate(s.muted.Render(m.waTagged(sp.LastText)), cw-lipgloss.Width(m.indent()), "…")}
 				out = m.appendItem(out, lines, cw, border, sel, false)
 				continue
 			}
@@ -806,7 +806,7 @@ func wrap(text string, w int) []string {
 
 // ------------------------------------------------------------------- chat
 
-var reMention = regexp.MustCompile(`@[\p{L}\p{N}_.-]+`)
+var reMention = regexp.MustCompile(`@[\p{L}\p{N}\p{M}_.\x{00A0}-]+`)
 
 // chatLines draws a conversation as bubbles: a day line; a red "new" line
 // where what you haven't read starts; then runs of messages by sender
@@ -890,7 +890,7 @@ func (m *Model) chatLines(w int) []string {
 			if g.Quoted != "" {
 				who, what := "", "a message"
 				if q, ok := byName[g.Quoted]; ok {
-					who, what = q.SenderName, oneLine(q.Text)
+					who, what = q.SenderName, oneLine(m.waTagged(q.Text))
 					if q.Mine {
 						who = "You"
 					}
@@ -898,6 +898,9 @@ func (m *Model) chatLines(w int) []string {
 				lines = append(lines, s.muted.Render("▏")+s.sub.Bold(true).Render(who)+s.muted.Render(" · "+ansi.Truncate(what, bw-lipgloss.Width(who)-8, "…")))
 			}
 			text := mime.Clean(g.Text)
+			if g.Account == store.WhatsAppAccount {
+				text = m.waTagged(text)
+			}
 			// photos, stickers and GIFs show as themselves, above the text
 			shown := map[int]bool{}
 			for fi, f := range g.Files {
@@ -1006,6 +1009,9 @@ func (m *Model) pendingLines(w int) []string {
 			body = append(body, "📎 "+firstNonEmpty(f.Name, filepath.Base(f.Source)))
 		}
 		if t := strings.TrimSpace(it.Out.Body); t != "" {
+			if it.Account == store.WhatsAppAccount {
+				t = m.waTagged(t)
+			}
 			body = append(body, wrap(t, max(10, w*2/3-4))...)
 		}
 		who := "You"
@@ -1162,6 +1168,9 @@ func (m Model) previewBox(w, h int) string {
 			}
 			bottom = m.chatBoxLines(inner, 1, false, "Message "+cli.SpaceTitle(sp)+"…  (i)", hint)
 		}
+	}
+	if m.tagStart >= 0 && m.mode == modeChatMsg {
+		bottom = append(m.tagBox(min(inner, max(30, inner*2/3))), bottom...)
 	}
 	avail := h - 2 - len(aiLines) - len(bottom)
 	if avail < 3 {

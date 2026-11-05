@@ -278,6 +278,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `Ctrl+v` (typing) | Paste a copied image (a screenshot) into the chat message as a file |
 | `Enter` (typing) | Send the chat message and keep typing the next one (Esc leaves the box) |
 | `Alt+Enter` / `Ctrl+j` (typing) | Start a new line in the chat message |
+| `@` (typing, WhatsApp) | Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none) |
 | `←→` `Alt+b/f` `Ctrl+a/e` (typing) | Move the cursor in the message by letter, word, line start / end |
 | `↑↓` (typing) | Move the cursor up / down a line in a long message |
 | `Ctrl+w` / `Ctrl+k` / `Ctrl+u` (typing) | Delete the word before the cursor / to the end / the whole message |
@@ -518,6 +519,9 @@ goes Mail → Chat → WhatsApp, with sections All, Unread, People, Groups and
 Scheduled; `i` types a message, `r` on a picked message replies quoting it,
 `e` reacts to it (one reaction each, as on the phone: another replaces yours,
 picking yours again takes it back, and other people's show under their messages),
+`@` while typing lists who you can tag (a group's members and whoever has written
+there; type to narrow it) and tags show as names: the name you saved, else the name
+they gave themselves, and their number only when neither is known,
 and opening a chat marks it read (the sender sees blue ticks). The status
 line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
 notify like chat DMs. The background service keeps WhatsApp online; without

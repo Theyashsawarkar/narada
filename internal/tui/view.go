@@ -424,7 +424,11 @@ func (m Model) outgoingView(kind string, out store.Outgoing, note string, w int)
 		lines = append(lines, render.HTML(out.HTML, w, renderStylesOf(s), true).Lines...)
 		return strings.Join(lines, "\n")
 	}
-	for _, l := range wrap(out.Body, w) {
+	body := out.Body
+	if strings.Contains(kind, "whatsapp") || !strings.Contains(out.Space, "spaces/") && chatKind(kind) {
+		body = m.waTagged(body) // WhatsApp's tags by name (Google Chat spaces are "spaces/…")
+	}
+	for _, l := range wrap(body, w) {
 		if strings.HasPrefix(l, ">") {
 			lines = append(lines, s.muted.Render(l))
 		} else {
@@ -490,6 +494,10 @@ func (m Model) footerView() string {
 	case modeView:
 		keys = [][2]string{{"h/l", "previous/next"}, {"v", "open in its app"}, {"esc", "back"}}
 	case modeChatMsg:
+		if m.tagStart >= 0 {
+			keys = [][2]string{{"↑↓", "pick"}, {"enter/tab", "tag them"}, {"esc", "no tag"}}
+			break
+		}
 		keys = [][2]string{{"enter", "send"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+v", "paste image"}, {"ctrl+t", "later"}, {"esc", "done"}}
 		if m.editingMsg != "" {
 			keys = [][2]string{{"enter", "save the edit"}, {"esc", "cancel"}}

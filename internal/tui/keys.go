@@ -60,6 +60,7 @@ var Keys = []Key{
 	{"Act", "Ctrl+v (typing)", "Paste a copied image (a screenshot) into the chat message as a file"},
 	{"Act", "Enter (typing)", "Send the chat message and keep typing the next one (Esc leaves the box)"},
 	{"Act", "Alt+Enter / Ctrl+j (typing)", "Start a new line in the chat message"},
+	{"Act", "@ (typing, WhatsApp)", "Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none)"},
 	{"Act", "←→ Alt+b/f Ctrl+a/e (typing)", "Move the cursor in the message by letter, word, line start / end"},
 	{"Act", "↑↓ (typing)", "Move the cursor up / down a line in a long message"},
 	{"Act", "Ctrl+w / Ctrl+k / Ctrl+u (typing)", "Delete the word before the cursor / to the end / the whole message"},
