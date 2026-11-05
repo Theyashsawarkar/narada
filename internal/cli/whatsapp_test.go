@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Theyashsawarkar/narada/internal/app"
 	"github.com/Theyashsawarkar/narada/internal/fake"
@@ -49,6 +50,7 @@ func run(t *testing.T, a *app.App, args ...string) (string, error) {
 	old := os.Stdout
 	os.Stdout = wr
 	err := whatsApp(a, args)
+	a.StopWhatsApp() // a real command's process ends here, and its connection with it
 	wr.Close()
 	os.Stdout = old
 	b, _ := io.ReadAll(r)
@@ -310,4 +312,96 @@ func TestWhatsAppPinMessageCommands(t *testing.T) {
 	if _, err := run(t, a, "pin-message", msg, "--for", "1y"); err == nil {
 		t.Fatal("--for 1y")
 	}
+}
+
+// stdinFrom points stdin at f for one test.
+func stdinFrom(t *testing.T, f *os.File) {
+	t.Helper()
+	old := os.Stdin
+	os.Stdin = f
+	t.Cleanup(func() { os.Stdin = old })
+}
+
+// Regression: text piped in with --attach was dropped, and the file went
+// with no caption.
+func TestWhatsAppSendAttachCaptionFromStdin(t *testing.T) {
+	dir := t.TempDir()
+	doc, two := filepath.Join(dir, "plan.pdf"), filepath.Join(dir, "two.pdf")
+	_ = os.WriteFile(doc, []byte("%PDF-1.4 one"), 0o600)
+	_ = os.WriteFile(two, []byte("%PDF-1.4 two"), 0o600)
+	msg := filepath.Join(dir, "msg.txt")
+	_ = os.WriteFile(msg, []byte("  the plan\nfor Saturday\n"), 0o600)
+	open := func(p string) *os.File {
+		f, err := os.Open(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { f.Close() })
+		return f
+	}
+
+	t.Run("from a file: the first file's caption", func(t *testing.T) {
+		a, w := waApp(t)
+		stdinFrom(t, open(msg))
+		if _, err := run(t, a, "send", "Ravi", "--attach", doc, "--attach", two, "--now"); err != nil {
+			t.Fatal(err)
+		}
+		if len(w.Sent) != 2 || w.Sent[0].Text != "the plan\nfor Saturday" || w.Sent[1].Text != "" {
+			t.Fatalf("sent %+v", w.Sent)
+		}
+	})
+	t.Run("from a pipe", func(t *testing.T) {
+		a, w := waApp(t)
+		r, wr, _ := os.Pipe()
+		defer r.Close()
+		go func() { _, _ = wr.WriteString("piped"); wr.Close() }()
+		stdinFrom(t, r)
+		if _, err := run(t, a, "send", "Ravi", "--attach", doc, "--now"); err != nil {
+			t.Fatal(err)
+		}
+		if len(w.Sent) != 1 || w.Sent[0].Text != "piped" {
+			t.Fatalf("sent %+v", w.Sent)
+		}
+	})
+	t.Run("text on the command line wins", func(t *testing.T) {
+		a, w := waApp(t)
+		stdinFrom(t, open(msg))
+		if _, err := run(t, a, "send", "Ravi", "typed", "--attach", doc, "--now"); err != nil {
+			t.Fatal(err)
+		}
+		if len(w.Sent) != 1 || w.Sent[0].Text != "typed" {
+			t.Fatalf("sent %+v", w.Sent)
+		}
+	})
+	t.Run("an empty stdin sends the file alone", func(t *testing.T) {
+		a, w := waApp(t)
+		stdinFrom(t, open(os.DevNull))
+		if _, err := run(t, a, "send", "Ravi", "--attach", doc, "--now"); err != nil {
+			t.Fatal(err)
+		}
+		if len(w.Sent) != 1 || w.Sent[0].Text != "" {
+			t.Fatalf("sent %+v", w.Sent)
+		}
+	})
+	t.Run("a silent open pipe doesn't hang it", func(t *testing.T) {
+		a, w := waApp(t)
+		captionWait = 50 * time.Millisecond
+		t.Cleanup(func() { captionWait = 2 * time.Second })
+		r, wr, _ := os.Pipe() // nobody writes, and nobody closes it
+		defer wr.Close()
+		stdinFrom(t, r)
+		done := make(chan error, 1)
+		go func() {
+			_, err := run(t, a, "send", "Ravi", "--attach", doc, "--now")
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			if err != nil || len(w.Sent) != 1 || w.Sent[0].Text != "" {
+				t.Fatalf("%v, sent %+v", err, w.Sent)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("the send hung on stdin")
+		}
+	})
 }

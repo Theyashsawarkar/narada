@@ -68,6 +68,10 @@ Newest first.
   process marked a send stuck after a minute, so a long upload read `failed`
   ("interrupted") until it finished, and retrying then would send it twice. A WhatsApp
   file now gets two hours.
+- **`whatsapp send --attach` no longer drops text piped on stdin**: `narada whatsapp
+  send X --attach f < msg.txt` sent the file with no caption, silently. The text now
+  becomes the first file's caption, as the help says. An empty stdin sends the file
+  alone, and a pipe that stays silent for 2 seconds does too, with a warning.
 - After upgrading, restart the background service (`systemctl --user restart narada`) and any
   agent running `narada mcp`: edits, deletions, forwards, polls and the like wait for
   a narada that understands them.

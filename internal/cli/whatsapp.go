@@ -450,7 +450,7 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		return waAct(a, func() (store.OutboxItem, error) { return a.ForwardWhatsApp(pos[0], sp, app.OriginYou) })
 	case "send":
-		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--location LAT,LON [--place NAME]] [--contact WHO] [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more; up to 2 GB each): each is its own\nmessage, the text its first one's caption. --voice sends an audio file as a\nvoice note (made Ogg Opus with ffmpeg when it isn't).\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
+		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--location LAT,LON [--place NAME]] [--contact WHO] [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given, with files too). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more; up to 2 GB each): each is its own\nmessage, the text its first one's caption. --voice sends an audio file as a\nvoice note (made Ogg Opus with ffmpeg when it isn't).\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
 		nowFlag := fs.Bool("now", false, "skip the undo window")
 		link := fs.Bool("link", false, "open the click-to-chat page instead of sending")
 		at := fs.String("at", "", "send later: \"tomorrow 9am\", \"in 2h\"...")
@@ -470,7 +470,11 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		attach = append(attach, voice...)
 		text := strings.Join(pos[1:], " ")
-		if text == "" && len(attach) == 0 && *location == "" && *contact == "" && !term.IsTerminal(int(os.Stdin.Fd())) {
+		switch {
+		case text != "" || *location != "" || *contact != "":
+		case len(attach) > 0:
+			text = captionFromStdin(os.Stdin) // a file can go without text: don't wait for ever
+		case !term.IsTerminal(int(os.Stdin.Fd())):
 			b, _ := io.ReadAll(os.Stdin)
 			text = strings.TrimSpace(string(b))
 		}
@@ -654,6 +658,39 @@ func waGroup(a *app.App, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "narada: %s: done\n", SpaceTitle(g))
 	return nil
+}
+
+// captionWait is how long a file's send waits for text on stdin to start.
+var captionWait = 2 * time.Second
+
+// captionFromStdin is text piped in for a file's caption: "" from a
+// terminal, an empty stdin, or a pipe that stays silent (a parent process
+// that left one open must not hang the send). Once text starts, it's read
+// to the end.
+func captionFromStdin(in *os.File) string {
+	if term.IsTerminal(int(in.Fd())) {
+		return ""
+	}
+	type got struct {
+		b []byte
+	}
+	first := make(chan got, 1)
+	go func() {
+		b := make([]byte, 4096)
+		n, _ := in.Read(b)
+		first <- got{b[:n]}
+	}()
+	select {
+	case g := <-first:
+		if len(g.b) == 0 {
+			return ""
+		}
+		rest, _ := io.ReadAll(in)
+		return strings.TrimSpace(string(g.b) + string(rest))
+	case <-time.After(captionWait):
+		fmt.Fprintln(os.Stderr, "narada: nothing came on stdin: sending the file without text")
+		return ""
+	}
 }
 
 // waAct queues a change to a message and waits for it to go out, as a
