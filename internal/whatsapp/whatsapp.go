@@ -76,6 +76,12 @@ type Ticks struct {
 	Level int
 }
 
+// MsgPin: a message pinned in its chat for everyone (On), or unpinned.
+type MsgPin struct {
+	Chat, Msg string
+	On        bool
+}
+
 // Chat is a conversation: a person or a group.
 type Chat struct {
 	JID     string
@@ -102,6 +108,7 @@ type Event struct {
 	Ticks     *Ticks     // receipts for messages you sent
 	Reactions []Reaction // someone reacted, or took a reaction back
 	Votes     []Vote     // someone voted in a poll
+	Pin       *MsgPin    // a message pinned or unpinned in a chat
 	ChatState *ChatState // a chat archived, pinned, muted or marked unread (on another device)
 	Star      *Star      // a message starred or unstarred (on another device)
 	Presence  *Presence  // someone online, away or typing
@@ -451,6 +458,10 @@ func (cl *Client) event(evt any) {
 			if v, ok := cl.vote(ctx, e); ok {
 				cl.emit(Event{Votes: []Vote{v}})
 			}
+			return
+		}
+		if p := e.Message.GetPinInChatMessage(); p != nil {
+			cl.emit(Event{Pin: &MsgPin{Chat: cl.chatJID(ctx, e.Info.Chat), Msg: p.GetKey().GetID(), On: p.GetType() == waE2E.PinInChatMessage_PIN_FOR_ALL}})
 			return
 		}
 		if r, ok := cl.reaction(ctx, e); ok {

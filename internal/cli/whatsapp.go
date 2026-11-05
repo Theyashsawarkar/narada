@@ -20,7 +20,7 @@ import (
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group, poll, vote, disappear, status")
+		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group, poll, vote, disappear, status, pin-message")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -323,6 +323,24 @@ func whatsApp(a *app.App, args []string) error {
 			fmt.Printf("%s  %s  [%s]\n%s\n\n", m.SenderName, When(m.Created), m.Name, m.Text)
 		}
 		return nil
+	case "pin-message", "unpin-message":
+		fs := flags("narada whatsapp "+sub, "narada whatsapp pin-message <message-id> [--for 24h|7d|30d]\nnarada whatsapp unpin-message <message-id>\n\nPin a message in its chat for everyone (a week by default), or unpin it.")
+		dur := fs.String("for", "7d", "24h, 7d or 30d")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) != 1 {
+			return usageError("whatsapp %s needs one message id", sub)
+		}
+		secs := map[string]int{"24h": app.PinDay, "1d": app.PinDay, "7d": app.PinWeek, "1w": app.PinWeek, "30d": app.PinMonth}[*dur]
+		if secs == 0 {
+			return usageError("--for is 24h, 7d or 30d")
+		}
+		if sub == "unpin-message" {
+			secs = 0
+		}
+		return waAct(a, func() (store.OutboxItem, error) { return a.PinWhatsAppMessage(pos[0], secs, app.OriginYou) })
 	case "group", "groups":
 		return waGroup(a, rest)
 	case "disappear", "disappearing":

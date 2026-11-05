@@ -171,7 +171,7 @@ func validate(kind string, out store.Outgoing) error {
 				return errors.New("an edit needs the message and its new text")
 			}
 			return nil
-		case ActDelete, ActForward:
+		case ActDelete, ActForward, ActPin:
 			if out.Target == "" {
 				return errors.New("which message?")
 			}
@@ -283,6 +283,14 @@ func (a *App) Approve(id int64, edited *store.Outgoing) error {
 		return fmt.Errorf("#%d is %s, not waiting for approval", id, it.Status)
 	}
 	if edited != nil {
+		switch it.Out.Action {
+		case "", ActEdit, ActStatus:
+		default:
+			if edited.Body != it.Out.Body {
+				return fmt.Errorf("a %s can't be edited: approve it as it is, or decline it", it.Out.Action)
+			}
+		}
+		edited.Action, edited.Target, edited.Poll, edited.Location, edited.Card = it.Out.Action, it.Out.Target, it.Out.Poll, it.Out.Location, it.Out.Card // what it does isn't the editor's to change
 		files, err := a.ResolveFilesUpTo(edited.Files, MaxAttachFor(it.Account))
 		if err != nil {
 			return err

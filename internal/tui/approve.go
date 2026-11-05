@@ -180,6 +180,8 @@ func sendTarget(kind string, out store.Outgoing) (verb, target string) {
 		return "ask a poll in", name
 	case kind == "whatsapp" && out.Action == app.ActVote:
 		return "vote in a poll in", name
+	case kind == "whatsapp" && out.Action == app.ActPin:
+		return "pin a message, for everyone, in", name
 	case kind == "whatsapp" && out.Action == app.ActEdit:
 		return "edit your message in", name
 	case kind == "whatsapp" && out.Action == app.ActDelete:

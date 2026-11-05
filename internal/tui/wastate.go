@@ -152,6 +152,20 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		return m, m.act(map[bool]string{true: "archived (Archived section has it)", false: "back from the archive"}[on],
 			func(ctx context.Context) error { return a.ArchiveWhatsApp(ctx, sp.Name, on) }), true
 	case "p":
+		if m.pickingMsg() { // the picked message, for everyone, for a week
+			c := m.chatMsgs[m.chatSel]
+			secs := app.PinWeek
+			if c.Pinned {
+				secs = 0
+			}
+			it, err := a.PinWhatsAppMessage(c.Name, secs, app.OriginYou)
+			if err != nil {
+				m.setErr(err.Error())
+				return m, nil, true
+			}
+			m.say(map[bool]string{true: "pinning it for everyone, for a week…", false: "unpinning it…"}[secs > 0])
+			return m, m.sent(it), true
+		}
 		on := !sp.Pinned
 		return m, m.act(map[bool]string{true: "pinned on top, everywhere", false: "unpinned"}[on],
 			func(ctx context.Context) error { return a.PinWhatsApp(ctx, sp.Name, on) }), true

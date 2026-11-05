@@ -294,3 +294,20 @@ func TestWhatsAppStatusCommands(t *testing.T) {
 		t.Fatal("whatsapp send reached the status chat")
 	}
 }
+
+func TestWhatsAppPinMessageCommands(t *testing.T) {
+	a, w := waApp(t)
+	msg := "120363000000000001@g.us/H9"
+	if _, err := run(t, a, "pin-message", msg, "--for", "24h"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(w.Did, "\n"), "pin-message "+msg+" true 86400") {
+		t.Fatalf("did %q", w.Did)
+	}
+	if _, err := run(t, a, "unpin-message", msg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, a, "pin-message", msg, "--for", "1y"); err == nil {
+		t.Fatal("--for 1y")
+	}
+}

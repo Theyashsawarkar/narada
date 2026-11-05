@@ -238,6 +238,7 @@ func migrate(db *sql.DB) error {
 			`ALTER TABLE spaces ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE spaces ADD COLUMN muted_until INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE chat_messages ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE chat_messages ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE spaces ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE spaces ADD COLUMN disappear INTEGER NOT NULL DEFAULT 0`,
 			`CREATE TABLE IF NOT EXISTS whatsapp_polls (msg TEXT PRIMARY KEY, question TEXT NOT NULL, options TEXT NOT NULL, multi INTEGER NOT NULL DEFAULT 0)`,
@@ -967,6 +968,7 @@ type ChatMessage struct {
 	Edited     bool       `json:"edited,omitempty"`
 	Ticks      int        `json:"ticks,omitempty"` // WhatsApp, yours: 1 sent, 2 delivered, 3 read
 	Starred    bool       `json:"starred,omitempty"`
+	Pinned     bool       `json:"pinned,omitempty"` // WhatsApp: pinned in its chat, for everyone
 }
 
 // Ticks of a message of yours that only exists here so far: it shows in
@@ -1319,8 +1321,8 @@ func (s *Store) RaiseTicks(account string, names []string, level int) error {
 func (s *Store) ChatMessage(account, name string) (ChatMessage, error) {
 	var m ChatMessage
 	var files string
-	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,starred FROM chat_messages WHERE account=? AND name=?`, account, name).
-		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred)
+	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,starred,pinned FROM chat_messages WHERE account=? AND name=?`, account, name).
+		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred, &m.Pinned)
 	if err != nil {
 		return m, err
 	}
@@ -1512,6 +1514,12 @@ func (s *Store) TypingIn(chat string) []Presence {
 		}
 	}
 	return out
+}
+
+// SetMessagePinned marks a message pinned in its chat.
+func (s *Store) SetMessagePinned(account, name string, on bool) error {
+	_, err := s.db.Exec(`UPDATE chat_messages SET pinned=? WHERE account=? AND name=?`, on, account, name)
+	return err
 }
 
 func (s *Store) SetStarred(account, name string, on bool) error {
@@ -1788,7 +1796,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited, c.ticks, c.starred
+	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited, c.ticks, c.starred, c.pinned
 	  FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=? AND c.space=? ORDER BY c.created DESC LIMIT ?`, account, space, limit)
 	if err != nil {
 		return nil, err
@@ -1798,7 +1806,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	for rows.Next() {
 		var m ChatMessage
 		var files string
-		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred); err != nil {
+		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred, &m.Pinned); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(files), &m.Files)

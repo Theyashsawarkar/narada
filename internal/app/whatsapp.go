@@ -40,6 +40,7 @@ type WhatsAppConn interface {
 	SendLocation(ctx context.Context, chat string, l whatsapp.Location) (string, error)
 	SendContact(ctx context.Context, chat string, c whatsapp.Contact) (string, error)
 	SetDisappearing(chat string, secs int)
+	PinMessage(ctx context.Context, chat, sender, id string, on bool, secs int) error
 	Resolve(ctx context.Context, phone string) (string, error)
 	GroupName(ctx context.Context, chat string) (string, error)
 	Logout(ctx context.Context) error
@@ -265,6 +266,8 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 		a.onWhatsAppState(e)
 	case len(e.Votes) > 0:
 		a.onWhatsAppVotes(e.Votes)
+	case e.Pin != nil:
+		_ = a.Store.SetMessagePinned(acc, waName(e.Pin.Chat, e.Pin.Msg), e.Pin.On)
 	case len(e.Reactions) > 0:
 		for _, r := range e.Reactions {
 			reactor := r.Reactor

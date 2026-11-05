@@ -1185,3 +1185,64 @@ func TestWhatsAppStatus(t *testing.T) {
 		t.Fatalf("old statuses: %+v", msgs)
 	}
 }
+
+func TestWhatsAppPinMessage(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	const trek = "120363000000000001@g.us"
+	msg := waName(trek, "H9")
+	if _, err := a.PinWhatsAppMessage(msg, 3600, OriginYou); err == nil {
+		t.Fatal("pinned for an hour")
+	}
+	it, err := a.PinWhatsAppMessage(msg, PinWeek, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, it); got.Status != store.StatusSent {
+		t.Fatal(got.Error)
+	}
+	if m, _ := a.Store.ChatMessage(store.WhatsAppAccount, msg); !m.Pinned || !strings.Contains(strings.Join(w.Did, " "), "pin-message "+msg+" true 604800") {
+		t.Fatalf("pinned %v, did %q", m.Pinned, w.Did)
+	}
+	// someone unpins it
+	w.Emit(whatsapp.Event{Pin: &whatsapp.MsgPin{Chat: trek, Msg: "H9"}})
+	if m, _ := a.Store.ChatMessage(store.WhatsAppAccount, msg); m.Pinned {
+		t.Fatal("still pinned")
+	}
+	// an agent's waits for approval, and what an action does can't be edited there
+	ag, err := a.PinWhatsAppMessage(msg, PinDay, OriginAgent)
+	if err != nil || ag.Status != store.StatusApproval {
+		t.Fatalf("%v %s", err, ag.Status)
+	}
+	changed := ag.Out
+	changed.Body = "something else"
+	if err := a.Approve(ag.ID, &changed); err == nil || !strings.Contains(err.Error(), "can't be edited") {
+		t.Fatalf("edited a pin's approval: %v", err)
+	}
+}
+
+// A .webp goes as a sticker.
+func TestWhatsAppSticker(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(t.TempDir(), "wave.webp")
+	_ = os.WriteFile(p, []byte("RIFF\x00\x00\x00\x00WEBPVP8 "), 0o600)
+	it, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: "919800000002@s.whatsapp.net", Files: []store.File{{Source: p}}}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, it); got.Status != store.StatusSent || w.Sent[0].Media.Kind != "sticker" {
+		t.Fatalf("%s %s %+v", got.Status, got.Error, w.Sent[0].Media)
+	}
+}

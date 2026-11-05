@@ -59,6 +59,11 @@ Newest first.
   `whatsapp status` lists them, without telling them you looked. `whatsapp status post
   [text] [--attach FILE]` posts yours; agents can't, and a plain send can't reach the
   status chat.
+- **Pin a WhatsApp message** in its chat for everyone: `p` on a picked message (a
+  week), `whatsapp pin-message <message> [--for 24h|7d|30d]`, `unpin-message`. Pinned
+  messages show 📌. A `.webp` now goes as a sticker, not a photo.
+- An agent's forward, poll, vote, place, contact or pin can't be changed in the
+  approval: approve it as it is, or decline it. Edit still works on its text messages.
 - These go through a queue that the narada holding WhatsApp works off (ADR 7), so they
   work beside the daemon.
 

@@ -62,6 +62,7 @@ var Keys = []Key{
 	{"Act", "X (WhatsApp)", "Set the chat's messages to disappear after 24 hours (again: 7 days, 90 days, then off)"},
 	{"Act", "I (WhatsApp group)", "Show the group's people, admins and description"},
 	{"Act", "B (WhatsApp)", "Block the person in this chat (B twice; again unblocks)"},
+	{"Act", "p (picking, WhatsApp)", "Toggle the picked message pinned in the chat, for everyone, for a week"},
 	{"Act", "* (picking, WhatsApp)", "Toggle a star on the picked message (your phone follows)"},
 	{"Act", "[ / ]", "Switch to the previous / next chat (staying in the conversation)"},
 	{"Act", "Ctrl+k", "Open the chat switcher (search chats, people and messages)"},

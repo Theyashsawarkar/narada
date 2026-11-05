@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
@@ -40,6 +41,32 @@ func (cl *Client) Revoke(ctx context.Context, chat, sender, id string) error {
 		}
 	}
 	_, err = cl.c.SendMessage(ctx, to, cl.c.BuildRevoke(to, from, id))
+	return err
+}
+
+// PinMessage pins a message in its chat for everyone, for secs (WhatsApp
+// offers a day, a week or 30 days), or unpins it (on false).
+func (cl *Client) PinMessage(ctx context.Context, chat, sender, id string, on bool, secs int) error {
+	to, err := types.ParseJID(chat)
+	if err != nil {
+		return fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
+	}
+	var from types.JID
+	if sender != "" {
+		if from, err = types.ParseJID(sender); err != nil {
+			return err
+		}
+	}
+	kind := waE2E.PinInChatMessage_UNPIN_FOR_ALL
+	if on {
+		kind = waE2E.PinInChatMessage_PIN_FOR_ALL
+	}
+	msg := &waE2E.Message{PinInChatMessage: &waE2E.PinInChatMessage{Key: cl.c.BuildMessageKey(to, from, id), Type: kind.Enum(),
+		SenderTimestampMS: proto.Int64(time.Now().UnixMilli())}}
+	if on {
+		msg.MessageContextInfo = &waE2E.MessageContextInfo{MessageAddOnDurationInSecs: proto.Uint32(uint32(secs))}
+	}
+	_, err = cl.c.SendMessage(ctx, to, msg)
 	return err
 }
 

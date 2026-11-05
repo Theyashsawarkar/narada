@@ -21,7 +21,30 @@ const (
 	ActDelete  = "delete"
 	ActForward = "forward"
 	ActStatus  = "status" // Body and Files are your new status, for your contacts
+	ActPin     = "pin"    // pin Target in its chat for everyone, Secs long (0: unpin)
 )
+
+// How long WhatsApp lets a message stay pinned.
+const (
+	PinDay   = 86400
+	PinWeek  = 7 * 86400
+	PinMonth = 30 * 86400
+)
+
+// PinWhatsAppMessage pins a message in its chat for everyone for secs (a
+// day, a week or 30 days), or unpins it (secs 0).
+func (a *App) PinWhatsAppMessage(msg string, secs int, origin string) (store.OutboxItem, error) {
+	m, _, err := a.waMsg(msg)
+	if err != nil {
+		return store.OutboxItem{}, err
+	}
+	switch secs {
+	case 0, PinDay, PinWeek, PinMonth:
+	default:
+		return store.OutboxItem{}, errors.New("a message stays pinned for 24h, 7d or 30d")
+	}
+	return a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: m.Space, SpaceName: a.waChatName(m.Space, ""), Action: ActPin, Target: msg, PinSecs: secs, Body: m.Text}, origin)
+}
 
 // PostWhatsAppStatus posts a status your contacts see for a day, with a
 // photo or video when given. Only you: agents can't, and nothing else
@@ -128,6 +151,11 @@ func (a *App) deliverWhatsAppAction(ctx context.Context, c WhatsAppConn, it stor
 			return "", err
 		}
 		return out.Target, a.Store.EditChatText(store.WhatsAppAccount, out.Target, out.Body)
+	case ActPin:
+		if err := c.PinMessage(ctx, m.Space, m.Sender, id, out.PinSecs > 0, out.PinSecs); err != nil {
+			return "", err
+		}
+		return out.Target, a.Store.SetMessagePinned(store.WhatsAppAccount, out.Target, out.PinSecs > 0)
 	case ActDelete:
 		if err != nil {
 			return out.Target, nil // gone already

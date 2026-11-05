@@ -202,9 +202,6 @@ func (c *WhatsAppConn) SendFile(ctx context.Context, chat string, f whatsapp.Fil
 	}
 	w.nextID++
 	kind := whatsapp.KindOf(name, http.DetectContentType(data))
-	if kind == "sticker" {
-		kind = "image"
-	}
 	if f.Voice {
 		kind = "voice"
 	}
@@ -330,6 +327,16 @@ func (c *WhatsAppConn) SetDisappearing(chat string, secs int) {
 		c.w.Disappear = map[string]int{}
 	}
 	c.w.Disappear[chat] = secs
+}
+
+func (c *WhatsAppConn) PinMessage(ctx context.Context, chat, sender, id string, on bool, secs int) error {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	if c.w.SendErr != nil {
+		return c.w.SendErr
+	}
+	c.w.Did = append(c.w.Did, fmt.Sprintf("pin-message %s/%s %v %d", chat, id, on, secs))
+	return nil
 }
 
 // ReceiveVote is someone voting in a poll.

@@ -361,3 +361,16 @@ func TestStatusSection(t *testing.T) {
 		t.Fatal("Google Chat shows WhatsApp's sections")
 	}
 }
+
+func TestPinMessageKey(t *testing.T) {
+	m, w := waModel(t, "120363000000000001@g.us")
+	m = pickMsg(t, m, "H9")
+	m = press(m, "p")
+	m.a.DeliverDue(context.Background())
+	if !strings.Contains(strings.Join(w.Did, "\n"), "pin-message 120363000000000001@g.us/H9 true") {
+		t.Fatalf("did %q (%s %s)", w.Did, m.err, m.toast)
+	}
+	if sp, _ := m.a.Store.Space(store.WhatsAppAccount, "120363000000000001@g.us"); sp.Pinned {
+		t.Fatal("p in the conversation pins the message, not the chat")
+	}
+}

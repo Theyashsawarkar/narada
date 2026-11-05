@@ -45,6 +45,8 @@ type Outgoing struct {
 	// "location" shares Location, "contact" Card
 	Location *Location `json:"location,omitempty"`
 	Card     *Card     `json:"contact,omitempty"`
+	// "pin" pins Target for this long (0: unpins)
+	PinSecs int `json:"pin_secs,omitempty"`
 	// both
 	Body  string `json:"body"`
 	HTML  string `json:"html,omitempty"` // mail: sent beside Body when set

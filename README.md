@@ -280,6 +280,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `X` (WhatsApp) | Set the chat's messages to disappear after 24 hours (again: 7 days, 90 days, then off) |
 | `I` (WhatsApp group) | Show the group's people, admins and description |
 | `B` (WhatsApp) | Block the person in this chat (B twice; again unblocks) |
+| `p` (picking, WhatsApp) | Toggle the picked message pinned in the chat, for everyone, for a week |
 | `*` (picking, WhatsApp) | Toggle a star on the picked message (your phone follows) |
 | `[` / `]` | Switch to the previous / next chat (staying in the conversation) |
 | `Ctrl+k` | Open the chat switcher (search chats, people and messages) |
@@ -543,7 +544,7 @@ and opening a chat marks it read (the sender sees blue ticks). `e` archives
 a chat (the Archived section has them), `p` pins it (three at most, as
 WhatsApp allows), `M` marks it unread, `Z` mutes it (8 hours, again a week,
 again always, again unmuted; muted chats don't notify), `B B` blocks the
-person, and `*` stars the picked message; all of it reaches your phone, and
+person, `*` stars the picked message and `p` on a picked message pins it for everyone; all of it reaches your phone, and
 what you change on the phone shows here. In a group, `I` shows its people,
 admins and description, and `n` renames it for everyone; `narada whatsapp
 group` makes groups and adds, removes and promotes people, and gives or
@@ -593,7 +594,7 @@ the chat's pictures. To send one, press `Ctrl+o` while typing (or `U` in
 the chat), or `Ctrl+v` to paste a copied image such as a screenshot (needs
 `wl-paste` or `xclip`): a small preview of each file shows above the box,
 what you type becomes the first file's caption, and each file goes as its
-own message, up to 2 GB each. `Ctrl+r` while typing records a voice note
+own message, up to 2 GB each (a `.webp` goes as a sticker). `Ctrl+r` while typing records a voice note
 from the microphone (needs `ffmpeg`); `Ctrl+r` again adds it, `Enter` sends
 it. Files of any size download as they're opened (`v`, `V`, `narada
 whatsapp save`, an agent's `attachment_save`), streamed to disk, by
@@ -734,6 +735,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp vote <poll> [option...]` | Vote by option number or text; none takes your vote back |
 | `narada whatsapp disappear <chat> 24h\|7d\|90d\|off` | Turn disappearing messages on or off for a chat |
 | `narada whatsapp status [--json]` / `status post [text] [--attach FILE]` | People's status updates from the last day; post yours (all your contacts see it) |
+| `narada whatsapp pin-message <message> [--for 24h\|7d\|30d]` / `unpin-message <message>` | Pin a message in its chat, for everyone |
 | `narada whatsapp list --archived` | The archived chats (left out of `list` otherwise) |
 | `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |
 | `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |

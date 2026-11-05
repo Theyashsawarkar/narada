@@ -658,7 +658,7 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 	if err != nil {
 		return err
 	}
-	done := map[string]string{"": "sent", app.ActStatus: "status posted", app.ActEdit: "edited", app.ActDelete: "deleted for everyone", app.ActForward: "forwarded",
+	done := map[string]string{"": "sent", app.ActStatus: "status posted", app.ActPin: "done", app.ActEdit: "edited", app.ActDelete: "deleted for everyone", app.ActForward: "forwarded",
 		app.ActPoll: "poll sent", app.ActVote: "voted", app.ActLocation: "location shared", app.ActContact: "contact shared"}[it.Out.Action]
 	if done == "" {
 		done = "done"

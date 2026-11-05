@@ -953,6 +953,9 @@ func (m *Model) chatLines(w int) []string {
 			if g.Starred && len(lines) > 0 {
 				lines[len(lines)-1] += s.yellow.Render(" ★")
 			}
+			if g.Pinned && len(lines) > 0 {
+				lines[len(lines)-1] += s.accent.Render(" 📌")
+			}
 			for _, f := range files {
 				lines = append(lines, "📎 "+s.peach.Render(ansi.Truncate(f, bw-16, "…"))+s.muted.Render(" · v opens"))
 			}

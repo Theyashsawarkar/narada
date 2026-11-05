@@ -146,8 +146,9 @@ func sniff(path string) (string, int64, error) {
 
 // SendFile sends a file to chat with an optional caption; quote is the
 // message it replies to. A .gif becomes the MP4 WhatsApp plays as a GIF
-// (it needs ffmpeg); other images go as photos, videos as videos, audio
-// as audio (or a voice note), the rest as documents. The file is
+// (it needs ffmpeg); a .webp goes as a sticker, other images as photos,
+// videos as videos, audio as audio (or a voice note), the rest as
+// documents. The file is
 // streamed, so a 2 GB document doesn't sit in memory. Returns the new
 // message's id and what was sent.
 func (cl *Client) SendFile(ctx context.Context, chat string, f File, quote *Message) (string, *Media, error) {
@@ -194,6 +195,7 @@ func (cl *Client) SendFile(ctx context.Context, chat string, f File, quote *Mess
 	}
 	mediaType := map[string]whatsmeow.MediaType{"image": whatsmeow.MediaImage, "gif": whatsmeow.MediaVideo, "video": whatsmeow.MediaVideo,
 		"audio": whatsmeow.MediaAudio, "voice": whatsmeow.MediaAudio, "sticker": whatsmeow.MediaImage}[kind]
+	// (WhatsApp keeps stickers with the images)
 	if mediaType == "" {
 		mediaType = whatsmeow.MediaDocument
 	}
@@ -223,10 +225,12 @@ func (cl *Client) SendFile(ctx context.Context, chat string, f File, quote *Mess
 	n := up.FileLength
 	msg := &waE2E.Message{}
 	switch kind {
-	case "image", "sticker":
+	case "image":
 		msg.ImageMessage = &waE2E.ImageMessage{Caption: optional(f.Caption), Mimetype: proto.String(mime), URL: &up.URL, DirectPath: &up.DirectPath,
 			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci}
-		kind = "image"
+	case "sticker":
+		msg.StickerMessage = &waE2E.StickerMessage{Mimetype: proto.String("image/webp"), URL: &up.URL, DirectPath: &up.DirectPath,
+			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci}
 	case "gif", "video":
 		msg.VideoMessage = &waE2E.VideoMessage{Caption: optional(f.Caption), Mimetype: proto.String(mime), URL: &up.URL, DirectPath: &up.DirectPath,
 			MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: &n, ContextInfo: ci,
