@@ -156,6 +156,15 @@ func TestTools(t *testing.T) {
 
 func TestWhatsAppTools(t *testing.T) {
 	a, _, cs := session(t)
+	tools, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range tools.Tools {
+		if tl.Name == "whatsapp_send" && !strings.Contains(tl.Description, "only files the user asked for") {
+			t.Fatalf("whatsapp_send must tell agents to attach only what the user asked for: %s", tl.Description)
+		}
+	}
 	if out := call(t, cs, "whatsapp_chats", nil); !strings.Contains(out, "not linked") {
 		t.Fatalf("unlinked: %s", out)
 	}

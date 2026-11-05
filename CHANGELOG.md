@@ -8,6 +8,10 @@ Newest first.
   build of 90 MB goes), from the screen, `whatsapp send --attach` and agents. Mail
   and Google Chat keep their 25 MB limit, and the file picker's warning says which
   limit applies.
+- `whatsapp_send` tells agents plainly that it takes files (`attachments`, up to 2 GB
+  each) and that they attach only files you asked for. An agent that still sees a
+  text-only `whatsapp_send` is talking to an old `narada mcp` (or `sandesh mcp`) left
+  running: restart that agent session.
 
 ## v0.10.0 -- 2026-11-05
 
