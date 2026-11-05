@@ -321,6 +321,9 @@ func (cl *Client) Send(ctx context.Context, chat, text string, quote *Message) (
 		return "", fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
 	}
 	msg := outgoing(chat, text, quote)
+	if chat == StatusChat && msg.ExtendedTextMessage == nil {
+		msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text)}} // statuses are never plain
+	}
 	if exp := cl.expiration(chat); exp > 0 { // the chat's messages disappear: so does this one
 		if msg.ExtendedTextMessage == nil {
 			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text)}}
@@ -680,7 +683,7 @@ func (cl *Client) reaction(ctx context.Context, e *events.Message) (Reaction, bo
 // narada doesn't show (status updates, key exchanges, reactions).
 func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool) {
 	info := e.Info
-	if Hidden(info.Chat.String()) || info.Chat.Server == types.BroadcastServer || info.Chat.Server == types.NewsletterServer {
+	if info.Chat != types.StatusBroadcastJID && (Hidden(info.Chat.String()) || info.Chat.Server == types.BroadcastServer || info.Chat.Server == types.NewsletterServer) {
 		return Message{}, false
 	}
 	sender := info.Sender
@@ -811,8 +814,11 @@ func firstPN(js ...types.JID) types.JID {
 // Hidden: WhatsApp's own service chats (its announcements), not people.
 func Hidden(jid string) bool { return jid == "0@s.whatsapp.net" || strings.HasPrefix(jid, "status@") }
 
+// StatusChat is where people's status updates arrive, and yours go.
+const StatusChat = "status@broadcast"
+
 // Known names for WhatsApp's own accounts.
-var Known = map[string]string{"13135550002@s.whatsapp.net": "Meta AI"}
+var Known = map[string]string{"13135550002@s.whatsapp.net": "Meta AI", StatusChat: "Status"}
 
 func contextInfo(msg *waE2E.Message) *waE2E.ContextInfo {
 	switch {

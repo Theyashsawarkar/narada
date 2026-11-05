@@ -55,6 +55,10 @@ Newest first.
 - **Disappearing messages on WhatsApp**: `X` in a chat, `whatsapp disappear <chat>
   24h|7d|90d|off`. An open chat shows the timer, what you send from narada carries
   it, and a change made by anyone shows as a line in the chat.
+- **WhatsApp status**: a Status section shows people's updates from the last day, and
+  `whatsapp status` lists them, without telling them you looked. `whatsapp status post
+  [text] [--attach FILE]` posts yours; agents can't, and a plain send can't reach the
+  status chat.
 - These go through a queue that the narada holding WhatsApp works off (ADR 7), so they
   work beside the daemon.
 

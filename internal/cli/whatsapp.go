@@ -20,7 +20,7 @@ import (
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group, poll, vote, disappear")
+		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group, poll, vote, disappear, status")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -99,7 +99,7 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		out := []store.Space{}
 		for _, s := range sps {
-			if (!*unread || s.Unread > 0) && s.Archived == *archived {
+			if (!*unread || s.Unread > 0) && s.Archived == *archived && s.Type != store.TypeStatus {
 				out = append(out, s)
 			}
 		}
@@ -284,6 +284,43 @@ func whatsApp(a *app.App, args []string) error {
 				chat = SpaceTitle(sp)
 			}
 			fmt.Printf("★ %s · %s  %s  [%s]\n%s\n\n", chat, m.SenderName, When(m.Created), m.Name, m.Text)
+		}
+		return nil
+	case "status":
+		if len(rest) > 0 && rest[0] == "post" {
+			fs := flags("narada whatsapp status post", "narada whatsapp status post [text...] [--attach FILE]\n\nPost a status: all your contacts (as your privacy settings say) see it for a\nday. With --attach, a photo or video with the text as its caption.")
+			var attach listFlag
+			fs.Var(&attach, "attach", "a photo or video")
+			pos, err := parse(fs, rest[1:])
+			if err != nil {
+				return err
+			}
+			var files []store.File
+			for _, p := range attach {
+				files = append(files, store.File{Source: p})
+			}
+			return waAct(a, func() (store.OutboxItem, error) { return a.PostWhatsAppStatus(strings.Join(pos, " "), files) })
+		}
+		fs := flags("narada whatsapp status", "narada whatsapp status [--json]\nnarada whatsapp status post [text...] [--attach FILE]\n\nPeople's status updates from the last day (narada doesn't tell them you looked),\nor post your own. Their photos and videos: narada whatsapp save <id>.")
+		asJSON := fs.Bool("json", false, "JSON output")
+		if _, err := parse(fs, rest); err != nil {
+			return err
+		}
+		msgs, err := a.Store.ChatMessages(store.WhatsAppAccount, whatsapp.StatusChat, 200)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			if msgs == nil {
+				msgs = []store.ChatMessage{}
+			}
+			return printJSON(msgs)
+		}
+		if len(msgs) == 0 {
+			fmt.Println("no status updates in the last day (they arrive while narada is online)")
+		}
+		for _, m := range msgs {
+			fmt.Printf("%s  %s  [%s]\n%s\n\n", m.SenderName, When(m.Created), m.Name, m.Text)
 		}
 		return nil
 	case "group", "groups":

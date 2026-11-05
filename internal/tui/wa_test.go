@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -190,7 +191,7 @@ func TestChatStateKeys(t *testing.T) {
 			t.Fatal("an archived chat still shows in All")
 		}
 	}
-	m.sec = len(chatSections) - 1 // Archived
+	m.sec = slices.Index(chatSections, "Archived")
 	m.reload()
 	if len(m.spaces) != 1 || m.spaces[0].Name != "919800000002@s.whatsapp.net" {
 		t.Fatalf("Archived shows %+v", m.spaces)
@@ -330,5 +331,33 @@ func TestDisappearKey(t *testing.T) {
 	x()
 	if sp().Disappear != 0 {
 		t.Fatalf("X four times is off: %d", sp().Disappear)
+	}
+}
+
+func TestStatusSection(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	w.Receive(whatsapp.Message{ID: "S1", Chat: whatsapp.StatusChat, Sender: "919800000002@s.whatsapp.net", SenderName: "Ravi", Text: "At the top!"})
+	m.reload()
+	for _, s := range m.spaces {
+		if s.Name == whatsapp.StatusChat {
+			t.Fatal("the status chat shows in All")
+		}
+	}
+	m.focus = 0
+	m.sec = slices.Index(chatSections, "Status")
+	m.sel = 0
+	m.reload()
+	if len(m.spaces) != 1 || m.spaces[0].Name != whatsapp.StatusChat {
+		t.Fatalf("Status shows %+v", m.spaces)
+	}
+	m.loadPreview(true)
+	m = press(m, "i")
+	if m.mode == modeChatMsg || !strings.Contains(m.toast, "status post") {
+		t.Fatalf("i in Status: mode %d %q", m.mode, m.toast)
+	}
+	// Google Chat has neither section
+	m.wa = false
+	if !strings.Contains(m.View(), "Unread") || strings.Contains(m.View(), "Archived") {
+		t.Fatal("Google Chat shows WhatsApp's sections")
 	}
 }

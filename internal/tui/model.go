@@ -53,7 +53,7 @@ const (
 	tabChat
 )
 
-var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled", aiSection, "Archived"} // Archived: WhatsApp only
+var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled", aiSection, "Archived", "Status"} // the last two: WhatsApp only
 
 // aiSection is where an agent's sends wait for your answer, in mail, chat
 // and WhatsApp alike.
@@ -364,6 +364,9 @@ func (m *Model) currentSection() config.Section {
 // reload reads the list from the local copy, keeping the selection on the
 // same item when it is still there.
 func (m *Model) reload() {
+	if m.tab == tabChat && !m.wa && m.sec >= len(chatSections)-2 {
+		m.sec = 0 // Archived and Status are WhatsApp's
+	}
 	m.loadWANames()
 	keep := m.curKey
 	accs := m.accountFilter()
@@ -472,8 +475,9 @@ func (m *Model) reload() {
 		}
 		var out []store.Space
 		for _, s := range sps {
-			if archived := chatSections[m.sec%len(chatSections)] == "Archived"; s.Archived != archived {
-				continue // archived WhatsApp chats show only in Archived
+			section := chatSections[m.sec%len(chatSections)]
+			if s.Archived != (section == "Archived") || (s.Type == store.TypeStatus) != (section == "Status") {
+				continue // archived chats and people's statuses only show in their sections
 			}
 			switch chatSections[m.sec%len(chatSections)] {
 			case "Unread":
@@ -1702,7 +1706,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 		if m.tab == tabChat {
 			n = len(chatSections)
 			if !m.wa {
-				n-- // Google Chat has no archive
+				n -= 2 // Google Chat has no archive or status
 				m.sec %= n
 			}
 		}

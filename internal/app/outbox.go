@@ -13,6 +13,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/config"
 	"github.com/Theyashsawarkar/narada/internal/mime"
 	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 // sendAt is when a queued message goes: its scheduled time, else after the
@@ -71,6 +72,9 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 	}
 	if err := validate(kind, out); err != nil {
 		return store.OutboxItem{}, err
+	}
+	if kind == "whatsapp" && (out.Space == whatsapp.StatusChat) != (out.Action == ActStatus) || out.Action == ActStatus && origin != OriginYou {
+		return store.OutboxItem{}, errors.New("a status goes to all your contacts: only narada whatsapp status post posts one")
 	}
 	if kind == "whatsapp" {
 		if n := a.Store.SentSince(kind, time.Now().Add(-time.Hour)); n >= a.Config.WhatsAppPerHour {
@@ -161,7 +165,7 @@ func validate(kind string, out store.Outgoing) error {
 			return errors.New("no chat")
 		}
 		switch out.Action {
-		case "":
+		case "", ActStatus:
 		case ActEdit:
 			if out.Target == "" || strings.TrimSpace(out.Body) == "" {
 				return errors.New("an edit needs the message and its new text")

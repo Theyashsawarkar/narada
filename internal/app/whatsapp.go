@@ -281,6 +281,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 		switch e.State {
 		case "connected":
 			_ = a.Store.RepairWhatsAppNames()
+			_ = a.Store.DeleteChatOlderThan(acc, whatsapp.StatusChat, time.Now().Add(-24*time.Hour).UnixMilli()) // statuses last a day
 			a.waMu.Lock()
 			if a.waReadyOnce != nil {
 				a.waReadyOnce.Do(func() { close(a.waReady) })
@@ -391,13 +392,16 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			if !m.FromMe && m.Sender == m.Chat && m.SenderName != "" {
 				self[m.Chat] = "~" + m.SenderName
 			}
-			if !e.History && !m.FromMe && a.Config.Notify && !a.waMuted(m.Chat) && a.Store.FirstNotify(acc, name) {
+			if !e.History && !m.FromMe && a.Config.Notify && m.Chat != whatsapp.StatusChat && !a.waMuted(m.Chat) && a.Store.FirstNotify(acc, name) {
 				title := a.waChatName(m.Chat, "")
 				if whatsapp.IsGroup(m.Chat) {
 					title = cm.SenderName + " in " + title
 				}
 				Notify("WhatsApp: "+title, m.Text)
 			}
+		}
+		if last, ok := touched[whatsapp.StatusChat]; ok { // statuses aren't unread chats
+			defer func() { _ = a.Store.SetSpaceRead(acc, whatsapp.StatusChat, last) }()
 		}
 		for chat, last := range touched {
 			if _, err := a.Store.Space(acc, chat); errors.Is(err, store.ErrNotFound) {
@@ -451,6 +455,9 @@ func (a *App) waGroupName(ctx context.Context, chat string) {
 func waName(chat, id string) string { return chat + "/" + id }
 
 func waType(jid string) string {
+	if jid == whatsapp.StatusChat {
+		return store.TypeStatus
+	}
 	if whatsapp.IsGroup(jid) {
 		return "GROUP_CHAT"
 	}
@@ -711,7 +718,7 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 	if sp, err := a.Store.Space(store.WhatsAppAccount, out.Space); err == nil {
 		c.SetDisappearing(out.Space, sp.Disappear) // what you send disappears with the rest
 	}
-	if out.Action != "" {
+	if out.Action != "" && out.Action != ActStatus {
 		return a.deliverWhatsAppAction(ctx, c, it, keep)
 	}
 	if len(out.Files) == 0 {

@@ -1144,3 +1144,44 @@ func TestWhatsAppShareAndDisappear(t *testing.T) {
 		t.Fatalf("timer after off: %d", sp.Disappear)
 	}
 }
+
+func TestWhatsAppStatus(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	const ravi = "919800000002@s.whatsapp.net"
+	w.Receive(whatsapp.Message{ID: "S1", Chat: whatsapp.StatusChat, Sender: ravi, SenderName: "Ravi", Text: "At the top!"})
+	sp, err := a.Store.Space(store.WhatsAppAccount, whatsapp.StatusChat)
+	if err != nil || sp.DisplayName != "Status" || sp.Type != store.TypeStatus || sp.Unread != 0 {
+		t.Fatalf("status chat: %+v %v", sp, err)
+	}
+	// only status post posts: not a plain send, not an agent
+	for _, origin := range []string{OriginYou, OriginAgent} {
+		if _, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: whatsapp.StatusChat, Body: "hi all"}, origin); err == nil {
+			t.Fatalf("a %s send reached the status chat", origin)
+		}
+	}
+	if _, err := a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: whatsapp.StatusChat, Action: ActStatus, Body: "hi all"}, OriginAgent); err == nil {
+		t.Fatal("an agent posted a status")
+	}
+	it, err := a.PostWhatsAppStatus("On the trail", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, it); got.Status != store.StatusSent || w.Sent[0].Chat != whatsapp.StatusChat || w.Sent[0].Text != "On the trail" {
+		t.Fatalf("post: %s %s %+v", got.Status, got.Error, w.Sent)
+	}
+	if _, err := a.PostWhatsAppStatus("  ", nil); err == nil {
+		t.Fatal("an empty status")
+	}
+	// a day on, they're gone
+	_ = a.Store.DeleteChatOlderThan(store.WhatsAppAccount, whatsapp.StatusChat, time.Now().Add(time.Hour).UnixMilli())
+	if msgs, _ := a.Store.ChatMessages(store.WhatsAppAccount, whatsapp.StatusChat, 0); len(msgs) != 0 {
+		t.Fatalf("old statuses: %+v", msgs)
+	}
+}

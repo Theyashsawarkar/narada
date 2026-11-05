@@ -20,7 +20,15 @@ const (
 	ActEdit    = "edit"
 	ActDelete  = "delete"
 	ActForward = "forward"
+	ActStatus  = "status" // Body and Files are your new status, for your contacts
 )
+
+// PostWhatsAppStatus posts a status your contacts see for a day, with a
+// photo or video when given. Only you: agents can't, and nothing else
+// sends to the status chat (Queue refuses).
+func (a *App) PostWhatsAppStatus(text string, files []store.File) (store.OutboxItem, error) {
+	return a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: whatsapp.StatusChat, SpaceName: "Status", Action: ActStatus, Body: text, Files: files}, OriginYou)
+}
 
 // waMsg finds a WhatsApp message here, with its id within its chat.
 func (a *App) waMsg(name string) (store.ChatMessage, string, error) {

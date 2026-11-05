@@ -275,3 +275,22 @@ func TestWhatsAppShareAndDisappearCommands(t *testing.T) {
 		t.Fatal("a one-hour timer")
 	}
 }
+
+func TestWhatsAppStatusCommands(t *testing.T) {
+	a, w := waApp(t)
+	if _, err := run(t, a, "status", "post", "On", "the", "trail"); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Sent) != 1 || w.Sent[0].Chat != "status@broadcast" || w.Sent[0].Text != "On the trail" {
+		t.Fatalf("sent %+v", w.Sent)
+	}
+	if out, _ := run(t, a, "status"); !strings.Contains(out, "On the trail") {
+		t.Fatalf("status:\n%s", out)
+	}
+	if out, _ := run(t, a, "list"); strings.Contains(out, "status@broadcast") {
+		t.Fatalf("list shows the status chat:\n%s", out)
+	}
+	if _, err := run(t, a, "send", "status@broadcast", "hi all"); err == nil {
+		t.Fatal("whatsapp send reached the status chat")
+	}
+}

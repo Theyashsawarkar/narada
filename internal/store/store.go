@@ -927,6 +927,9 @@ func (s *Store) Labels(account string) ([]Label, error) {
 
 // ------------------------------------------------------------------- chat
 
+// TypeStatus is the WhatsApp space that holds people's status updates.
+const TypeStatus = "STATUS"
+
 type Space struct {
 	Account     string `json:"account"`
 	Name        string `json:"id"`
@@ -1626,6 +1629,12 @@ func (s *Store) FinishWhatsAppAction(id int64, result, errText string) error {
 // EditChatText changes a stored message's text (after an edit).
 func (s *Store) EditChatText(account, name, text string) error {
 	_, err := s.db.Exec(`UPDATE chat_messages SET text=?, edited=1 WHERE account=? AND name=?`, text, account, name)
+	return err
+}
+
+// DeleteChatOlderThan drops a chat's messages from before a time.
+func (s *Store) DeleteChatOlderThan(account, space string, before int64) error {
+	_, err := s.db.Exec(`DELETE FROM chat_messages WHERE account=? AND space=? AND created<?`, account, space, before)
 	return err
 }
 

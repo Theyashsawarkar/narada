@@ -528,8 +528,8 @@ narada whatsapp link --phone +9198…   # or type a code on the phone instead
 Keep it open after scanning: it waits until the phone has logged the new
 device in and sent your recent chats (up to two minutes), then hands over
 to the background service. `Tab` in the screen now
-goes Mail → Chat → WhatsApp, with sections All, Unread, People, Groups and
-Scheduled; `i` types a message, `r` on a picked message replies quoting it,
+goes Mail → Chat → WhatsApp, with sections All, Unread, People, Groups,
+Scheduled, Archived and Status; `i` types a message, `r` on a picked message replies quoting it,
 `e` reacts to it (one reaction each, as on the phone: another replaces yours,
 picking yours again takes it back, and other people's show under their messages),
 `@` while typing lists who you can tag (a group's members and whoever has written
@@ -553,7 +553,10 @@ while typing sends the question and the options below it (one per line)
 as a poll. `X` sets a chat's messages to disappear (24 hours, again 7 days,
 90 days, then off); its top line shows the timer, and what you send there
 disappears too. A place or a contact card goes from the shell: `narada
-whatsapp send --location` and `--contact`. While a chat is open, its top line
+whatsapp send --location` and `--contact`. The Status section shows people's
+status updates from the last day, as they arrive while narada is online
+(narada doesn't tell them you looked); `narada whatsapp status post` posts
+yours, which only you can: agents can't, and nothing else sends there. While a chat is open, its top line
 says when they're typing (or recording a voice note), online, or when they
 were last seen (if they share it), and they see you typing, as with
 WhatsApp Web. The status
@@ -730,6 +733,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp poll <to> <question> <option>... [--multi]` | Ask a poll (2 to 12 options; `--multi`: several may be picked) |
 | `narada whatsapp vote <poll> [option...]` | Vote by option number or text; none takes your vote back |
 | `narada whatsapp disappear <chat> 24h\|7d\|90d\|off` | Turn disappearing messages on or off for a chat |
+| `narada whatsapp status [--json]` / `status post [text] [--attach FILE]` | People's status updates from the last day; post yours (all your contacts see it) |
 | `narada whatsapp list --archived` | The archived chats (left out of `list` otherwise) |
 | `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |
 | `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |

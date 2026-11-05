@@ -689,7 +689,7 @@ func (s *server) waChats(ctx context.Context, _ *mcp.CallToolRequest, in waChats
 	var b strings.Builder
 	n := 0
 	for _, sp := range sps {
-		if in.UnreadOnly && sp.Unread == 0 {
+		if in.UnreadOnly && sp.Unread == 0 || sp.Type == store.TypeStatus {
 			continue
 		}
 		if n++; n > in.Limit {

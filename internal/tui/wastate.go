@@ -125,6 +125,17 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	a := m.a
+	if sp.Type == store.TypeStatus {
+		switch s {
+		case "i", "r", "U", "c", "e", "p", "M", "Z", "B", "X", "I", "n", "f", "R", "P":
+			if m.pickingMsg() && s == "e" {
+				break
+			}
+			m.say("people's statuses are to look at: narada whatsapp status post posts yours")
+			return m, nil, true
+		}
+		return m, nil, false
+	}
 	switch s {
 	case "*":
 		if !m.pickingMsg() {
