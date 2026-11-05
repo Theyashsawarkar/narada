@@ -15,11 +15,12 @@ import (
 
 	"github.com/Theyashsawarkar/narada/internal/app"
 	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group, poll, vote")
+		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group, poll, vote, disappear")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -287,6 +288,31 @@ func whatsApp(a *app.App, args []string) error {
 		return nil
 	case "group", "groups":
 		return waGroup(a, rest)
+	case "disappear", "disappearing":
+		fs := flags("narada whatsapp disappear", "narada whatsapp disappear <chat> 24h|7d|90d|off\n\nTurn disappearing messages on for a chat (new messages go after that long, for\neveryone in it), or off. Messages you send from narada there disappear too.")
+		pos, err := parse(fs, rest)
+		if err != nil {
+			return err
+		}
+		if len(pos) < 2 {
+			return usageError("whatsapp disappear needs a chat and 24h, 7d, 90d or off")
+		}
+		secs, ok := app.DisappearTimers[strings.ToLower(pos[len(pos)-1])]
+		if !ok {
+			return usageError("the timer is 24h, 7d, 90d or off")
+		}
+		ctx, cancel := ctxSignal()
+		defer cancel()
+		startWhatsApp(ctx, a)
+		sp, err := a.WhatsAppChat(ctx, strings.Join(pos[:len(pos)-1], " "))
+		if err != nil {
+			return err
+		}
+		if err := a.DisappearWhatsApp(ctx, sp.Name, secs); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "narada: %s: %s\n", SpaceTitle(sp), strings.TrimPrefix(whatsapp.DisappearText(secs), "⏱ "))
+		return nil
 	case "poll":
 		fs := flags("narada whatsapp poll", "narada whatsapp poll <to> <question> <option> <option>... [--multi] [--at WHEN]\n\nAsk a poll in a chat: 2 to 12 options. --multi lets people pick several.\nThe votes show in the poll's message as they come.")
 		multi := fs.Bool("multi", false, "people may pick several options")
@@ -369,11 +395,14 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		return waAct(a, func() (store.OutboxItem, error) { return a.ForwardWhatsApp(pos[0], sp, app.OriginYou) })
 	case "send":
-		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more; up to 2 GB each): each is its own\nmessage, the text its first one's caption. --voice sends an audio file as a\nvoice note (made Ogg Opus with ffmpeg when it isn't).\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
+		fs := flags("narada whatsapp send", "narada whatsapp send <to> [text...] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--location LAT,LON [--place NAME]] [--contact WHO] [--at WHEN] [--now] [--link]\n\nSend a WhatsApp message (text from stdin when not given). <to> is a contact,\na chat or a phone number with country code. Waits chat_undo_seconds first.\n--attach sends a file (repeat for more; up to 2 GB each): each is its own\nmessage, the text its first one's caption. --voice sends an audio file as a\nvoice note (made Ogg Opus with ffmpeg when it isn't).\n\n--link (or when WhatsApp isn't linked) opens WhatsApp's click-to-chat page\nwith the message typed in instead: you press Send there. <to> is then a phone\nnumber.")
 		nowFlag := fs.Bool("now", false, "skip the undo window")
 		link := fs.Bool("link", false, "open the click-to-chat page instead of sending")
 		at := fs.String("at", "", "send later: \"tomorrow 9am\", \"in 2h\"...")
 		replyTo := fs.String("reply-to", "", "a message id to reply to, quoting it (a group's message, sent to a person: a private reply)")
+		location := fs.String("location", "", "share a place instead: latitude,longitude (18.52,73.85)")
+		place := fs.String("place", "", "with --location: what the place is called")
+		contact := fs.String("contact", "", "share a contact card instead: a contact's name or a phone number (the text is then its name)")
 		var attach, voice listFlag
 		fs.Var(&attach, "attach", "a file to send (repeat for more)")
 		fs.Var(&voice, "voice", "an audio file to send as a voice note (repeat for more)")
@@ -386,7 +415,7 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		attach = append(attach, voice...)
 		text := strings.Join(pos[1:], " ")
-		if text == "" && len(attach) == 0 && !term.IsTerminal(int(os.Stdin.Fd())) {
+		if text == "" && len(attach) == 0 && *location == "" && *contact == "" && !term.IsTerminal(int(os.Stdin.Fd())) {
 			b, _ := io.ReadAll(os.Stdin)
 			text = strings.TrimSpace(string(b))
 		}
@@ -410,6 +439,25 @@ func whatsApp(a *app.App, args []string) error {
 		}
 		if *nowFlag {
 			a.Config.ChatUndoSeconds = 0
+		}
+		if *location != "" {
+			l, err := app.ParseLocation(*location)
+			if err != nil {
+				return usageError("%v", err)
+			}
+			l.Name = *place
+			it, err := a.ShareLocationWhatsApp(sp, l, app.OriginYou)
+			if err != nil {
+				return err
+			}
+			return waitSend(a, it)
+		}
+		if *contact != "" {
+			it, err := a.ShareContactWhatsApp(ctx, sp, *contact, text, app.OriginYou)
+			if err != nil {
+				return err
+			}
+			return waitSend(a, it)
 		}
 		out := store.Outgoing{Space: sp.Name, SpaceName: SpaceTitle(sp), Body: text, Quote: *replyTo}
 		if *replyTo != "" {

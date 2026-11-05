@@ -277,6 +277,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `p` | Toggle the chat pinned on top of the list (WhatsApp: on your phone too, three at most) |
 | `e` (WhatsApp) | Move the chat into Archived, or back out of it (archive; your phone follows) |
 | `Z` (WhatsApp) | Mute the chat for 8 hours (again: a week, then always, then unmuted) |
+| `X` (WhatsApp) | Set the chat's messages to disappear after 24 hours (again: 7 days, 90 days, then off) |
 | `I` (WhatsApp group) | Show the group's people, admins and description |
 | `B` (WhatsApp) | Block the person in this chat (B twice; again unblocks) |
 | `*` (picking, WhatsApp) | Toggle a star on the picked message (your phone follows) |
@@ -549,7 +550,10 @@ group` makes groups and adds, removes and promotes people, and gives or
 resets the invite link. Polls show their options and votes, kept up to
 date as people vote (yours marked ●): `P` on a poll votes, and `Ctrl+p`
 while typing sends the question and the options below it (one per line)
-as a poll. While a chat is open, its top line
+as a poll. `X` sets a chat's messages to disappear (24 hours, again 7 days,
+90 days, then off); its top line shows the timer, and what you send there
+disappears too. A place or a contact card goes from the shell: `narada
+whatsapp send --location` and `--contact`. While a chat is open, its top line
 says when they're typing (or recording a voice note), online, or when they
 were last seen (if they share it), and they see you typing, as with
 WhatsApp Web. The status
@@ -645,7 +649,7 @@ claude  → contacts_find → mail_send
 | `chat_send` | Post in a space, DM or thread | **asks you** |
 | `whatsapp_chats` | WhatsApp chats with unread counts | reads |
 | `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
-| `whatsapp_send` | One message to one WhatsApp chat (or `forward`: a message forwarded there; or `poll_options`: a poll), optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
+| `whatsapp_send` | One message to one WhatsApp chat (or `forward`: a message forwarded there; `poll_options`: a poll; `location`, `contact`: a place or a contact card), optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
 | `attachment_save` | Download a mail's attachments or a chat or WhatsApp message's files into `~/Downloads/narada` | saves files |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
@@ -718,13 +722,14 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp unlink` | Log this machine out of WhatsApp and forget its chats |
 | `narada whatsapp list [--unread]` | WhatsApp chats (`wa ls`) |
 | `narada whatsapp read <chat> [--mark-read]` | A chat's recent messages (`<chat>`: a name, a number or its id) |
-| `narada whatsapp send <to> [text] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--at WHEN] [--link]` | Send one message (`--reply-to`: quoting a message; a group's message sent to a person is a private reply), with files (`--attach`, repeatable, up to 2 GB each; each its own message, the text the first one's caption) and voice notes (`--voice`: an audio file, made Ogg Opus with ffmpeg when it isn't); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
+| `narada whatsapp send <to> [text] [--attach FILE]... [--voice FILE]... [--reply-to MSG] [--location LAT,LON [--place NAME]] [--contact WHO] [--at WHEN] [--link]` | Send one message (`--location` shares a place, `--contact` a contact card; `--reply-to`: quoting a message; a group's message sent to a person is a private reply), with files (`--attach`, repeatable, up to 2 GB each; each its own message, the text the first one's caption) and voice notes (`--voice`: an audio file, made Ogg Opus with ffmpeg when it isn't); `--link` opens click-to-chat instead (text only); `@919820147460` (a phone number with its country code) tags that person |
 | `narada whatsapp archive\|unarchive\|pin\|unpin\|unread\|block\|unblock <chat>` | Change a chat, here and on your phone |
 | `narada whatsapp mute <chat> [--for 8h\|1w\|always]` / `unmute <chat>` | Silence a chat's notifications (always by default) |
 | `narada whatsapp star\|unstar <message>` / `starred` | Star a message; list the starred ones |
 | `narada whatsapp group new\|info\|rename\|about\|add\|remove\|promote\|demote\|link\|join\|leave ...` | Make and run groups: `new <name> <person>...`, `add <group> <person>...`, `link <group> [--reset]` (the invite link), `join <link>`, `leave <group>` |
 | `narada whatsapp poll <to> <question> <option>... [--multi]` | Ask a poll (2 to 12 options; `--multi`: several may be picked) |
 | `narada whatsapp vote <poll> [option...]` | Vote by option number or text; none takes your vote back |
+| `narada whatsapp disappear <chat> 24h\|7d\|90d\|off` | Turn disappearing messages on or off for a chat |
 | `narada whatsapp list --archived` | The archived chats (left out of `list` otherwise) |
 | `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |
 | `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |

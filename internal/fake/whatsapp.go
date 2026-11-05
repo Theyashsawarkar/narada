@@ -31,20 +31,21 @@ type WhatsApp struct {
 	handler func(whatsapp.Event)
 	nextID  int
 
-	Sent    []whatsapp.Message  // what narada sent, in order
-	Read    []string            // chats narada sent read receipts for
-	Reacted []string            // reactions sent: "chat/id sender emoji"
-	Edited  []string            // edits sent: "chat/id new text"
-	Revoked []string            // deleted for everyone: "chat/id"
-	Quotes  []whatsapp.Message  // what each send that replied quoted
-	Did     []string            // chat-state, presence and group actions: "action chat arg"
-	Voted   []string            // votes sent: "chat/poll option,option"
-	DoErr   error               // Do fails with this
-	Members map[string][]string // group JID → its people
-	ReadErr error               // MarkRead fails with this
-	SendErr error               // Send fails with this
-	Groups  map[string]string   // group JID → name
-	People  map[string]string   // JID → contact name
+	Sent      []whatsapp.Message  // what narada sent, in order
+	Read      []string            // chats narada sent read receipts for
+	Reacted   []string            // reactions sent: "chat/id sender emoji"
+	Edited    []string            // edits sent: "chat/id new text"
+	Revoked   []string            // deleted for everyone: "chat/id"
+	Quotes    []whatsapp.Message  // what each send that replied quoted
+	Did       []string            // chat-state, presence and group actions: "action chat arg"
+	Voted     []string            // votes sent: "chat/poll option,option"
+	Disappear map[string]int      // the timer narada gave each chat before sending
+	DoErr     error               // Do fails with this
+	Members   map[string][]string // group JID → its people
+	ReadErr   error               // MarkRead fails with this
+	SendErr   error               // Send fails with this
+	Groups    map[string]string   // group JID → name
+	People    map[string]string   // JID → contact name
 	// History is played when narada connects for the first time.
 	History []whatsapp.Message
 	Chats   []whatsapp.Chat
@@ -311,6 +312,24 @@ func (c *WhatsAppConn) SendVote(ctx context.Context, chat, sender, pollID string
 	}
 	c.w.Voted = append(c.w.Voted, chat+"/"+pollID+" "+strings.Join(options, ","))
 	return nil
+}
+
+func (c *WhatsAppConn) SendLocation(ctx context.Context, chat string, l whatsapp.Location) (string, error) {
+	return c.Send(ctx, chat, fmt.Sprintf("📍 Location https://maps.google.com/?q=%f,%f", l.Lat, l.Lon), nil)
+}
+
+func (c *WhatsAppConn) SendContact(ctx context.Context, chat string, ct whatsapp.Contact) (string, error) {
+	return c.Send(ctx, chat, "👤 Contact: "+ct.Name+" "+whatsapp.VCard(ct), nil)
+}
+
+// SetDisappearing records the timer narada says a chat has.
+func (c *WhatsAppConn) SetDisappearing(chat string, secs int) {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	if c.w.Disappear == nil {
+		c.w.Disappear = map[string]int{}
+	}
+	c.w.Disappear[chat] = secs
 }
 
 // ReceiveVote is someone voting in a poll.

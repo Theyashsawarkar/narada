@@ -97,7 +97,7 @@ func (a *App) Queue(account, kind string, out store.Outgoing, origin string) (st
 		return it, err
 	}
 	if origin == OriginYou && it.Status == store.StatusQueued && out.ScheduledFor == 0 && (kind == "chat" || kind == "whatsapp") &&
-		(out.Action == "" || out.Action == ActForward || out.Action == ActPoll) {
+		(out.Action == "" || out.Action == ActForward || out.Action == ActPoll || out.Action == ActLocation || out.Action == ActContact) {
 		a.showPending(id, account, kind, out)
 	}
 	if origin == OriginAgent {
@@ -181,6 +181,16 @@ func validate(kind string, out store.Outgoing) error {
 		case ActVote:
 			if out.Target == "" || out.Poll == nil {
 				return errors.New("a vote needs the poll")
+			}
+			return nil
+		case ActLocation:
+			if out.Location == nil {
+				return errors.New("no place to share")
+			}
+			return nil
+		case ActContact:
+			if out.Card == nil || out.Card.Phone == "" {
+				return errors.New("no contact to share")
 			}
 			return nil
 		default:

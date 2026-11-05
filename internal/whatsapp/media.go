@@ -214,6 +214,12 @@ func (cl *Client) SendFile(ctx context.Context, chat string, f File, quote *Mess
 			ci.RemoteJID = proto.String(quote.Chat) // replying privately to a group's message
 		}
 	}
+	if exp := cl.expiration(chat); exp > 0 {
+		if ci == nil {
+			ci = &waE2E.ContextInfo{}
+		}
+		ci.Expiration = proto.Uint32(uint32(exp))
+	}
 	n := up.FileLength
 	msg := &waE2E.Message{}
 	switch kind {

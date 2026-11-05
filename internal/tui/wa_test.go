@@ -301,3 +301,34 @@ func TestPollFromTheScreen(t *testing.T) {
 		t.Fatal("voting in a plain message")
 	}
 }
+
+func TestDisappearKey(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	m.focus = 0
+	sp := func() store.Space {
+		s, _ := m.a.Store.Space(store.WhatsAppAccount, "919800000002@s.whatsapp.net")
+		return s
+	}
+	x := func() {
+		nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+		m = nm.(Model)
+		if cmd != nil {
+			cmd()
+		}
+		m.reload()
+	}
+	x()
+	if sp().Disappear != 86400 {
+		t.Fatalf("X: %d (%v)", sp().Disappear, w.Did)
+	}
+	m.reload()
+	if got := ansi.Strip(m.presenceLine(sp())); !strings.Contains(got, "⏱ 24 hours") {
+		t.Fatalf("header %q", got)
+	}
+	x()
+	x()
+	x()
+	if sp().Disappear != 0 {
+		t.Fatalf("X four times is off: %d", sp().Disappear)
+	}
+}

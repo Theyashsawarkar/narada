@@ -37,6 +37,9 @@ type WhatsAppConn interface {
 	Do(ctx context.Context, action, chat, arg string) (string, error)
 	SendPoll(ctx context.Context, chat string, p whatsapp.Poll) (string, error)
 	SendVote(ctx context.Context, chat, sender, pollID string, fromMe bool, options []string) error
+	SendLocation(ctx context.Context, chat string, l whatsapp.Location) (string, error)
+	SendContact(ctx context.Context, chat string, c whatsapp.Contact) (string, error)
+	SetDisappearing(chat string, secs int)
 	Resolve(ctx context.Context, phone string) (string, error)
 	GroupName(ctx context.Context, chat string) (string, error)
 	Logout(ctx context.Context) error
@@ -314,6 +317,9 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			if len(ch.Members) > 0 {
 				_ = a.Store.SetWhatsAppMembers(ch.JID, ch.Members)
 			}
+			if ch.Disappear > 0 || ch.Group && ch.People > 0 {
+				_ = a.Store.SetDisappear(acc, ch.JID, ch.Disappear)
+			}
 			if e.History {
 				a.waUnreadMu.Lock()
 				if a.waUnread == nil {
@@ -346,6 +352,9 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 					_ = a.Store.EditChatText(acc, name, m.Text)
 					continue
 				}
+			}
+			if m.Disappear != 0 {
+				defer func(chat string, secs int) { _ = a.Store.SetDisappear(acc, chat, secs) }(m.Chat, m.Disappear)
 			}
 			text := m.Text
 			if m.Forwarded {
@@ -698,6 +707,9 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files, Ticks: whatsapp.TickSent}})
 		_ = a.queueWhatsAppReads(out.Space) // answering a chat reads it, as on the phone
 		_ = a.Store.SetSpaceRead(store.WhatsAppAccount, out.Space, time.Now().UnixMilli())
+	}
+	if sp, err := a.Store.Space(store.WhatsAppAccount, out.Space); err == nil {
+		c.SetDisappearing(out.Space, sp.Disappear) // what you send disappears with the rest
 	}
 	if out.Action != "" {
 		return a.deliverWhatsAppAction(ctx, c, it, keep)

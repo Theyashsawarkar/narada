@@ -250,3 +250,28 @@ func TestWhatsAppPollCommands(t *testing.T) {
 		t.Fatal("a poll with one option")
 	}
 }
+
+func TestWhatsAppShareAndDisappearCommands(t *testing.T) {
+	a, w := waApp(t)
+	if _, err := run(t, a, "send", "Ravi", "--location", "18.52,73.85", "--place", "Wada"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, a, "send", "Ravi", "--contact", "Amma"); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Sent) != 2 || !strings.Contains(w.Sent[0].Text, "18.52") || !strings.Contains(w.Sent[1].Text, "FN:Amma") {
+		t.Fatalf("sent %+v", w.Sent)
+	}
+	if _, err := run(t, a, "send", "Ravi", "--location", "north"); err == nil {
+		t.Fatal("a place with no numbers")
+	}
+	if _, err := run(t, a, "disappear", "Ravi", "7d"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(w.Did, "\n"), "disappear 919800000002@s.whatsapp.net 604800") {
+		t.Fatalf("did %q", w.Did)
+	}
+	if _, err := run(t, a, "disappear", "Ravi", "1h"); err == nil {
+		t.Fatal("a one-hour timer")
+	}
+}

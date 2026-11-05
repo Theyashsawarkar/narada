@@ -42,6 +42,9 @@ type Outgoing struct {
 	Target string `json:"target,omitempty"`
 	// "poll" asks Poll; "vote" picks Poll.Options in the poll Target
 	Poll *Poll `json:"poll,omitempty"`
+	// "location" shares Location, "contact" Card
+	Location *Location `json:"location,omitempty"`
+	Card     *Card     `json:"contact,omitempty"`
 	// both
 	Body  string `json:"body"`
 	HTML  string `json:"html,omitempty"` // mail: sent beside Body when set
@@ -61,6 +64,19 @@ type Poll struct {
 	Question string   `json:"question,omitempty"`
 	Options  []string `json:"options"`
 	Multi    bool     `json:"multi,omitempty"`
+}
+
+// Location is a place to share on WhatsApp.
+type Location struct {
+	Lat  float64 `json:"lat"`
+	Lon  float64 `json:"lon"`
+	Name string  `json:"name,omitempty"`
+}
+
+// Card is a contact card to share on WhatsApp.
+type Card struct {
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
 }
 
 // File is an attachment to send: a private copy made when it was queued

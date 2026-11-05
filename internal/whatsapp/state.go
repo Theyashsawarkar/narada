@@ -124,7 +124,11 @@ func (cl *Client) Do(ctx context.Context, action, chat, arg string) (string, err
 		if err != nil {
 			return "", err
 		}
-		return "", cl.c.SetDisappearingTimer(ctx, jid, time.Duration(secs)*time.Second, time.Now())
+		if err := cl.c.SetDisappearingTimer(ctx, jid, time.Duration(secs)*time.Second, time.Now()); err != nil {
+			return "", err
+		}
+		cl.SetDisappearing(chat, secs)
+		return "", nil
 	case DoGroupNew:
 		var g NewGroup
 		if err := json.Unmarshal([]byte(arg), &g); err != nil {

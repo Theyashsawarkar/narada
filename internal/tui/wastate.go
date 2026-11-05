@@ -37,10 +37,19 @@ func (m *Model) presenceLine(sp store.Space) string {
 		}
 		return s.green.Render(" · " + what)
 	}
+	timer := ""
+	if sp.Disappear > 0 {
+		timer = s.muted.Render(" · ⏱ " + whatsapp.DisappearName(sp.Disappear))
+	}
 	if whatsapp.IsGroup(sp.Name) {
-		return ""
+		return timer
 	}
 	p := m.a.Store.PresenceOf(sp.Name)
+	return m.onlineLine(p) + timer
+}
+
+func (m *Model) onlineLine(p store.Presence) string {
+	s := m.styles
 	switch {
 	case p.JID == "" || time.Since(time.UnixMilli(p.At)) > 10*time.Minute && p.Online:
 		return ""
@@ -183,6 +192,13 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 			b.WriteString("\nnarada whatsapp group add|remove|promote|link … changes it")
 			return aiMsg{title: info.Name, text: b.String()}
 		}, true
+	case "X":
+		next := map[int]int{0: 86400, 86400: 7 * 86400, 7 * 86400: 90 * 86400}[sp.Disappear] // 90 days → off
+		what := "disappearing messages off"
+		if next > 0 {
+			what = "new messages disappear after " + whatsapp.DisappearName(next) + " (X again: longer, then off)"
+		}
+		return m, m.act(what, func(ctx context.Context) error { return a.DisappearWhatsApp(ctx, sp.Name, next) }), true
 	case "B":
 		if whatsapp.IsGroup(sp.Name) {
 			m.say("B blocks a person; leave a group with narada whatsapp group leave")

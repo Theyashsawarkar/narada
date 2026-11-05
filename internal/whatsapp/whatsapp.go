@@ -43,6 +43,7 @@ type Message struct {
 	Ticks      int    // yours: how far it got (TickSent, TickDelivered, TickRead)
 	Forwarded  bool   // marked "Forwarded"
 	Poll       *Poll  // a poll it asks
+	Disappear  int    // seconds: the chat's disappearing-messages timer, as this message says (-1: turned off)
 }
 
 // Poll is a poll's question and options; Multi lets people pick several.
@@ -84,6 +85,9 @@ type Chat struct {
 	Members []string // who they are, when known
 	Last    time.Time
 	Unread  int // from the phone's history: how many are unread
+	// Disappear: the disappearing-messages timer in seconds (0 off), from
+	// the phone's history
+	Disappear int
 }
 
 // Event is what the connection hears. Exactly one part is set.
@@ -141,8 +145,9 @@ type Client struct {
 	c     *whatsmeow.Client
 	store *sqlstore.Container
 
-	mu      sync.Mutex
-	handler func(Event)
+	mu        sync.Mutex
+	handler   func(Event)
+	disappear map[string]int // chat → its disappearing-messages timer (seconds)
 }
 
 func init() {
@@ -316,6 +321,15 @@ func (cl *Client) Send(ctx context.Context, chat, text string, quote *Message) (
 		return "", fmt.Errorf("%q is not a WhatsApp chat: %w", chat, err)
 	}
 	msg := outgoing(chat, text, quote)
+	if exp := cl.expiration(chat); exp > 0 { // the chat's messages disappear: so does this one
+		if msg.ExtendedTextMessage == nil {
+			msg = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text)}}
+		}
+		if msg.ExtendedTextMessage.ContextInfo == nil {
+			msg.ExtendedTextMessage.ContextInfo = &waE2E.ContextInfo{}
+		}
+		msg.ExtendedTextMessage.ContextInfo.Expiration = proto.Uint32(uint32(exp))
+	}
 	resp, err := cl.c.SendMessage(ctx, to, msg)
 	if err != nil {
 		return "", err
@@ -524,7 +538,12 @@ func (cl *Client) groups(ctx context.Context) {
 	}
 	var chats []Chat
 	for _, g := range gs {
-		chats = append(chats, Chat{JID: g.JID.String(), Name: g.Name, Group: true, People: len(g.Participants), Members: cl.members(ctx, g.Participants)})
+		d := 0
+		if g.IsEphemeral {
+			d = int(g.DisappearingTimer)
+		}
+		cl.SetDisappearing(g.JID.String(), d)
+		chats = append(chats, Chat{JID: g.JID.String(), Name: g.Name, Group: true, People: len(g.Participants), Members: cl.members(ctx, g.Participants), Disappear: d})
 	}
 	if len(chats) > 0 {
 		cl.emit(Event{Chats: chats})
@@ -598,7 +617,8 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 			continue
 		}
 		ch := Chat{JID: cl.chatJID(ctx, jid), Name: conv.GetName(), Group: jid.Server == types.GroupServer,
-			Last: time.Unix(int64(conv.GetConversationTimestamp()), 0), Unread: int(conv.GetUnreadCount())}
+			Last: time.Unix(int64(conv.GetConversationTimestamp()), 0), Unread: int(conv.GetUnreadCount()), Disappear: int(conv.GetEphemeralExpiration())}
+		cl.SetDisappearing(ch.JID, ch.Disappear)
 		chats = append(chats, ch)
 		for _, hm := range conv.GetMessages() {
 			evt, err := cl.c.ParseWebMessage(jid, hm.GetMessage())
@@ -685,6 +705,15 @@ func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool
 			m.ID, m.Edit = pm.GetKey().GetID(), true
 			m.Text = Text(pm.GetEditedMessage())
 			return m, m.Text != ""
+		case waE2E.ProtocolMessage_EPHEMERAL_SETTING:
+			secs := int(pm.GetEphemeralExpiration())
+			cl.SetDisappearing(m.Chat, secs)
+			m.Disappear = secs
+			if secs == 0 {
+				m.Disappear = -1
+			}
+			m.Text = DisappearText(secs)
+			return m, true
 		}
 		return Message{}, false
 	}
@@ -698,6 +727,10 @@ func (cl *Client) convert(ctx context.Context, e *events.Message) (Message, bool
 	m.Media = media(msg)
 	m.Poll = poll(msg)
 	if ci := contextInfo(msg); ci != nil {
+		if exp := int(ci.GetExpiration()); exp > 0 {
+			cl.SetDisappearing(m.Chat, exp)
+			m.Disappear = exp
+		}
 		m.Forwarded = ci.GetIsForwarded()
 		m.Quoted = ci.GetStanzaID()
 		m.Text = cl.mentions(ctx, m.Text, ci.GetMentionedJID())
@@ -793,6 +826,12 @@ func contextInfo(msg *waE2E.Message) *waE2E.ContextInfo {
 		return msg.GetDocumentMessage().GetContextInfo()
 	case msg.GetAudioMessage() != nil:
 		return msg.GetAudioMessage().GetContextInfo()
+	case msg.GetLocationMessage() != nil:
+		return msg.GetLocationMessage().GetContextInfo()
+	case msg.GetContactMessage() != nil:
+		return msg.GetContactMessage().GetContextInfo()
+	case msg.GetStickerMessage() != nil:
+		return msg.GetStickerMessage().GetContextInfo()
 	}
 	return nil
 }
@@ -834,7 +873,14 @@ func Text(msg *waE2E.Message) string {
 		l := msg.GetLocationMessage()
 		return with(fmt.Sprintf("📍 Location https://maps.google.com/?q=%f,%f", l.GetDegreesLatitude(), l.GetDegreesLongitude()), l.GetName())
 	case msg.GetContactMessage() != nil:
-		return "👤 Contact: " + msg.GetContactMessage().GetDisplayName()
+		c := msg.GetContactMessage()
+		return "👤 Contact: " + c.GetDisplayName() + vcardPhones(c.GetVcard())
+	case msg.GetContactsArrayMessage() != nil:
+		var names []string
+		for _, c := range msg.GetContactsArrayMessage().GetContacts() {
+			names = append(names, c.GetDisplayName()+vcardPhones(c.GetVcard()))
+		}
+		return "👤 Contacts: " + strings.Join(names, "; ")
 	case msg.GetPollCreationMessage() != nil:
 		return "📊 Poll: " + msg.GetPollCreationMessage().GetName()
 	case msg.GetPollCreationMessageV3() != nil:

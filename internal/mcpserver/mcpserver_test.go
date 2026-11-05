@@ -282,6 +282,19 @@ func TestWhatsAppTools(t *testing.T) {
 	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "forward": "nope"}); !strings.Contains(out, "no message") {
 		t.Fatalf("forward of nothing: %q", out)
 	}
+	// a place and a contact card, behind approval
+	go approveNext()
+	n = len(w.Sent)
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "location": "18.52,73.85", "text": "Start here"}); out != "Sent." || !strings.Contains(w.Sent[n].Text, "18.52") {
+		t.Fatalf("location: %q", out)
+	}
+	go approveNext()
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "contact": "Amma"}); out != "Sent." || !strings.Contains(w.Sent[n+1].Text, "FN:Amma") {
+		t.Fatalf("contact: %q", out)
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "Ravi", "location": "nowhere"}); !strings.Contains(out, "latitude") {
+		t.Fatalf("bad location: %q", out)
+	}
 	// a poll, behind approval
 	go approveNext()
 	n = len(w.Sent)

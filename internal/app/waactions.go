@@ -104,8 +104,11 @@ func (a *App) ForwardWhatsApp(msg string, to store.Space, origin string) (store.
 // message it acted on, or the new one.
 func (a *App) deliverWhatsAppAction(ctx context.Context, c WhatsAppConn, it store.OutboxItem, keep func(id, text string, files []store.ChatFile)) (string, error) {
 	out := it.Out
-	if out.Action == ActPoll || out.Action == ActVote {
+	switch out.Action {
+	case ActPoll, ActVote:
 		return a.deliverPoll(ctx, c, it, keep)
+	case ActLocation, ActContact:
+		return a.deliverShare(ctx, c, it, keep)
 	}
 	m, id, err := a.waMsg(out.Target)
 	if err != nil && out.Action != ActDelete {

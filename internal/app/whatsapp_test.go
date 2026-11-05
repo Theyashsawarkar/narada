@@ -1087,3 +1087,60 @@ func TestWhatsAppPolls(t *testing.T) {
 		t.Fatal("voted in a message that isn't a poll")
 	}
 }
+
+func TestWhatsAppShareAndDisappear(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	ravi, _ := a.Store.Space(store.WhatsAppAccount, "919800000002@s.whatsapp.net")
+	if _, err := ParseLocation("118.5,73"); err == nil {
+		t.Fatal("latitude 118")
+	}
+	l, err := ParseLocation("18.52, 73.85")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Name = "Shaniwar Wada"
+	it, err := a.ShareLocationWhatsApp(ravi, l, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, it); got.Status != store.StatusSent || !strings.Contains(w.Sent[0].Text, "18.52") {
+		t.Fatalf("location: %s %s %+v", got.Status, got.Error, w.Sent)
+	}
+	ct, err := a.ShareContactWhatsApp(ctx, ravi, "Amma", "", OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, ct); got.Status != store.StatusSent || !strings.Contains(w.Sent[1].Text, "FN:Amma") || !strings.Contains(w.Sent[1].Text, "waid=919800000001") {
+		t.Fatalf("contact: %s %s %q", got.Status, got.Error, w.Sent[1].Text)
+	}
+	if _, err := a.ShareContactWhatsApp(ctx, ravi, "Weekend trek", "", OriginYou); err == nil {
+		t.Fatal("shared a group as a contact")
+	}
+	// disappearing: WhatsApp's timers only; what you send then carries it
+	if err := a.DisappearWhatsApp(ctx, ravi.Name, 3600); err == nil {
+		t.Fatal("a one-hour timer")
+	}
+	if err := a.DisappearWhatsApp(ctx, ravi.Name, 7*86400); err != nil {
+		t.Fatal(err)
+	}
+	if sp, _ := a.Store.Space(store.WhatsAppAccount, ravi.Name); sp.Disappear != 7*86400 {
+		t.Fatalf("timer here: %d", sp.Disappear)
+	}
+	it, _ = a.Queue(store.WhatsAppAccount, "whatsapp", store.Outgoing{Space: ravi.Name, Body: "gone in a week"}, OriginYou)
+	deliver(t, a, ctx, it)
+	if w.Disappear[ravi.Name] != 7*86400 {
+		t.Fatalf("the send didn't carry the timer: %v", w.Disappear)
+	}
+	// the other side turns it off: the chat says so, and the timer goes
+	w.Receive(whatsapp.Message{ID: "E1", Chat: ravi.Name, Sender: ravi.Name, Text: whatsapp.DisappearText(0), Disappear: -1})
+	if sp, _ := a.Store.Space(store.WhatsAppAccount, ravi.Name); sp.Disappear != 0 {
+		t.Fatalf("timer after off: %d", sp.Disappear)
+	}
+}

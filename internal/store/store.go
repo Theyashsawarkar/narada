@@ -239,6 +239,7 @@ func migrate(db *sql.DB) error {
 			`ALTER TABLE spaces ADD COLUMN muted_until INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE chat_messages ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`,
 			`ALTER TABLE spaces ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE spaces ADD COLUMN disappear INTEGER NOT NULL DEFAULT 0`,
 			`CREATE TABLE IF NOT EXISTS whatsapp_polls (msg TEXT PRIMARY KEY, question TEXT NOT NULL, options TEXT NOT NULL, multi INTEGER NOT NULL DEFAULT 0)`,
 			`CREATE TABLE IF NOT EXISTS whatsapp_votes (msg TEXT NOT NULL, voter TEXT NOT NULL, options TEXT NOT NULL, PRIMARY KEY (msg, voter))`,
 			`CREATE TABLE IF NOT EXISTS whatsapp_presence (jid TEXT PRIMARY KEY, online INTEGER NOT NULL DEFAULT 0,
@@ -936,6 +937,7 @@ type Space struct {
 	Archived    bool   `json:"archived,omitempty"`    // WhatsApp: out of the list, in Archived
 	MutedUntil  int64  `json:"muted_until,omitempty"` // WhatsApp: no notifications until (ms; -1 for ever)
 	Blocked     bool   `json:"blocked,omitempty"`     // WhatsApp: you blocked them
+	Disappear   int    `json:"disappear,omitempty"`   // WhatsApp: messages disappear after this many seconds
 	Type        string `json:"type"`                  // SPACE, GROUP_CHAT, DIRECT_MESSAGE
 	Members     int    `json:"members,omitempty"`     // people in it, when known
 	LastActive  int64  `json:"last_active"`
@@ -1439,6 +1441,11 @@ func (s *Store) SetMuted(account, space string, until int64) error {
 	return err
 }
 
+func (s *Store) SetDisappear(account, space string, secs int) error {
+	_, err := s.db.Exec(`UPDATE spaces SET disappear=? WHERE account=? AND name=?`, max(secs, 0), account, space)
+	return err
+}
+
 func (s *Store) SetBlocked(account, space string, on bool) error {
 	_, err := s.db.Exec(`UPDATE spaces SET blocked=? WHERE account=? AND name=?`, on, account, space)
 	return err
@@ -1723,7 +1730,7 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 // (messages from others after the space's read time). No accounts means
 // every Google account: WhatsApp's chats only come when asked by name.
 func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error) {
-	q := `SELECT s.account,s.name,s.display_name,s.alias,s.threaded,s.pinned,s.archived,s.muted_until,s.blocked,s.type,s.last_active,s.last_read,s.synced_to,s.members,
+	q := `SELECT s.account,s.name,s.display_name,s.alias,s.threaded,s.pinned,s.archived,s.muted_until,s.blocked,s.disappear,s.type,s.last_active,s.last_read,s.synced_to,s.members,
 	  (SELECT COUNT(*) FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=s.account AND c.space=s.name AND c.created>s.last_read AND c.sender<>a.chat_user),
 	  COALESCE((SELECT c.text FROM chat_messages c WHERE c.account=s.account AND c.space=s.name ORDER BY c.created DESC LIMIT 1),''),
 	  COALESCE((SELECT CASE WHEN c.sender<>'' AND c.sender=(SELECT chat_user FROM accounts WHERE name=s.account) THEN 'You' ELSE c.sender_name END
@@ -1747,7 +1754,7 @@ func (s *Store) Spaces(accounts []string, me map[string]string) ([]Space, error)
 	var out []Space
 	for rows.Next() {
 		var sp Space
-		if err := rows.Scan(&sp.Account, &sp.Name, &sp.DisplayName, &sp.Alias, &sp.Threaded, &sp.Pinned, &sp.Archived, &sp.MutedUntil, &sp.Blocked, &sp.Type, &sp.LastActive, &sp.LastRead, &sp.SyncedTo, &sp.Members, &sp.Unread, &sp.LastText, &sp.LastSender); err != nil {
+		if err := rows.Scan(&sp.Account, &sp.Name, &sp.DisplayName, &sp.Alias, &sp.Threaded, &sp.Pinned, &sp.Archived, &sp.MutedUntil, &sp.Blocked, &sp.Disappear, &sp.Type, &sp.LastActive, &sp.LastRead, &sp.SyncedTo, &sp.Members, &sp.Unread, &sp.LastText, &sp.LastSender); err != nil {
 			return nil, err
 		}
 		out = append(out, sp)

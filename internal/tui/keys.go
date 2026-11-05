@@ -59,6 +59,7 @@ var Keys = []Key{
 	{"Act", "p", "Toggle the chat pinned on top of the list (WhatsApp: on your phone too, three at most)"},
 	{"Act", "e (WhatsApp)", "Move the chat into Archived, or back out of it (archive; your phone follows)"},
 	{"Act", "Z (WhatsApp)", "Mute the chat for 8 hours (again: a week, then always, then unmuted)"},
+	{"Act", "X (WhatsApp)", "Set the chat's messages to disappear after 24 hours (again: 7 days, 90 days, then off)"},
 	{"Act", "I (WhatsApp group)", "Show the group's people, admins and description"},
 	{"Act", "B (WhatsApp)", "Block the person in this chat (B twice; again unblocks)"},
 	{"Act", "* (picking, WhatsApp)", "Toggle a star on the picked message (your phone follows)"},

@@ -49,6 +49,12 @@ Newest first.
   under it as a poll. `whatsapp poll <to> <question> <options...> [--multi]` and
   `whatsapp vote <poll> <option>...`; agents can ask one (`whatsapp_send` with
   `poll_options`), behind your approval.
+- **Share a place or a contact card on WhatsApp**: `whatsapp send --location LAT,LON
+  [--place NAME]` and `--contact WHO`, and `whatsapp_send` with `location` or `contact`.
+  Contact cards you receive show their numbers.
+- **Disappearing messages on WhatsApp**: `X` in a chat, `whatsapp disappear <chat>
+  24h|7d|90d|off`. An open chat shows the timer, what you send from narada carries
+  it, and a change made by anyone shows as a line in the chat.
 - These go through a queue that the narada holding WhatsApp works off (ADR 7), so they
   work beside the daemon.
 
