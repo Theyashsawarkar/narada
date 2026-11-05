@@ -168,3 +168,60 @@ func TestWhatsAppChatStateCommands(t *testing.T) {
 		t.Fatal("blocked a group")
 	}
 }
+
+func TestWhatsAppGroupCommands(t *testing.T) {
+	a, w := waApp(t)
+	out, err := run(t, a, "group", "new", "Book club", "Amma", "+919800000002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "made Book club") {
+		t.Fatalf("new: %s", out)
+	}
+	var g string
+	for jid, name := range w.Groups {
+		if name == "Book club" {
+			g = jid
+		}
+	}
+	if g == "" || len(w.Members[g]) != 3 {
+		t.Fatalf("group %q members %v", g, w.Members[g])
+	}
+	if _, err := run(t, a, "group", "rename", "Book club", "Book", "club", "2"); err != nil || w.Groups[g] != "Book club 2" {
+		t.Fatalf("rename: %v %q", err, w.Groups[g])
+	}
+	if sp, _ := a.Store.Space(store.WhatsAppAccount, g); sp.DisplayName != "Book club 2" {
+		t.Fatalf("not renamed here: %q", sp.DisplayName)
+	}
+	if _, err := run(t, a, "group", "add", "Book club 2", "+919800000005"); err != nil || len(w.Members[g]) != 4 {
+		t.Fatalf("add: %v %v", err, w.Members[g])
+	}
+	if _, err := run(t, a, "group", "remove", "Book club 2", "Amma"); err != nil || len(w.Members[g]) != 3 {
+		t.Fatalf("remove: %v %v", err, w.Members[g])
+	}
+	if out, err = run(t, a, "group", "info", "Book club 2"); err != nil || !strings.Contains(out, "3 people") || !strings.Contains(out, "(owner)") {
+		t.Fatalf("info: %v\n%s", err, out)
+	}
+	if out, _ = run(t, a, "group", "link", "Book club 2", "--reset"); strings.TrimSpace(out) != "https://chat.whatsapp.com/FAKEINVITE2" {
+		t.Fatalf("link: %q", out)
+	}
+	if out, err = run(t, a, "group", "join", "https://chat.whatsapp.com/ABC"); err != nil || !strings.Contains(out, "joined") {
+		t.Fatalf("join: %v %s", err, out)
+	}
+	if _, err := run(t, a, "group", "leave", "Book club 2"); err != nil {
+		t.Fatal(err)
+	}
+	if sp, _ := a.Store.Space(store.WhatsAppAccount, g); !sp.Archived {
+		t.Fatal("a group you left moves to Archived")
+	}
+	// abuse: a person isn't a group; a group isn't a person
+	if _, err := run(t, a, "group", "rename", "Amma", "x"); err == nil {
+		t.Fatal("renamed a person as a group")
+	}
+	if _, err := run(t, a, "group", "new", "x", "Weekend trek"); err == nil {
+		t.Fatal("a group as a member")
+	}
+	if _, err := run(t, a, "group", "join", "https://example.com/x"); err == nil {
+		t.Fatal("joined a non-WhatsApp link")
+	}
+}

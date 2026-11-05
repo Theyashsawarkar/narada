@@ -50,6 +50,7 @@ func (a *App) WhatsAppDo(ctx context.Context, action, chat, arg string, wait tim
 	}
 	deadline := time.After(wait)
 	for {
+		a.flushWhatsAppActions(ctx) // when this process holds WhatsApp (once it's connected)
 		if it, err := a.Store.WhatsAppActionByID(id); err == nil && it.Done {
 			if it.Error != "" {
 				return "", errors.New(it.Error)

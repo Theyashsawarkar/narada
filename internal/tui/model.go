@@ -1465,6 +1465,9 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 					case text == "":
 						return doneMsg{msg: "back to its own name"}
 					case onGoogle:
+						if sp.Account == store.WhatsAppAccount {
+							return doneMsg{msg: "renamed on WhatsApp"}
+						}
 						return doneMsg{msg: "renamed on Google Chat"}
 					}
 					return doneMsg{msg: "named here (Google Chat doesn't name DMs and groups)"}

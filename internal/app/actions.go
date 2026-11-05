@@ -159,6 +159,12 @@ func (a *App) RenameSpace(ctx context.Context, account, space, name string) (onG
 	if sp.Type == "DIRECT_MESSAGE" || name == "" {
 		return false, a.Store.SetAlias(account, space, name)
 	}
+	if account == store.WhatsAppAccount { // a group: renamed for everyone
+		if err := a.RenameWhatsAppGroup(ctx, space, name); err != nil {
+			return false, err
+		}
+		return true, a.Store.SetAlias(account, space, "")
+	}
 	c, err := a.Client(account)
 	if err != nil {
 		return false, err

@@ -41,6 +41,7 @@ Usage:
   narada whatsapp send <to> <text> send on WhatsApp (--attach, --voice; --link: click-to-chat)
   narada whatsapp save <message>  download a WhatsApp message's file
   narada whatsapp edit|delete|forward <message> ...  change or pass on a message
+  narada whatsapp group new|info|rename|add|link|leave ...  WhatsApp groups
   narada status                   unread counts (--json, --tmux)
   narada sync                     sync every account now
   narada outbox                   sends of the last week (cancel <id> stops one)

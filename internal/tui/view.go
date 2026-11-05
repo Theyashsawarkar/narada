@@ -54,6 +54,12 @@ func (m Model) renamePrompt() string {
 	if !ok {
 		return "name: "
 	}
+	switch {
+	case sp.Account == store.WhatsAppAccount && sp.Type == "GROUP_CHAT":
+		return "rename the group on WhatsApp (everyone sees it): "
+	case sp.Account == store.WhatsAppAccount:
+		return "name this chat (only here; empty: back to the default): "
+	}
 	switch sp.Type {
 	case "SPACE":
 		return "rename on Google Chat (everyone sees it): "

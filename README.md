@@ -276,6 +276,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `p` | Toggle the chat pinned on top of the list (WhatsApp: on your phone too, three at most) |
 | `e` (WhatsApp) | Move the chat into Archived, or back out of it (archive; your phone follows) |
 | `Z` (WhatsApp) | Mute the chat for 8 hours (again: a week, then always, then unmuted) |
+| `I` (WhatsApp group) | Show the group's people, admins and description |
 | `B` (WhatsApp) | Block the person in this chat (B twice; again unblocks) |
 | `*` (picking, WhatsApp) | Toggle a star on the picked message (your phone follows) |
 | `[` / `]` | Switch to the previous / next chat (staying in the conversation) |
@@ -292,7 +293,7 @@ The screen opens in **normal mode**: letters are commands. `/`, `s` and
 | `L` (WhatsApp, not linked) | Add this machine to WhatsApp (link it) with a QR code shown in the tab |
 | `P` (WhatsApp, not linked) | Add this machine to WhatsApp (link it) with your phone number and a code |
 | `t` | Move a scheduled send to another time (in Scheduled; Enter edits it) |
-| `n` | Rename the chat (spaces and groups on Google Chat; a DM only here) |
+| `n` | Rename the chat (spaces and groups for everyone, on Google Chat and WhatsApp; a DM only here) |
 | `N` | Start a conversation (opens the one you have with them, earlier messages and all) |
 | `v` | Open the attachments in their apps (kept in ~/Downloads/narada; picker when several) |
 | `V` | Save the attachments to ~/Downloads/narada without opening them |
@@ -540,7 +541,10 @@ a chat (the Archived section has them), `p` pins it (three at most, as
 WhatsApp allows), `M` marks it unread, `Z` mutes it (8 hours, again a week,
 again always, again unmuted; muted chats don't notify), `B B` blocks the
 person, and `*` stars the picked message; all of it reaches your phone, and
-what you change on the phone shows here. While a chat is open, its top line
+what you change on the phone shows here. In a group, `I` shows its people,
+admins and description, and `n` renames it for everyone; `narada whatsapp
+group` makes groups and adds, removes and promotes people, and gives or
+resets the invite link. While a chat is open, its top line
 says when they're typing (or recording a voice note), online, or when they
 were last seen (if they share it), and they see you typing, as with
 WhatsApp Web. The status
@@ -713,6 +717,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp archive\|unarchive\|pin\|unpin\|unread\|block\|unblock <chat>` | Change a chat, here and on your phone |
 | `narada whatsapp mute <chat> [--for 8h\|1w\|always]` / `unmute <chat>` | Silence a chat's notifications (always by default) |
 | `narada whatsapp star\|unstar <message>` / `starred` | Star a message; list the starred ones |
+| `narada whatsapp group new\|info\|rename\|about\|add\|remove\|promote\|demote\|link\|join\|leave ...` | Make and run groups: `new <name> <person>...`, `add <group> <person>...`, `link <group> [--reset]` (the invite link), `join <link>`, `leave <group>` |
 | `narada whatsapp list --archived` | The archived chats (left out of `list` otherwise) |
 | `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |
 | `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |

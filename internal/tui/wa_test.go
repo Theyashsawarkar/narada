@@ -238,3 +238,33 @@ func TestTypingAndPresence(t *testing.T) {
 		t.Fatalf("told %d times: %q", n, w.Did)
 	}
 }
+
+func TestRenameWhatsAppGroup(t *testing.T) {
+	m, w := waModel(t, "120363000000000001@g.us")
+	m.focus = 0
+	m = press(m, "n")
+	if m.mode != modeRename || !strings.Contains(m.renamePrompt(), "WhatsApp") {
+		t.Fatalf("n: mode %d, prompt %q", m.mode, m.renamePrompt())
+	}
+	m = press(m, "ctrl+u")
+	m = typeText(m, "Rajmachi crew")
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if done, ok := cmd().(doneMsg); !ok || done.err != nil || done.msg != "renamed on WhatsApp" {
+		t.Fatalf("%+v", done)
+	}
+	if w.Groups["120363000000000001@g.us"] != "Rajmachi crew" {
+		t.Fatalf("WhatsApp has %q", w.Groups["120363000000000001@g.us"])
+	}
+}
+
+func TestGroupInfoKey(t *testing.T) {
+	m, _ := waModel(t, "120363000000000001@g.us")
+	m.focus = 0
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("I")})
+	m = nm.(Model)
+	msg, ok := cmd().(aiMsg)
+	if !ok || msg.err != nil || !strings.Contains(msg.text, "4 people") || !strings.Contains(msg.text, "Ravi Kulkarni") {
+		t.Fatalf("%+v", msg)
+	}
+}

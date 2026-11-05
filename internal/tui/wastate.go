@@ -151,6 +151,37 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 			return m, m.act("muted for a week", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 7*24*time.Hour, false) }), true
 		}
 		return m, m.act("muted always", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 0, false) }), true
+	case "I":
+		if !whatsapp.IsGroup(sp.Name) {
+			m.say("I shows a group's people and description")
+			return m, nil, true
+		}
+		m.aiBusy = true
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			info, err := a.WhatsAppGroupInfo(ctx, sp.Name)
+			if err != nil {
+				return aiMsg{err: err}
+			}
+			var b strings.Builder
+			if info.About != "" {
+				b.WriteString(info.About + "\n\n")
+			}
+			fmt.Fprintf(&b, "%d people:\n", len(info.People))
+			for _, p := range info.People {
+				name, _, _ := a.Store.User(store.WhatsAppAccount, p.JID)
+				role := ""
+				if p.Owner {
+					role = " · owner"
+				} else if p.Admin {
+					role = " · admin"
+				}
+				fmt.Fprintf(&b, "  %s +%s%s\n", strings.TrimPrefix(firstNonEmpty(name, "?"), "~"), strings.TrimSuffix(p.JID, "@s.whatsapp.net"), role)
+			}
+			b.WriteString("\nnarada whatsapp group add|remove|promote|link … changes it")
+			return aiMsg{title: info.Name, text: b.String()}
+		}, true
 	case "B":
 		if whatsapp.IsGroup(sp.Name) {
 			m.say("B blocks a person; leave a group with narada whatsapp group leave")

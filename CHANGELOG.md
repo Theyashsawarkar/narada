@@ -40,6 +40,10 @@ Newest first.
 - **Typing and online on WhatsApp**: an open chat says when they're typing or
   recording, online, or last seen; they see you typing. Only while you have a chat
   open, as WhatsApp Web, so your phone keeps its notifications otherwise.
+- **WhatsApp groups**: `narada whatsapp group new|info|rename|about|add|remove|promote|
+  demote|link [--reset]|join|leave`. In the screen `n` renames a group for everyone
+  and `I` shows its people, admins and description. A group you leave moves to
+  Archived.
 - These go through a queue that the narada holding WhatsApp works off (ADR 7), so they
   work beside the daemon.
 

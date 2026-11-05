@@ -19,7 +19,7 @@ import (
 
 func whatsApp(a *app.App, args []string) error {
 	if len(args) == 0 {
-		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block")
+		return usageError("whatsapp what? link, unlink, list, read, send, save, edit, delete, forward, archive, pin, mute, unread, star, starred, block, group")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -285,6 +285,8 @@ func whatsApp(a *app.App, args []string) error {
 			fmt.Printf("★ %s · %s  %s  [%s]\n%s\n\n", chat, m.SenderName, When(m.Created), m.Name, m.Text)
 		}
 		return nil
+	case "group", "groups":
+		return waGroup(a, rest)
 	case "edit":
 		fs := flags("narada whatsapp edit", "narada whatsapp edit <message-id> <new text...>\n\nChange the text of a message you sent (whatsapp read shows the ids). WhatsApp\nallows it for 15 minutes after sending.")
 		pos, err := parse(fs, rest)
@@ -397,6 +399,121 @@ func whatsApp(a *app.App, args []string) error {
 		return waitSend(a, it)
 	}
 	return usageError("unknown whatsapp command %q", sub)
+}
+
+const groupUsage = `narada whatsapp group <what> ...
+
+  new <name> <person>...          make a group (people: names, numbers or ids)
+  info <group> [--json]           who's in it, its admins and description
+  rename <group> <name...>        rename it for everyone
+  about <group> <text...>         set its description
+  add|remove <group> <person>...  add or remove people (you must be an admin)
+  promote|demote <group> <person>...  make people admins, or not
+  link <group> [--reset]          its invite link (--reset: a new one; the old stops)
+  join <link>                     join a group by its invite link
+  leave <group>                   leave it`
+
+func waGroup(a *app.App, args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
+		fmt.Println(groupUsage)
+		if len(args) == 0 {
+			return usageError("whatsapp group what?")
+		}
+		return nil
+	}
+	sub, rest := args[0], args[1:]
+	fs := flags("narada whatsapp group "+sub, groupUsage)
+	reset := fs.Bool("reset", false, "link: make a new link")
+	asJSON := fs.Bool("json", false, "info: JSON output")
+	pos, err := parse(fs, rest)
+	if err != nil {
+		return err
+	}
+	need := map[string]int{"new": 2, "info": 1, "rename": 2, "about": 2, "add": 2, "remove": 2, "promote": 2, "demote": 2, "link": 1, "join": 1, "leave": 1}[sub]
+	if need == 0 {
+		return usageError("unknown whatsapp group command %q\n\n%s", sub, groupUsage)
+	}
+	if len(pos) < need {
+		return usageError("whatsapp group %s needs more\n\n%s", sub, groupUsage)
+	}
+	ctx, cancel := ctxSignal()
+	defer cancel()
+	startWhatsApp(ctx, a)
+	if sub == "new" {
+		people, err := a.WhatsAppIDs(ctx, pos[1:])
+		if err != nil {
+			return err
+		}
+		sp, err := a.NewWhatsAppGroup(ctx, pos[0], people)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("narada: made %s [%s]\n", SpaceTitle(sp), sp.Name)
+		return nil
+	}
+	if sub == "join" {
+		sp, err := a.JoinWhatsAppGroup(ctx, pos[0])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("narada: joined %s [%s]\n", SpaceTitle(sp), sp.Name)
+		return nil
+	}
+	g, err := a.WhatsAppChat(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	rest = pos[1:]
+	switch sub {
+	case "info":
+		info, err := a.WhatsAppGroupInfo(ctx, g.Name)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(info)
+		}
+		fmt.Printf("%s  [%s]\n", info.Name, info.JID)
+		if info.About != "" {
+			fmt.Printf("\n%s\n", info.About)
+		}
+		fmt.Printf("\n%d people:\n", len(info.People))
+		for _, p := range info.People {
+			name, _, _ := a.Store.User(store.WhatsAppAccount, p.JID)
+			role := ""
+			switch {
+			case p.Owner:
+				role = "  (owner)"
+			case p.Admin:
+				role = "  (admin)"
+			}
+			fmt.Printf("  %-28s +%s%s\n", strings.TrimPrefix(name, "~"), strings.TrimSuffix(p.JID, "@s.whatsapp.net"), role)
+		}
+		return nil
+	case "rename":
+		err = a.RenameWhatsAppGroup(ctx, g.Name, strings.Join(rest, " "))
+	case "about":
+		err = a.DescribeWhatsAppGroup(ctx, g.Name, strings.Join(rest, " "))
+	case "add", "remove", "promote", "demote":
+		var people []string
+		if people, err = a.WhatsAppIDs(ctx, rest); err == nil {
+			err = a.ChangeWhatsAppGroup(ctx, g.Name, sub, people)
+		}
+	case "link":
+		link, err := a.WhatsAppGroupLink(ctx, g.Name, *reset)
+		if err != nil {
+			return err
+		}
+		fmt.Println(link)
+		return nil
+	case "leave":
+		err = a.LeaveWhatsAppGroup(ctx, g.Name)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "narada: %s: done\n", SpaceTitle(g))
+	return nil
 }
 
 // waAct queues a change to a message and waits for it to go out, as a
