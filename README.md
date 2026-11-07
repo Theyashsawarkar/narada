@@ -54,7 +54,7 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
 ## Features
 
 - **Mail and chat in one place**: Gmail threads and Google Chat spaces and
-  DMs, one `Tab` apart.
+  DMs, one key apart (`1`, `2`, `3`).
 - **Sections, like saved searches**: Inbox, Today, Unread, Starred, or any
   Gmail search (`from:priya newer_than:7d`). Switch with `h`/`l`; each tab
   shows its unread count. Search with `s`, keep it as a section with `W`.
@@ -196,6 +196,15 @@ what they count. Then the list on the left, what's open on the right, and
 the mode and the keys that matter now at the bottom. Below 100 columns the
 list and what's open take turns: Enter opens, `h` or Esc goes back.
 
+Places are `1` to `4` (or `gt` / `gT`), sections `Tab` / `Shift+Tab` (or `[`
+/ `]`), as tabs are anywhere. **The mouse works too**: click a place, a
+section, a row (click it again to open it) or a message (to pick it), and the
+wheel scrolls what's under it. Opening a chat lets you read and write it
+(`i`); `j` / `k` pick a message for `r`, `e`, `yy` and the rest, and a key for
+one message with none picked acts on the latest. Esc goes back one step:
+picking → reading → the list. What you were writing stays, for each chat,
+until you send it or clear it (`Ctrl+u`).
+
 Colour always means something, and always comes with a shape or a word:
 each person has their own colour (avatar, name, the bar by their messages),
 yours is mauve, mentions are pink with an `@`, files yellow with 📎, links
@@ -219,9 +228,10 @@ colour of it, and recolours live when the theme changes.
   italics, strikes, `code`, quotes. Nothing is ever drawn to the right of a
   message, so text a terminal measures differently (Hindi, Marathi) can't
   push a frame out of line (see Troubleshooting).
-- **AI requests**: an agent's sends wait in the AI requests (`4`, or the
-  section of each place); `y`, `e` or `n` answer the one you picked, on a
-  card showing exactly what would go out.
+- **AI requests** (`4`): every send an agent is waiting on, mail, Chat and
+  WhatsApp in one list, each on a card showing exactly what would go out.
+  Only `y` (send), `e` (edit first) and `n` (decline, pressed twice) answer
+  one; no other key can send an agent's message.
 
 ## Keys
 
@@ -246,7 +256,7 @@ message or a mail) and shows the key for each, and `?` lists every key.
 | `J` / `K` | Scroll what's open a line down / up |
 | `h` / `l` | Move to the list / to what's open |
 | `Enter` | Open the thread or chat (marks it read) |
-| `q` / `Esc` | Go back, then quit |
+| `q` / `Esc` | Go back (q at the top quits) |
 | `[` / `]` | Switch to the previous / next section (Unread, Groups, Sent…) |
 | `1` / `2` / `3` / `4` | Go to Mail / Chat / WhatsApp / the AI requests |
 | `gt` / `gT` | Go to the next / previous place |
@@ -273,7 +283,7 @@ message or a mail) and shows the key for each, and `?` lists every key.
 | `m` / `M` | Set it as read / unread (or everything picked) |
 | `*` | Toggle the star on the thread or picked message |
 | `L` | Add or remove a label |
-| `v` | Pick several (VISUAL): j/k grow it, then dd, m, M, * or y act on all |
+| `v` | Pick several (VISUAL): j/k, gg, G grow it, then d, m, M, * or y act on all |
 | `V` | Pick the whole list (again clears) |
 | `Alt+r` | Set everything in this list as read |
 | `yy` / `Y` | Copy the picked message / the link to the thread or chat |
@@ -547,7 +557,7 @@ threads a minute, with a progress bar in the top bar.
 ## WhatsApp
 
 narada links to your WhatsApp the way WhatsApp Web does: as a linked
-device of your phone's account. Open the WhatsApp tab (`Tab` twice) and
+device of your phone's account. Open WhatsApp (`3`) and
 press `L`: the QR code shows right there; scan it from WhatsApp → Settings
 → Linked devices. `P` links with your phone number instead (you type a code
 on the phone). A progress bar follows while the phone sends your recent
@@ -560,9 +570,9 @@ narada whatsapp link --phone +9198…   # or type a code on the phone instead
 
 Keep it open after scanning: it waits until the phone has logged the new
 device in and sent your recent chats (up to two minutes), then hands over
-to the background service. `Tab` in the screen now
-goes Mail → Chat → WhatsApp, with sections All, Unread, People, Groups,
-Scheduled, Archived and Status; `i` types a message, `r` on a picked message replies quoting it,
+to the background service. WhatsApp is the third place (`3`), with
+sections All, Unread, People, Groups, Scheduled, Archived and Status (a row
+for each person with a status up); `i` types a message, `r` on a picked message replies quoting it,
 `e` reacts to it (one reaction each, as on the phone: another replaces yours,
 picking yours again takes it back, and other people's show under their messages),
 `@` while typing lists who you can tag (a group's members and whoever has written

@@ -127,15 +127,16 @@ func TestScreen(t *testing.T) {
 	if th, ok := m.curThread(); !ok || th.ID != "t-rohan" || m.search == nil {
 		t.Fatalf("opened: %+v %v", th, m.search)
 	}
-	m = press(m, "[", "tab")
+	m = press(m, "[", "2")
 	if !strings.Contains(m.View(), "portal-dev") {
 		t.Fatal("chat tab")
 	}
 	m = press(m, "?")
+	m = typeText(m, "summary")
 	if !strings.Contains(m.View(), "Claude's summary") {
 		t.Fatal("help sheet")
 	}
-	m = press(m, "esc", "]")
+	m = press(m, "esc", "esc", "]") // the first Esc clears the filter
 	if chatSections[m.sec] != "Unread" || len(m.spaces) != 2 {
 		t.Fatalf("chat Unread section: %d", len(m.spaces))
 	}
@@ -260,7 +261,7 @@ func TestSearchScopes(t *testing.T) {
 	}
 	m = press(m, "esc")
 	// a chat space: only its messages
-	m = press(m, "tab", "j") // chat, portal-dev
+	m = press(m, "2", "j") // chat, portal-dev
 	m = press(m, " ", "/")
 	m = typeText(m, "smoke")
 	m = runSearch(t, m)
@@ -327,7 +328,7 @@ func TestSchedule(t *testing.T) {
 
 func TestScheduledChat(t *testing.T) {
 	m := model(t)
-	m = press(m, "tab", "j", "i") // chat, portal-dev, type
+	m = press(m, "2", "j", "i") // chat, portal-dev, type
 	m = typeText(m, "standup notes")
 	m = press(m, "ctrl+t")
 	m = typeText(m, "tomorrow 9am")
@@ -353,7 +354,7 @@ func TestScheduledChat(t *testing.T) {
 
 func TestNewConversation(t *testing.T) {
 	m := model(t)
-	m = press(m, "tab", " ", "N")
+	m = press(m, "2", " ", "N")
 	if m.mode != modeConvo || !strings.Contains(m.View(), "new conversation") {
 		t.Fatal("N should open (and draw) the new conversation window")
 	}
@@ -413,7 +414,7 @@ func TestGroupNameAndSignIn(t *testing.T) {
 	m := model(t)
 	g := lastFake
 	g.NeedsScope = true
-	m = press(m, "tab", " ", "N")
+	m = press(m, "2", " ", "N")
 	m = typeText(m, "arj")
 	m = press(m, "tab")
 	m = typeText(m, "neh")
@@ -440,7 +441,7 @@ func TestGroupNameAndSignIn(t *testing.T) {
 
 func TestChatReplies(t *testing.T) {
 	m := model(t)
-	m = press(m, "tab") // chat, Priya's DM first
+	m = press(m, "2") // chat, Priya's DM first
 	if sp, _ := m.curSpace(); sp.Name != "spaces/dm-priya" {
 		t.Fatalf("first chat: %s", sp.Name)
 	}
@@ -454,7 +455,7 @@ func TestChatReplies(t *testing.T) {
 		t.Fatal("thread labels in an unthreaded chat")
 	}
 	// pick your own message and reply to it
-	m = press(m, "enter") // focus the conversation: the latest message picked
+	m = press(m, "enter", "k") // open the conversation, then pick its latest message
 	if !m.pickingMsg() || m.chatSel != len(m.chatMsgs)-1 {
 		t.Fatalf("picking: %v sel %d", m.pickingMsg(), m.chatSel)
 	}
@@ -483,7 +484,7 @@ func TestChatExtras(t *testing.T) {
 	m := model(t)
 	g := lastFake
 	g.AddChat(fake.ChatMessage{Space: "spaces/dm-priya", Sender: "users/2", Text: "from last month", Created: time.Now().AddDate(0, -1, 0)})
-	m = press(m, "tab") // Priya's DM
+	m = press(m, "2") // Priya's DM
 	v := m.View()
 	// a DM doesn't list "You, Priya · 2 people": its title says who
 	if !strings.Contains(v, "new") || strings.Contains(v, "2 people") {
@@ -568,7 +569,7 @@ func TestJumpToOriginal(t *testing.T) {
 	g.AddChat(fake.ChatMessage{Name: "spaces/dm-priya/messages/C", Space: "spaces/dm-priya", Sender: "users/2", Text: "message C", Created: time.Now(), Quoted: "spaces/dm-priya/messages/B"})
 	m.a.SyncAll(context.Background())
 	m.reload()
-	m = press(m, "tab", "enter") // the DM, latest message (C) picked
+	m = press(m, "2", "enter", "k") // the DM, latest message (C) picked
 	if m.chatMsgs[m.chatSel].Text != "message C" {
 		t.Fatalf("picked %q", m.chatMsgs[m.chatSel].Text)
 	}
@@ -595,7 +596,7 @@ func TestJumpToOriginal(t *testing.T) {
 
 func TestPickAndMarkAllRead(t *testing.T) {
 	m := model(t)
-	m = press(m, "tab") // chat
+	m = press(m, "2") // chat
 	unread := func() int {
 		n := 0
 		for _, sp := range m.spaces {

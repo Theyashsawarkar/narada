@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -444,7 +445,11 @@ func (m *Model) listView(w, h int) string {
 		} else if m.syncing {
 			msg = "Syncing…"
 		}
-		return "\n " + s.muted.Render(msg)
+		var out []string
+		for _, l := range wrap(msg, max(10, w-4)) {
+			out = append(out, " "+s.muted.Render(l))
+		}
+		return "\n" + strings.Join(out, "\n")
 	}
 	cw := w - 6 // card inner width: margins, borders and padding on both sides
 	var out []string
@@ -509,7 +514,7 @@ func (m *Model) listView(w, h int) string {
 				}
 				lines = []string{row(s.text.Render(to), fg(col).Render(status), cw), s.text.Render(t.Subject),
 					ansi.Truncate(fg(col).Render(hint)+s.muted.Render("  "+oneLine(it.Out.Body)), cw, "…")}
-				out = m.appendItem(out, lines, cw, border, sel, false)
+				out = m.addRow(out, i, lines, cw, border, sel, false)
 				continue
 			}
 			sentSt, isSent := m.sentStat[t.Account+"/"+t.ID]
@@ -551,14 +556,17 @@ func (m *Model) listView(w, h int) string {
 				}
 				lines = []string{row(m.avatar(sp.DisplayName)+" "+s.text.Render("→ "+sp.DisplayName), fg(col).Render(status), cw),
 					m.indent() + ansi.Truncate(s.muted.Render(m.waTagged(sp.LastText)), cw-lipgloss.Width(m.indent()), "…")}
-				out = m.appendItem(out, lines, cw, border, sel, false)
+				out = m.addRow(out, i, lines, cw, border, sel, false)
 				continue
 			}
 			dot = sp.Unread > 0
 			name := cli.SpaceTitle(sp)
 			mark := s.muted.Render("# ")
-			if sp.Type == "DIRECT_MESSAGE" {
+			switch sp.Type {
+			case "DIRECT_MESSAGE":
 				mark = s.muted.Render("@ ")
+			case store.TypeStatus:
+				mark = ""
 			}
 			title := s.sub.Render(name)
 			if sp.Unread > 0 {
@@ -587,7 +595,7 @@ func (m *Model) listView(w, h int) string {
 			}
 			lines = []string{row(m.avatar(name)+" "+mark+title, s.muted.Render(cli.When(sp.LastActive)), cw), m.indent() + s.muted.Render(last)}
 		}
-		out = m.appendItem(out, lines, cw, border, sel, dot)
+		out = m.addRow(out, i, lines, cw, border, sel, dot)
 	}
 	// the end of a mail list: older mail comes from Gmail on demand
 	if m.tab == tabMail && m.offset+visible >= m.count() && !m.currentSection().Today && m.currentSection().Label != "SCHEDULED" && !m.inAISection() {
@@ -944,10 +952,10 @@ func (m *Model) chatLines(w int) []string {
 		if c.Mine {
 			color = s.c.Mauve
 		}
-		mineAt := w * 30 / 100 // yours start here, theirs at the left
 		out = append(out, "")
+		runStart := len(out) // yours: moved to the right edge once drawn
 		if c.Mine {
-			out = append(out, strings.Repeat(" ", mineAt)+fg(color).Bold(true).Render("You")+s.muted.Render("  "+time.UnixMilli(c.Created).Format("15:04")))
+			out = append(out, fg(color).Bold(true).Render("You")+s.muted.Render("  "+time.UnixMilli(c.Created).Format("15:04")))
 		} else {
 			out = append(out, m.avatar(name)+" "+fg(color).Bold(true).Render(name)+s.muted.Render("  "+time.UnixMilli(c.Created).Format("15:04")))
 		}
@@ -1026,7 +1034,7 @@ func (m *Model) chatLines(w int) []string {
 					mark = s.accent.Bold(true).Render("▶") + " "
 				}
 				if g.Mine {
-					out = append(out, strings.Repeat(" ", max(0, mineAt-2))+mark+l)
+					out = append(out, mark+l)
 				} else {
 					ind := m.indent()
 					out = append(out, ind[:len(ind)-min(2, len(ind))]+mark+l)
@@ -1039,10 +1047,22 @@ func (m *Model) chatLines(w int) []string {
 				}
 				line := strings.Join(chips, " ")
 				if g.Mine {
-					out = append(out, strings.Repeat(" ", mineAt+2)+line)
+					out = append(out, "  "+line)
 				} else {
 					out = append(out, m.indent()+"  "+line)
 				}
+			}
+		}
+		if c.Mine {
+			// your run ends at the right edge, as in any chat app; its bar
+			// stays on the left of the text, so nothing follows the text
+			widest := 0
+			for _, l := range out[runStart:] {
+				widest = max(widest, lipgloss.Width(l))
+			}
+			pad := strings.Repeat(" ", max(w/4, w-widest-1))
+			for k := runStart; k < len(out); k++ {
+				out[k] = pad + out[k]
 			}
 		}
 		i = j
@@ -1230,6 +1250,23 @@ func (m Model) previewPane(w, h int) []string {
 	s := m.styles
 	inner := w - 4
 	head := s.muted.Render("Nothing open")
+	if m.inAISection() && len(m.waiting) == 0 {
+		// the AI requests, empty: what lands here and how to answer it
+		out := []string{fitTerm("  "+s.peach.Bold(true).Render("✦ Nothing waiting for you"), w), fitTerm(" "+s.muted.Faint(true).Render(strings.Repeat("─", max(1, w-3))), w), ""}
+		for _, l := range []string{
+			"When an agent (Claude Code, Codex…) asks to send a mail, a Google Chat",
+			"message or a WhatsApp message, and your send_policy says to ask, it",
+			"waits here: exactly what would go out, to whom, and why.",
+			"",
+			"y sends it · e edits it first · n declines (twice) · Enter shows it all",
+		} {
+			out = append(out, fitTerm("  "+s.sub.Render(l), w))
+		}
+		for len(out) < h {
+			out = append(out, strings.Repeat(" ", w))
+		}
+		return out[:h]
+	}
 	if _, ok := m.curOutbox(); ok {
 		head = s.peach.Bold(true).Render("Outbox")
 	}
@@ -1244,7 +1281,9 @@ func (m Model) previewPane(w, h int) []string {
 	}
 	aiLines := m.aiLines(inner)
 	var bottom []string
-	if sp, ok := m.curSpace(); ok {
+	if sp, ok := m.curSpace(); ok && sp.Type == store.TypeStatus && m.mode != modeChatMsg {
+		bottom = []string{"", s.muted.Render("r replies to a status, e reacts: they get it in your chat with them, quoting it")}
+	} else if ok {
 		rows := max(1, min(8, (h-2)/3))
 		if m.mode == modeChatMsg {
 			// one frame: what it replies to, the files, then the text (the
@@ -1294,6 +1333,29 @@ func (m Model) previewPane(w, h int) []string {
 	}
 	if max := len(lines) - avail; max > 0 {
 		head += s.muted.Render(fmt.Sprintf("  %d%%", scroll*100/max))
+	}
+	if m.hits != nil && m.hits.msgRows != nil { // where each message is, for a click
+		// every line of a message, up to where the next one starts
+		type at struct {
+			line int
+			name string
+		}
+		var starts []at
+		for name, line := range m.chatMsgLine {
+			starts = append(starts, at{line, name})
+		}
+		sort.Slice(starts, func(i, j int) bool { return starts[i].line < starts[j].line })
+		for k, st := range starts {
+			end := len(lines)
+			if k+1 < len(starts) {
+				end = starts[k+1].line - 1 // the blank or name line before it isn't this one
+			}
+			for line := st.line; line < end; line++ {
+				if line >= scroll && line < scroll+avail {
+					m.hits.msgRows[4+line-scroll] = st.name // under the places, sections, header and rule
+				}
+			}
+		}
 	}
 	bar := s.muted.Render("  ")
 	if m.focus == 1 || m.mode == modeChatMsg {

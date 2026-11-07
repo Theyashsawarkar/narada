@@ -93,8 +93,9 @@ func (m Model) helpKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-var groupTitles = map[string]string{"Move": "Moving around", "Act": "Mail and chat", "Claude": "Claude", "Other": "Other",
-	"Search": "Search window", "Compose": "Writing a mail", "Review": "Reviewing a message", "Approve": "Approving an agent's send"}
+var groupTitles = map[string]string{"Move": "Moving around", "Act": "Mail and chat", "Space": "Space, then…", "Claude": "Claude",
+	"Other": "Other", "Insert": "Writing a message", "Search": "The search (/)", "Compose": "Writing a mail",
+	"Review": "Reviewing a message", "Approve": "The approval popup"}
 
 func (m Model) helpPopup() []string {
 	s := m.styles
@@ -103,7 +104,7 @@ func (m Model) helpPopup() []string {
 	iw := w - 4
 	q := strings.ToLower(strings.TrimSpace(m.helpQ))
 	// groups, in an order that reads well; the one for where you are first
-	order := []string{"Move", "Act", "Claude", "Search", "Compose", "Review", "Approve", "Other"}
+	order := []string{"Move", "Act", "Space", "Insert", "Claude", "Other", "Search", "Compose", "Review", "Approve"}
 	type entry struct{ keys, desc string }
 	groups := map[string][]entry{}
 	n := 0
@@ -186,7 +187,7 @@ func (m Model) helpPopup() []string {
 		}
 		body = append(body, strings.Join(parts, s.muted.Render(" │ ")))
 	}
-	avail := h - 4
+	avail := max(1, h-4)
 	top := min(m.helpTop, max(0, len(body)-avail))
 	body = body[top:min(len(body), top+avail)]
 	filter := s.muted.Render("type to filter")

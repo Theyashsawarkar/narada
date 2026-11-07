@@ -42,7 +42,7 @@ type finder struct {
 	section    config.Section // the section you were in
 	space      store.Space    // the chat you were in
 	seq        int            // bumped on every change; stale answers are dropped
-	actions    []Key          // what narada can do, matching the words
+	actions    []action       // what narada can do, matching the words (after the results)
 	mail       []findMail
 	convos     []store.Space // chats whose name matches
 	people     []person      // people to open a conversation with
@@ -113,28 +113,83 @@ func (f *finder) mailScope() bool { return f.scope == scopeSection || f.scope ==
 func (f *finder) query() string { return strings.TrimSpace(f.input.Value()) }
 
 func (f *finder) count() int {
-	return len(f.actions) + len(f.mail) + len(f.convos) + len(f.people) + len(f.chat)
+	return len(f.mail) + len(f.convos) + len(f.people) + len(f.chat) + len(f.actions)
 }
 
-// matchActions finds the keys whose description has every word typed
-// (only those / can do: Run is set), at most five.
-func matchActions(q string) []Key {
+// action is something / can do: one key, what it does, where it works.
+type action struct {
+	desc, key, run string
+	where          string // "" anywhere, mail, chat (Google Chat and WhatsApp), wa
+}
+
+var actions = []action{
+	{"Archive this thread or chat", "dd", "dd", ""},
+	{"Trash this thread", "#", "#", "mail"},
+	{"Mark it read", "m", "m", ""},
+	{"Mark it unread", "M", "M", ""},
+	{"Star it", "*", "*", "mail"},
+	{"Label it", "L", "L", "mail"},
+	{"Undo the last change", "u", "u", ""},
+	{"Reply", "r", "r", ""},
+	{"Reply to everyone", "R", "R", "mail"},
+	{"Forward it", "f", "f", "mail"},
+	{"Write a new mail", "c", "c", "mail"},
+	{"Write a message here", "i", "i", "chat"},
+	{"Start a conversation", "Space N", "Space N", ""},
+	{"Open the files", "gf", "gf", ""},
+	{"Save the files", "gF", "gF", ""},
+	{"Open a link", "gx", "gx", ""},
+	{"Open in the browser", "b", "b", ""},
+	{"Copy the link", "Y", "Y", ""},
+	{"Send a file here", "U", "U", "chat"},
+	{"Pin this chat", "p", "p", "chat"},
+	{"Mute this chat", "Z", "Z", "wa"},
+	{"Rename this chat", "Space R", "Space R", "chat"},
+	{"Show the group's people", "I", "I", "wa"},
+	{"Fold or unfold the thread", "za", "za", "mail"},
+	{"Show the quoted text", "zq", "zq", "mail"},
+	{"Go to Mail", "1", "1", ""},
+	{"Go to Google Chat", "2", "2", ""},
+	{"Go to WhatsApp", "3", "3", ""},
+	{"Go to the AI requests", "4", "4", ""},
+	{"Show only the unread", "Space u", "Space u", ""},
+	{"Jump to the next unread", "n", "n", ""},
+	{"Pick several (visual)", "v", "v", ""},
+	{"Switch account", "Space x", "Space x", ""},
+	{"Sync now", "Space r", "Space r", ""},
+	{"Save this search as a section", "W", "W", "mail"},
+	{"Draft a reply with Claude", "Space d", "Space d", "mail"},
+	{"Summarise with Claude", "Space s", "Space s", ""},
+	{"Ask Claude", "Space k", "Space k", ""},
+	{"Today's digest", "Space t", "Space t", ""},
+	{"Show every key", "?", "?", ""},
+	{"Quit narada", "Space q", "Space q", ""},
+}
+
+// matchActions finds the actions that work here whose words start with
+// every word typed ("arch" finds archive, not search), at most five.
+func (m Model) matchActions(q string) []action {
 	words := strings.Fields(strings.ToLower(q))
 	if len(words) == 0 || strings.Contains(q, ":") {
 		return nil
 	}
-	var out []Key
-	for _, k := range Keys {
-		if k.Run == "" {
+	here := map[string]bool{"": true, "mail": m.tab == tabMail, "chat": m.tab == tabChat, "wa": m.wa}
+	var out []action
+	for _, a := range actions {
+		if !here[a.where] {
 			continue
 		}
-		hay := strings.ToLower(k.Desc + " " + k.Keys)
+		have := strings.Fields(strings.ToLower(a.desc))
 		all := true
 		for _, w := range words {
-			all = all && strings.Contains(hay, w)
+			hit := false
+			for _, h := range have {
+				hit = hit || strings.HasPrefix(h, w)
+			}
+			all = all && hit
 		}
 		if all {
-			out = append(out, k)
+			out = append(out, a)
 			if len(out) == 5 {
 				break
 			}
@@ -149,7 +204,7 @@ func (f *finder) at(i int) (string, int) {
 	for _, g := range []struct {
 		kind string
 		n    int
-	}{{"action", len(f.actions)}, {"mail", len(f.mail)}, {"convo", len(f.convos)}, {"person", len(f.people)}, {"chat", len(f.chat)}} {
+	}{{"mail", len(f.mail)}, {"convo", len(f.convos)}, {"person", len(f.people)}, {"chat", len(f.chat)}, {"action", len(f.actions)}} {
 		if i < g.n {
 			return g.kind, i
 		}
@@ -193,7 +248,7 @@ func (m *Model) findChanged() tea.Cmd {
 	f.sel = 0
 	f.actions = nil
 	if searchable(f.query()) {
-		f.actions = matchActions(f.query()) // at once: no search to wait for
+		f.actions = m.matchActions(f.query()) // at once: no search to wait for
 	}
 	if f.cancel != nil {
 		f.cancel()
@@ -384,10 +439,10 @@ func (m *Model) wantPreview() tea.Cmd {
 	w := m.findPrevWidth()
 	if kind, i := f.at(f.sel); kind == "action" {
 		k := f.actions[i]
-		key := "a/" + k.Keys
+		key := "a/" + k.key
 		f.wantPrev = key
 		s := m.styles
-		f.previews[key] = append([]string{s.bold.Render(k.Desc), "", s.muted.Render("the key: ") + s.keycap.Render(k.Keys), ""},
+		f.previews[key] = append([]string{s.bold.Render(k.desc), "", s.muted.Render("the key: ") + s.keycap.Render(k.key), ""},
 			s.muted.Render("Enter does it now; the key does it any time."))
 		return nil
 	} else if kind == "mail" {
@@ -554,7 +609,7 @@ func (m Model) openFound() (tea.Model, tea.Cmd) {
 	}
 	m.find, m.mode = nil, modeNormal
 	if kind, i := f.at(f.sel); kind == "action" {
-		return m.runKeys(f.actions[i].Run)
+		return m.runKeys(f.actions[i].run)
 	} else if kind == "mail" {
 		chosen := f.mail[i].t
 		name := "search: " + q
@@ -728,26 +783,9 @@ func (m Model) findList(w int, q string) []string {
 		return []string{"", s.muted.Render(" " + msg)}
 	}
 	var out []string
-	if len(f.actions) > 0 {
-		out = append(out, s.muted.Bold(true).Render(fmt.Sprintf(" ACTIONS · %d", len(f.actions))))
-	}
-	for i, k := range f.actions {
-		mark := "  "
-		if i == f.sel {
-			mark = s.mauve.Bold(true).Render("▌ ")
-		}
-		l1 := mark + s.mauve.Render("✦ ") + hl(k.Desc, s.text)
-		if i == f.sel {
-			l1 += "\x00sel"
-		}
-		out = append(out, row(ansi.Truncate(l1, w-lipgloss.Width(k.Keys)-3, "…"), s.keycap.Render(k.Keys), w))
-	}
-	if len(f.actions) > 0 && f.count() > len(f.actions) {
-		out = append(out, "")
-	}
 	for i, x := range f.mail {
 		t := x.t
-		sel := len(f.actions)+i == f.sel
+		sel := i == f.sel
 		mark := "  "
 		if sel {
 			mark = s.accent.Bold(true).Render("▌ ")
@@ -768,7 +806,7 @@ func (m Model) findList(w int, q string) []string {
 		}
 		out = append(out, row(l1, right, w), ansi.Truncate(l2, w, "…"))
 	}
-	base := len(f.actions) + len(f.mail)
+	base := len(f.mail)
 	group := func(title string, n int) {
 		if n > 0 {
 			if len(out) > 0 {
@@ -836,6 +874,24 @@ func (m Model) findList(w int, q string) []string {
 			l2 = s.accent.Bold(true).Render("▌") + l2[1:]
 		}
 		out = append(out, row(l1, s.muted.Render(cli.When(c.Created)), w), ansi.Truncate(l2, w, "…"))
+	}
+	base += len(f.chat)
+	if len(f.actions) > 0 {
+		if len(out) > 0 {
+			out = append(out, "")
+		}
+		out = append(out, s.muted.Bold(true).Render(fmt.Sprintf(" ACTIONS · %d", len(f.actions))))
+	}
+	for i, k := range f.actions {
+		mark := "  "
+		if base+i == f.sel {
+			mark = s.mauve.Bold(true).Render("▌ ")
+		}
+		l1 := mark + s.mauve.Render("✦ ") + hl(k.desc, s.text)
+		if base+i == f.sel {
+			l1 += "\x00sel"
+		}
+		out = append(out, row(ansi.Truncate(l1, w-lipgloss.Width(k.key)-3, "…"), s.keycap.Render(k.key), w))
 	}
 	return out
 }

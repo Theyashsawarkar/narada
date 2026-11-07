@@ -71,7 +71,7 @@ type place struct {
 
 func (m Model) places() []place {
 	s := m.styles
-	ai := len(m.waitingOf("mail")) + len(m.waitingOf("chat")) + len(m.waitingOf("whatsapp"))
+	ai := len(m.waiting)
 	return []place{
 		{"1", "Mail", "󰇮", s.c.Blue, m.counts[m.sections[0].Name], m.tab == tabMail && !m.inAISection()},
 		{"2", "Chat", "󰭹", s.c.Teal, m.chatN, m.tab == tabChat && !m.wa && !m.inAISection()},
@@ -106,8 +106,12 @@ func (m Model) topBar() string {
 		if small && !p.on {
 			label = ""
 		}
+		icon := p.icon
+		if !s.nerd { // plain symbols any font has
+			icon = map[string]string{"1": "✉", "2": "◆", "3": "✆", "4": "✦"}[p.key]
+		}
 		if s.nerd || small {
-			label = strings.TrimSpace(p.icon + " " + label)
+			label = strings.TrimSpace(icon + " " + label)
 		}
 		if p.on {
 			if p.n > 0 {
@@ -127,6 +131,13 @@ func (m Model) topBar() string {
 		parts = append(parts, " "+cell+" ")
 	}
 	left := " " + strings.Join(parts, " ")
+	if m.hits != nil { // where each place is, for a click
+		x := 1
+		for i, p := range parts {
+			m.hits.places = append(m.hits.places, spanOf(x, p, i))
+			x += lipgloss.Width(p) + 1
+		}
+	}
 	right := m.whoAmI(small)
 	if m.syncing {
 		right = s.muted.Render("syncing… ") + right
@@ -205,8 +216,13 @@ func (m Model) sectionStrip() string {
 	s := m.styles
 	col := m.partColor()
 	var parts []string
+	var secs []int // the section each part opens
+	at := -1       // the section being added
+	cur := 0
 	add := func(label string, n int, ncol string, on bool) {
+		secs = append(secs, at)
 		if on {
+			cur = len(parts)
 			if n > 0 {
 				label += fmt.Sprintf(" %d", n)
 			}
@@ -221,8 +237,15 @@ func (m Model) sectionStrip() string {
 		parts = append(parts, " "+cell+" ")
 	}
 	switch {
+	case m.inAISection():
+		add("Waiting for you", len(m.waiting), col, true)
+		parts = append(parts, s.muted.Render("  y sends · e edits first · n declines · Enter shows it all"))
 	case m.tab == tabMail:
 		for i, sec := range m.sections {
+			if sec.Label == aiLabel {
+				continue // the AI requests are a place of their own (4)
+			}
+			at = i
 			ncol := col
 			if sec.Name == "Unread" {
 				ncol = s.c.Red
@@ -244,6 +267,7 @@ func (m Model) sectionStrip() string {
 				continue
 			}
 			label, n, ncol := name, 0, col
+			at = i
 			switch {
 			case name == "Unread":
 				n, ncol = unread, s.c.Red
@@ -253,18 +277,31 @@ func (m Model) sectionStrip() string {
 				label = "Groups"
 			case name == "Scheduled":
 				n, ncol = m.chatScheduled, s.c.Sky
-			case name == aiSection:
-				n, ncol = len(m.waitingOf(m.aiKind())), s.c.Peach
 			case name == "Status":
 				n = m.statusN
 			}
 			add(label, n, ncol, i == m.sec)
 		}
 	}
-	left := " " + strings.Join(parts, "")
-	hint := s.keycap.Render("[ ]") + s.muted.Render(" sections")
-	if m.w < 110 {
+	hint := s.keycap.Render("Tab") + s.muted.Render(" sections")
+	if m.w < 110 || m.inAISection() {
 		hint = ""
+	}
+	// too narrow for all of them: the ones before drop off, never the
+	// current one
+	more := ""
+	for cur > 0 && len(secs) > 0 && lipgloss.Width(" "+strings.Join(parts, ""))+2 > m.w-lipgloss.Width(hint)-1 {
+		parts, secs, cur, more = parts[1:], secs[1:], cur-1, s.muted.Render(" ‹")
+	}
+	left := more + " " + strings.Join(parts, "")
+	if m.hits != nil { // where each section is, for a click
+		x := lipgloss.Width(more) + 1
+		for i, p := range parts {
+			if i < len(secs) && secs[i] >= 0 {
+				m.hits.sections = append(m.hits.sections, spanOf(x, p, secs[i]))
+			}
+			x += lipgloss.Width(p)
+		}
 	}
 	return row(left, hint+" ", m.w)
 }
@@ -278,7 +315,7 @@ func (m Model) modeLook() (string, string) {
 	switch {
 	case m.leader:
 		return "LEADER", s.c.Mauve
-	case m.visual:
+	case m.visual && m.mode == modeNormal:
 		return "VISUAL", s.c.Peach
 	}
 	switch m.mode {
@@ -318,6 +355,9 @@ func (m Model) footerView() string {
 	name, col := m.modeLook()
 	pill := lipgloss.NewStyle().Foreground(lipgloss.Color(s.c.Crust)).Background(lipgloss.Color(col)).Bold(true).Padding(0, 1)
 	left := " " + s.round(pill, name)
+	if m.prefix != "" && m.mode == modeNormal {
+		left += " " + s.yellow.Bold(true).Render(m.prefix+"…")
+	}
 	for _, k := range m.barKeys() {
 		left += "  " + s.keycap.Render(k[0]) + s.sub.Render(" "+k[1])
 	}
@@ -339,7 +379,16 @@ func (m Model) barKeys() [][2]string {
 	if m.leader {
 		return [][2]string{{"a key", "from the menu"}, {"esc", "never mind"}}
 	}
-	if m.visual {
+	if m.prefix != "" && m.mode == modeNormal {
+		// a key that takes a second: what the second can be (Vim's showcmd)
+		return map[string][][2]string{
+			"g": {{"gg", "to the top"}, {"gt/gT", "next/previous place"}, {"gf/gF", "open/save files"}, {"gx", "open a link"}},
+			"d": {{"dd", "archive (picking: delete yours)"}},
+			"y": {{"yy", "copy the message"}},
+			"z": {{"za", "fold / unfold"}, {"zq", "quoted text"}},
+		}[m.prefix]
+	}
+	if m.visual && m.mode == modeNormal {
 		return [][2]string{{"j/k", "pick more"}, {"d", "archive"}, {"m/M", "read/unread"}, {"y", "copy"}, {"esc", "stop"}}
 	}
 	switch m.mode {
@@ -372,7 +421,9 @@ func (m Model) barKeys() [][2]string {
 	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward, modeVote:
 		return [][2]string{{"enter", "done"}, {"esc", "cancel"}, {"ctrl+u", "clear"}}
 	case modeView:
-		return [][2]string{{"h/l", "previous/next"}, {"gf", "open in its app"}, {"esc", "back"}}
+		return [][2]string{{"h/l", "previous/next"}, {"v", "open in its app"}, {"esc", "back"}}
+	case modeReact:
+		return [][2]string{{"h/l", "pick"}, {"1-0", "that one"}, {"enter", "react"}, {"esc", "cancel"}}
 	case modeChatMsg:
 		if m.tagStart >= 0 {
 			return [][2]string{{"↑↓", "pick"}, {"enter/tab", "tag them"}, {"esc", "no tag"}}
@@ -382,9 +433,11 @@ func (m Model) barKeys() [][2]string {
 		}
 		return [][2]string{{"enter", "send"}, {"esc", "normal mode"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+t", "later"}}
 	case modeHelp:
-		return [][2]string{{"j/k", "scroll"}, {"esc", "close"}}
+		return [][2]string{{"↑↓", "scroll"}, {"type", "to filter"}, {"esc", "close"}}
 	}
 	switch {
+	case m.isStatus() && !m.pickingMsg():
+		return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"r", "reply"}, {"e", "react"}}
 	case m.pickingMsg() && m.isStatus():
 		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"e", "react"}, {"gf", "open"}, {"esc", "back"}}
 	case m.pickingMsg():

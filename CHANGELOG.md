@@ -2,6 +2,45 @@
 
 Newest first.
 
+## v0.11.1 -- 2026-11-07
+
+A careful pass over every place, mode and key of the new screen, and fixes for
+what it found (two serious, fourteen major, about twenty small):
+
+- **No key but `y` sends an agent's message.** On an AI request `Y`, `Space y`
+  and `yy` approved it, `dd` opened the editor and `u` declined it. Now only `y`,
+  `e` and `n` answer one (`n` asks first: "n again declines"), and other keys say
+  they don't apply.
+- **Fixed a crash**: switching to a shorter chat after picking a message in a
+  longer one, then pressing a message key (`e`), went out of range.
+- **The AI requests are a place** (`4`): every waiting request, mail, Chat and
+  WhatsApp in one list, reachable even when empty (with what lands there and how to
+  answer). They no longer sit as a section in each place.
+- **`Tab` / `Shift+Tab` move between sections**, as tabs do anywhere (`[`/`]` still
+  do); places are `1`–`4`, `gt`/`gT`, `Alt+m/c/w`.
+- **The mouse works**: click a place, a section, a row (again to open it) or a
+  message; the wheel scrolls.
+- **Opening a chat no longer picks a message**: read it, `i` writes, `j`/`k` pick.
+  A key for one message (`e`, `E`, `f`, `*`, `R`, `yy`) acts on the latest when none
+  is picked, so `e` reacts rather than archiving the chat. Esc goes back a step.
+- **Esc keeps what you were writing**, for each chat, with the reply and files.
+- **Your messages end at the right edge**, as in any chat app.
+- **Status lists people**: a row for each with how many updates; the box no longer
+  offers to write there, and `r` / `e` answer the latest.
+- `/` lists results first and actions after, matched on word starts ("arch" no
+  longer finds "search"), each with its own key, only those that work here.
+- Small terminals show the message box while you write, and the request card in the
+  AI requests. The current section stays visible in a narrow strip.
+- The key sheet shows the Space and writing keys; its footer is right; a very short
+  terminal no longer crashes it. A pending two-key command shows on the bar with
+  what can follow (`g…  gg gt gf gx`); Esc drops it quietly.
+- `yy` copies the message, `Y` the link, and the toast says which; VISUAL `y` copies
+  subjects or chat names. VISUAL `dd` from habit no longer leaves a stray `d`; `gg`
+  and `G` grow the range. `:` keeps a full history (↑ ↓).
+- `R` in a chat list says how to reply privately instead of syncing; `#` on a
+  message says what it does; `Space N` from Mail opens a proper Chat; keys that do
+  nothing where you are say so instead of nothing; plain icons without a Nerd Font.
+
 ## v0.11.0 -- 2026-11-07
 
 - **A new screen.** The places sit in a top bar (Mail, Chat, WhatsApp, the AI

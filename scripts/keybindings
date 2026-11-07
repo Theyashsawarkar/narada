@@ -7,7 +7,7 @@
 # keybind: Tmux/narada | J / K | Scroll what's open a line down / up
 # keybind: Tmux/narada | h / l | Move to the list / to what's open
 # keybind: Tmux/narada | Enter | Open the thread or chat (marks it read)
-# keybind: Tmux/narada | q / Esc | Go back, then quit
+# keybind: Tmux/narada | q / Esc | Go back (q at the top quits)
 # keybind: Tmux/narada | [ / ] | Switch to the previous / next section (Unread, Groups, Sent…)
 # keybind: Tmux/narada | 1 / 2 / 3 / 4 | Go to Mail / Chat / WhatsApp / the AI requests
 # keybind: Tmux/narada | gt / gT | Go to the next / previous place
@@ -29,7 +29,7 @@
 # keybind: Tmux/narada | m / M | Set it as read / unread (or everything picked)
 # keybind: Tmux/narada | * | Toggle the star on the thread or picked message
 # keybind: Tmux/narada | L | Add or remove a label
-# keybind: Tmux/narada | v | Pick several (VISUAL): j/k grow it, then dd, m, M, * or y act on all
+# keybind: Tmux/narada | v | Pick several (VISUAL): j/k, gg, G grow it, then d, m, M, * or y act on all
 # keybind: Tmux/narada | V | Pick the whole list (again clears)
 # keybind: Tmux/narada | Alt+r | Set everything in this list as read
 # keybind: Tmux/narada | yy / Y | Copy the picked message / the link to the thread or chat

@@ -176,13 +176,23 @@ func TestStatusReplyAndReact(t *testing.T) {
 	m, w := waModel(t, whatsapp.StatusChat)
 	m.sec = slices.Index(chatSections, "Status") // where you'd open it
 	m.reload()
-	m.sel = 0
-	m.loadPreview(true)
-	m.focus = 1
-	if !m.isStatus() || len(m.chatMsgs) < 3 {
-		t.Fatalf("statuses: %d", len(m.chatMsgs))
+	if len(m.spaces) != 2 {
+		t.Fatalf("a row for each person: %+v", m.spaces)
 	}
-	m = pickMsg(t, m, "D1") // Ravi's
+	open := func(who string) {
+		for i, sp := range m.spaces {
+			if strings.HasSuffix(sp.Name, who) {
+				m.sel = i
+			}
+		}
+		m.loadPreview(true)
+		m.focus = 1
+	}
+	open("919800000002@s.whatsapp.net") // Ravi's
+	if !m.isStatus() || len(m.chatMsgs) != 2 {
+		t.Fatalf("Ravi's statuses: %d", len(m.chatMsgs))
+	}
+	m = pickMsg(t, m, "D1")
 	m = press(m, "r")
 	if m.mode != modeChatMsg || m.replyTo == nil {
 		t.Fatal("r should open the box")
@@ -197,7 +207,8 @@ func TestStatusReplyAndReact(t *testing.T) {
 	if got := w.Sent[0]; got.Chat != "919800000002@s.whatsapp.net" || got.Text != "Congrats!" || len(w.Quotes) == 0 || w.Quotes[0].ID != "D1" {
 		t.Fatalf("sent %+v quotes %+v", w.Sent, w.Quotes)
 	}
-	m = pickMsg(t, m, "D3") // Sneha's
+	open("919800000003@s.whatsapp.net") // Sneha's
+	m = pickMsg(t, m, "D3")
 	m = press(m, "e")
 	if m.mode != modeReact {
 		t.Fatal("e should open the reactions")

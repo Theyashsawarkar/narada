@@ -76,8 +76,12 @@ type myReactionsMsg struct {
 
 // openReact opens the reaction window and asks which ones are yours.
 func (m *Model) openReact() tea.Cmd {
+	c, ok := m.picked()
+	if !ok {
+		return nil
+	}
 	m.mode, m.reactSel, m.reactMine = modeReact, 0, nil
-	c, a := m.chatMsgs[m.chatSel], m.a
+	a := m.a
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

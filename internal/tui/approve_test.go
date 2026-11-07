@@ -276,13 +276,13 @@ func TestAIRequestsSection(t *testing.T) {
 	}
 	m.goToAI("mail")
 	v := m.View()
-	for _, want := range []string{"AI requests 1", "waiting for your OK", "Claude Code wants to email", "the message, exactly"} {
+	for _, want := range []string{"AI requests 2", "Waiting for you 2", "Claude Code wants to email", "the message, exactly"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("mail: missing %q:\n%s", want, v)
 		}
 	}
-	if strings.Contains(v, "Update for the team") {
-		t.Fatalf("chat's request in mail:\n%s", v)
+	if !strings.Contains(v, "chat message") {
+		t.Fatalf("the AI requests list the chat's request too:\n%s", v)
 	}
 	nm, _ := m.normalKey("y")
 	m = nm.(Model)
@@ -292,6 +292,11 @@ func TestAIRequestsSection(t *testing.T) {
 	m.goToAI("chat")
 	if v := m.View(); !strings.Contains(v, "Codex wants to post in Team") {
 		t.Fatalf("chat:\n%s", v)
+	}
+	nm, _ = m.normalKey("n")
+	m = nm.(Model)
+	if got, _ := m.a.Store.OutboxItem(chatIt.ID); got.Status != store.StatusApproval || !strings.Contains(m.toast, "n again") {
+		t.Fatal("one n should only ask")
 	}
 	nm, _ = m.normalKey("n")
 	m = nm.(Model)

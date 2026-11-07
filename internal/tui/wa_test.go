@@ -44,7 +44,7 @@ func waModel(t *testing.T, chat string) (Model, *fake.WhatsApp) {
 	m.showSpace(sp)
 	m.mode, m.focus = modeNormal, 1
 	m.loadPreview(true)
-	m.chatSel = len(m.chatMsgs) - 1
+	m.chatSel, m.picking = len(m.chatMsgs)-1, true
 	return m, w
 }
 
@@ -52,7 +52,7 @@ func pickMsg(t *testing.T, m Model, id string) Model {
 	t.Helper()
 	for i, c := range m.chatMsgs {
 		if strings.HasSuffix(c.Name, "/"+id) {
-			m.chatSel = i
+			m.chatSel, m.focus, m.picking = i, 1, true
 			return m
 		}
 	}
@@ -352,8 +352,8 @@ func TestStatusSection(t *testing.T) {
 	m.sec = slices.Index(chatSections, "Status")
 	m.sel = 0
 	m.reload()
-	if len(m.spaces) != 1 || m.spaces[0].Name != whatsapp.StatusChat {
-		t.Fatalf("Status shows %+v", m.spaces)
+	if len(m.spaces) != 1 || !strings.HasPrefix(m.spaces[0].Name, whatsapp.StatusChat+"|") || m.spaces[0].DisplayName != "Ravi Kulkarni" {
+		t.Fatalf("Status lists the people: %+v", m.spaces)
 	}
 	m.loadPreview(true)
 	m = press(m, "i")

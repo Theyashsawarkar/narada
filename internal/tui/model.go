@@ -54,7 +54,7 @@ const (
 	tabChat
 )
 
-var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled", aiSection, "Archived", "Status"} // the last two: WhatsApp only
+var chatSections = []string{"All", "Unread", "DMs", "Spaces", "Scheduled", "Archived", "Status"} // the last two: WhatsApp only
 
 // aiSection is where an agent's sends wait for your answer, in mail, chat
 // and WhatsApp alike.
@@ -68,16 +68,19 @@ func sectionsWithAI(secs []config.Section) []config.Section {
 	return append(secs, config.Section{Name: aiSection, Label: aiLabel})
 }
 
-// inAISection: the list is the AI requests of this place.
+// inAISection: you're in the AI requests, the fourth place: every send
+// an agent is waiting on, mail, chat and WhatsApp in one list. (It lives
+// as a hidden section of Mail.)
 func (m Model) inAISection() bool {
-	if m.tab == tabMail {
-		return m.search == nil && m.currentSection().Label == aiLabel
-	}
-	return chatSections[m.sec%len(chatSections)] == aiSection
+	return m.tab == tabMail && m.search == nil && m.currentSection().Label == aiLabel
 }
 
-// aiKind is what the current place's AI requests are.
+// aiKind is the kind of AI request in view (the picked one's, in the AI
+// requests), else the place's.
 func (m Model) aiKind() string {
+	if it, ok := m.curWaiting(); ok && m.inAISection() {
+		return it.Kind
+	}
 	switch {
 	case m.tab == tabMail:
 		return "mail"
@@ -151,8 +154,14 @@ type Model struct {
 	visual      bool
 	visualFrom  int    // where v started in the list
 	prefix      string // the first key of a two-key command (g, d, y, z)
+	swallow     string // a key to ignore once (the second d of a VISUAL dd)
 	cmdHist     []string
-	statusN     int // people with a status update you haven't seen
+	cmdAt       int              // where ↑/↓ are in cmdHist
+	statusN     int              // people with a status update you haven't seen
+	picking     bool             // in an open chat, j/k pick messages (else it's read)
+	hits        *hits            // where things were drawn, for the mouse (shared by copies)
+	chatDrafts  map[string]draft // what you were writing, per chat, kept on Esc
+	armDecline  int64            // an AI request n was pressed on once
 
 	tab      int
 	wa       bool // the chat tab shows WhatsApp instead of Google Chat
@@ -258,7 +267,7 @@ type Model struct {
 }
 
 func New(a *app.App, launch string) Model {
-	m := Model{a: a, launch: launch, styles: newStyles(a.Config.Colors, a.Config.NerdFont), acct: -1, selected: map[string]bool{}, counts: map[string]int{}, noOlder: map[string]bool{}, olderN: a.Config.OlderPage,
+	m := Model{a: a, launch: launch, styles: newStyles(a.Config.Colors, a.Config.NerdFont), acct: -1, hits: &hits{}, selected: map[string]bool{}, counts: map[string]int{}, noOlder: map[string]bool{}, olderN: a.Config.OlderPage,
 		expanded: map[string]bool{}, tagStart: -1, tagOff: -1}
 	m.sections = sectionsWithAI(a.Sections())
 	m.accounts = a.AccountNames()
@@ -286,7 +295,7 @@ func Run(a *app.App, launch string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _, _ = a.StartWhatsApp(ctx) }()
-	program = tea.NewProgram(first, tea.WithAltScreen())
+	program = tea.NewProgram(first, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	final, err := program.Run()
 	imgs.forget()
 	if fm, ok := final.(Model); ok && len(fm.watched) > 0 && !a.WhatsAppOnline() {
@@ -398,7 +407,7 @@ func (m *Model) reload() {
 				m.counts[s.Name] = len(m.outboxItems(accs, "mail", true))
 			}
 			if s.Label == aiLabel {
-				m.counts[s.Name] = len(m.waitingOf("mail"))
+				m.counts[s.Name] = len(m.waiting)
 			}
 		}
 	}
@@ -444,7 +453,7 @@ func (m *Model) reload() {
 			ts = m.outboxThreads(m.outboxItems(accs, "mail", true))
 		}
 		if m.inAISection() {
-			ts = m.outboxThreads(m.waitingOf("mail"))
+			ts = m.outboxThreads(m.waiting) // every kind: the AI requests place
 		}
 		if m.search == nil && m.currentSection().Label == "SENT" {
 			ts = append(m.outboxThreads(m.outboxItems(accs, "mail", false)), ts...)
@@ -460,11 +469,8 @@ func (m *Model) reload() {
 			}
 		}
 		m.threads = ts
-	} else if name := chatSections[m.sec%len(chatSections)]; name == "Scheduled" || name == aiSection {
+	} else if name := chatSections[m.sec%len(chatSections)]; name == "Scheduled" {
 		items := m.outboxItems(m.spaceAccounts(), "chat", true)
-		if name == aiSection {
-			items = m.waitingOf(m.aiKind())
-		}
 		m.outboxRows = map[string]store.OutboxItem{}
 		types := map[string]string{}
 		for _, s := range sps {
@@ -520,6 +526,9 @@ func (m *Model) reload() {
 		}
 		// pinned ones first, the rest as they come (most recent first)
 		sort.SliceStable(out, func(i, j int) bool { return out[i].Pinned && !out[j].Pinned })
+		if chatSections[m.sec%len(chatSections)] == "Status" {
+			out = m.statusRows() // a row for each person with a status up
+		}
 		m.spaces = out
 	}
 	m.waiting, _ = m.a.Store.Outbox(store.StatusApproval)
@@ -702,8 +711,11 @@ func (m *Model) curSpace() (store.Space, bool) {
 func (m *Model) loadPreview(reset bool) {
 	key := m.keyAt(m.sel)
 	if key != m.curKey {
+		m.keepDraft()
+		m.restoreChatDraft(key)
 		reset = true
 		m.chatLimit, m.armDelete, m.jumpBack = 0, "", nil
+		m.picking = false
 	}
 	m.curKey = key
 	if reset && m.wa {
@@ -715,12 +727,23 @@ func (m *Model) loadPreview(reset bool) {
 	}
 	if s, ok := m.curSpace(); ok {
 		m.chatMsgs, _ = m.a.Store.ChatMessages(s.Account, s.Name, max(200, m.chatLimit))
+		defer func() { // whatever was picked stays in range of this chat
+			if reset || m.chatSel >= len(m.chatMsgs) {
+				m.chatSel = max(0, len(m.chatMsgs)-1)
+			}
+			if len(m.chatMsgs) == 0 {
+				m.picking = false
+			}
+		}()
 		if s.Type == store.TypeStatus {
-			// statuses by person, yours first, then whoever posted last
+			// one person's statuses (a row of the Status list), or everyone's
+			_, who, one := strings.Cut(s.Name, "|")
 			if groups, err := m.a.Statuses(); err == nil {
 				m.chatMsgs = nil
 				for _, g := range groups {
-					m.chatMsgs = append(m.chatMsgs, g.Items...)
+					if !one || g.Sender == who {
+						m.chatMsgs = append(m.chatMsgs, g.Items...)
+					}
 				}
 			}
 		}
@@ -766,12 +789,98 @@ func (m *Model) targets() []store.Thread {
 // pickingMsg: the conversation has focus, so j/k pick messages.
 func (m *Model) pickingMsg() bool {
 	_, ok := m.curSpace()
-	return ok && m.focus == 1 && len(m.chatMsgs) > 0
+	return ok && m.focus == 1 && m.picking && m.chatSel >= 0 && m.chatSel < len(m.chatMsgs)
+}
+
+// picked is the message picked in the open chat, when one is.
+func (m *Model) picked() (store.ChatMessage, bool) {
+	if !m.pickingMsg() {
+		return store.ChatMessage{}, false
+	}
+	return m.chatMsgs[m.chatSel], true
+}
+
+// startPicking picks the latest message of the open chat (j/k in it).
+func (m *Model) startPicking() {
+	if len(m.chatMsgs) == 0 {
+		return
+	}
+	m.focus, m.picking = 1, true
+	m.chatSel = len(m.chatMsgs) - 1
+	m.fixView()
+}
+
+// statusRows lists the people with a status up, yours first, then whoever
+// posted last: each a row ("Ravi Kulkarni · 2 updates") that opens theirs.
+func (m *Model) statusRows() []store.Space {
+	groups, err := m.a.Statuses()
+	if err != nil {
+		return nil
+	}
+	var out []store.Space
+	for _, g := range groups {
+		if len(g.Items) == 0 {
+			continue
+		}
+		last := g.Items[len(g.Items)-1]
+		name := firstNonEmpty(strings.TrimPrefix(g.Name, "~"), g.Sender)
+		if g.Mine {
+			name = "My status"
+		}
+		text := fmt.Sprintf("%d update%s · %s", len(g.Items), plural(len(g.Items)), oneLine(last.Text))
+		if m.filter != "" && !strings.Contains(strings.ToLower(name+" "+text), strings.ToLower(m.filter)) {
+			continue
+		}
+		out = append(out, store.Space{Account: store.WhatsAppAccount, Name: whatsapp.StatusChat + "|" + g.Sender, DisplayName: name,
+			Type: store.TypeStatus, LastActive: last.Created, LastText: text})
+	}
+	return out
+}
+
+// draft is what you were writing in one chat, kept when you leave it.
+type draft struct {
+	text    string
+	replyTo *store.ChatMessage
+	files   []store.File
+}
+
+// keepDraft keeps the message box of the open chat (when it holds
+// anything) for when you come back to it.
+func (m *Model) keepDraft() {
+	if m.curKey == "" || m.editingMsg != "" {
+		return
+	}
+	if m.chatDrafts == nil {
+		m.chatDrafts = map[string]draft{}
+	}
+	if len(m.input) == 0 && m.replyTo == nil && len(m.chatFiles) == 0 {
+		delete(m.chatDrafts, m.curKey)
+		return
+	}
+	m.chatDrafts[m.curKey] = draft{string(m.input), m.replyTo, m.chatFiles}
+}
+
+// restoreChatDraft brings back what you were writing in that chat (nothing,
+// for one you weren't).
+func (m *Model) restoreChatDraft(key string) {
+	d := m.chatDrafts[key]
+	m.input, m.replyTo, m.chatFiles = []rune(d.text), d.replyTo, d.files
+	m.back = 0
+}
+
+// toList goes back to the list: after a place or section change nothing
+// stays picked or open on the right.
+func (m *Model) toList() {
+	m.focus, m.picking, m.visual = 0, false, false
+	m.chatSel = max(0, len(m.chatMsgs)-1)
 }
 
 // moveChatSel picks another message and keeps it in view; going up past
 // the first one loads earlier messages.
 func (m *Model) moveChatSel(step int) tea.Cmd {
+	if len(m.chatMsgs) == 0 {
+		return nil
+	}
 	if step < 0 && m.chatSel == 0 {
 		return m.loadOlderChat()
 	}
@@ -791,7 +900,10 @@ func (m *Model) moveChatSel(step int) tea.Cmd {
 // further back); when it's older than what's loaded, earlier messages are
 // fetched until it turns up.
 func (m *Model) jumpToQuote() tea.Cmd {
-	c := m.chatMsgs[m.chatSel]
+	c, ok := m.picked()
+	if !ok {
+		return nil
+	}
 	if c.Quoted == "" {
 		m.say("not a reply · Backspace goes back")
 		return nil
@@ -856,7 +968,7 @@ func (m Model) gotJump(msg jumpMsg) (tea.Model, tea.Cmd) {
 func (m *Model) selectChatMsg(name string) bool {
 	for i, c := range m.chatMsgs {
 		if c.Name == name {
-			m.chatSel = i
+			m.chatSel, m.focus, m.picking = i, 1, true
 			m.flashMsg = name
 			m.moveChatSel(0)
 			return true
@@ -892,7 +1004,10 @@ func (m *Model) quoteInto(out *store.Outgoing, sp store.Space) {
 // replyPrivately answers the picked group message in your chat with its
 // sender, quoting it, as WhatsApp's "Reply privately" does.
 func (m *Model) replyPrivately() tea.Cmd {
-	c := m.chatMsgs[m.chatSel]
+	c, ok := m.picked()
+	if !ok {
+		return nil
+	}
 	if !whatsapp.IsGroup(c.Space) || c.Mine {
 		m.say("R replies privately to someone's message in a group")
 		return nil
@@ -950,7 +1065,11 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 	}
 	if w := m.a.UndoWindow(it.Kind); w > 0 {
 		m.undo = &undo{what: "send", outboxID: it.ID}
-		m.say(fmt.Sprintf("sending in %ds · u cancels", int(w.Seconds())))
+		if m.mode == modeChatMsg {
+			m.say(fmt.Sprintf("sending in %ds · Esc, then u cancels it", int(w.Seconds())))
+		} else {
+			m.say(fmt.Sprintf("sending in %ds · u cancels", int(w.Seconds())))
+		}
 		return nil
 	}
 	if !chatKind(it.Kind) {
@@ -1090,6 +1209,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fixView()
 		m.layoutComposer()
 		return m, widenRenderer(msg.Height)
+	case tea.MouseMsg:
+		return m.mouse(msg)
 	case leaderTick:
 		if m.leader && msg.at == m.leaderAt {
 			m.leaderShown = true
@@ -1429,6 +1550,13 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.Type {
 	case tea.KeyEsc:
 		m.back = 0
+		if m.mode == modeChatMsg && m.editingMsg == "" {
+			// back to NORMAL: what you wrote, the reply and the files stay
+			// for this chat until you send them or clear them (Ctrl+u)
+			m.keepDraft()
+			m.mode = modeNormal
+			return m, nil
+		}
 		m.replyTo, m.editingMsg, m.chatFiles = nil, "", nil
 		m.tagged, m.tagOff = nil, -1
 		if m.mode == modeFilter {
@@ -1650,24 +1778,40 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // goToAI opens the AI requests of a kind in its place.
 func (m *Model) goToAI(kind string) {
-	m.tab, m.wa, m.sel, m.offset, m.focus = tabChat, kind == "whatsapp", 0, 0, 0
-	m.sec = slices.Index(chatSections, aiSection)
-	if kind == "mail" {
-		m.tab, m.search = tabMail, nil
-		m.sec = slices.IndexFunc(m.sections, func(s config.Section) bool { return s.Label == aiLabel })
-	}
+	m.tab, m.wa, m.search, m.sel, m.offset, m.filter = tabMail, false, nil, 0, 0, ""
+	m.sec = slices.IndexFunc(m.sections, func(s config.Section) bool { return s.Label == aiLabel })
+	m.selected = map[string]bool{}
+	m.toList()
 	m.reload()
+	for i, t := range m.threads { // the first of that kind
+		if it, ok := m.outboxRows[t.ID]; ok && it.Kind == kind {
+			m.sel = i
+			break
+		}
+	}
+	m.loadPreview(true)
 }
 
 // normalKey is a key in NORMAL mode: Vim's keys first (vim.go), then
 // the action it names.
 func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
-	// on an AI request, its own keys answer it, before Vim's
-	if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() && !m.leader && m.prefix == "" {
+	if m.inAISection() && !m.leader && m.prefix == "" && !m.visual {
+		if mm, cmd, done := m.aiKey(s); done {
+			return mm, cmd
+		}
+	}
+	// in an open chat, a key for one message acts on the latest one when
+	// none is picked: e reacts to it rather than archiving the chat
+	if m.focus == 1 && m.tab == tabChat && !m.picking && m.prefix == "" && !m.leader && !m.visual {
 		switch s {
-		case "y", "n", "e":
-			m.apID = it.ID
-			return m.approveKey(s)
+		case "e", "E", "f", "P", "*", "R":
+			m.startPicking()
+		case "r":
+			if m.isStatus() {
+				m.startPicking() // r answers the latest status
+			}
+		case "y":
+			m.startPicking() // yy copies it
 		}
 	}
 	mm, cmd, old, done := m.vimKey(s)
@@ -1681,20 +1825,12 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 // vimKey translates, so dd reaches here as e).
 func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	page := max(1, m.previewHeight()/2)
-	// on an AI request, the approval keys answer it
-	if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() {
-		switch s {
-		case "y", "n", "e":
-			m.apID = it.ID
-			return m.approveKey(s)
-		}
-	}
 	if m.tab == tabChat && m.wa && !m.waLinked {
 		if mm, cmd, ok := m.linkKey(s); ok {
 			return mm, cmd
 		}
 		switch s {
-		case "tab", "q", "ctrl+c", "?", "esc":
+		case "tab", "shift+tab", "h", "l", "q", "ctrl+c", "?", "esc", "alt+m", "alt+c", "alt+w":
 		default:
 			return m, nil // nothing else to act on yet
 		}
@@ -1709,6 +1845,8 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	switch s {
 	case "q", "esc":
 		switch {
+		case m.picking && m.focus == 1:
+			m.picking = false
 		case m.focus == 1:
 			m.focus = 0
 		case m.err != "":
@@ -1732,6 +1870,8 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		if m.pickingMsg() {
 			return m, m.moveChatSel(1)
+		} else if m.focus == 1 && m.tab == tabChat && len(m.chatMsgs) > 0 {
+			m.startPicking()
 		} else if m.focus == 1 {
 			m.scroll++
 		} else if m.tab == tabMail && m.sel >= m.count()-1 && m.count() > 0 {
@@ -1744,6 +1884,8 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		if m.pickingMsg() {
 			return m, m.moveChatSel(-1)
+		} else if m.focus == 1 && m.tab == tabChat && len(m.chatMsgs) > 0 {
+			m.startPicking()
 		} else if m.focus == 1 {
 			m.scroll = max(0, m.scroll-1)
 		} else if m.sel > 0 {
@@ -1778,6 +1920,10 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	case "ctrl+u":
 		m.scroll = max(0, m.scroll-page)
 	case "h", "l":
+		if m.inAISection() {
+			m.say("the AI requests have no sections · 1 2 3 go to Mail, Chat, WhatsApp")
+			return m, nil
+		}
 		n := len(m.sections)
 		if m.tab == tabChat {
 			n = len(chatSections)
@@ -1786,15 +1932,21 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 				m.sec %= n
 			}
 		}
+		step := 1
+		if s == "h" {
+			step = n - 1
+		}
 		if m.search != nil {
 			m.search = nil
-		} else if s == "l" {
-			m.sec = (m.sec + 1) % n
 		} else {
-			m.sec = (m.sec + n - 1) % n
+			m.sec = (m.sec + step) % n
+			if m.tab == tabMail && m.sections[m.sec].Label == aiLabel {
+				m.sec = (m.sec + step) % n // the AI requests are their own place
+			}
 		}
 		m.sel, m.offset, m.filter = 0, 0, ""
 		m.selected = map[string]bool{}
+		m.toList()
 		m.reload()
 	case "tab", "shift+tab", "alt+m", "alt+c", "alt+w":
 		// Tab: Mail → Chat → WhatsApp → Mail; Shift+Tab the other way;
@@ -1817,6 +1969,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		}
 		m.sec, m.sel, m.offset, m.filter, m.search, m.ai = 0, 0, 0, "", nil, ""
 		m.selected = map[string]bool{}
+		m.toList()
 		m.reload()
 	case "1":
 		m.focus = 0
@@ -1881,7 +2034,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		if m.search != nil {
 			m.mode, m.input = modeSaveName, nil // Enter alone names it after the search
 		} else {
-			m.say("search first (s), then W saves it")
+			m.say("search first (/), then W saves it")
 		}
 	case "X":
 		if m.tab == tabMail && m.search == nil {
@@ -1924,8 +2077,11 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 			}
 			return m, m.sent(it)
 		}
-		m.say("syncing…")
-		return m, m.syncCmd()
+		if m.tab == tabChat {
+			m.say("R answers a group message privately: pick one first (j/k) · Space r syncs")
+			return m, nil
+		}
+		return m, m.replyCmd("a") // mail: reply to everyone
 	case "P":
 		if m.wa && m.pickingMsg() {
 			c := m.chatMsgs[m.chatSel]
@@ -2063,7 +2219,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	case "i":
 		if m.tab == tabChat {
 			if _, ok := m.curSpace(); ok {
-				m.mode, m.input = modeChatMsg, nil
+				m.focus, m.mode = 1, modeChatMsg // what you'd written stays
 			}
 		}
 	case "+", "-":
@@ -2145,7 +2301,9 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 			// else), quoting it, right in the message box
 			if _, ok := m.curSpace(); ok && s == "r" {
 				m.replyTo = m.replyTarget()
-				m.mode, m.input = modeChatMsg, nil
+				m.focus, m.mode = 1, modeChatMsg // what you'd written stays
+			} else if s == "f" {
+				m.say("f forwards mail, or a picked WhatsApp message; Google Chat can't forward")
 			}
 			return m, nil
 		}
@@ -2171,11 +2329,14 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 			_ = exec.Command("xdg-open", u).Start()
 			m.say("opened in the browser")
 		}
-	case "y":
-		if m.pickingMsg() {
-			m.say(copyText(m.chatMsgs[m.chatSel].Source()))
+	case "y", "Y":
+		// yy: the picked message (else the link); Y: always the link
+		if c, ok := m.picked(); ok && s == "y" {
+			m.say(copyAs(c.Source(), "the message"))
 		} else if u := m.link(); u != "" {
 			m.say(copyText(u))
+		} else {
+			m.say("nothing to copy here")
 		}
 	case "@":
 		m.mode, m.input = modeAsk, nil
@@ -2184,9 +2345,16 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	case "D":
 		if _, ok := m.curThread(); ok {
 			m.mode, m.input = modeDraftHint, nil
+		} else {
+			m.say("Claude drafts replies to mail: pick a thread in Mail")
 		}
 	case "T":
 		return m, m.digest()
+	default:
+		// a key that does nothing here says so, rather than nothing at all
+		if r := []rune(s); len(r) == 1 && r[0] > ' ' && r[0] < 0x7f {
+			m.say(s + " does nothing here · ? lists the keys, / finds what you want")
+		}
 	}
 	return m, nil
 }
@@ -2380,19 +2548,22 @@ func (m *Model) openLink(n string) {
 	m.say("opened link " + n)
 }
 
-func copyText(s string) string {
+func copyText(s string) string { return copyAs(s, "the link") }
+
+// copyAs copies s and says what was copied ("the message", "3 subjects").
+func copyAs(s, what string) string {
 	for _, c := range [][]string{{"wl-copy"}, {"xclip", "-selection", "clipboard"}, {"xsel", "-b"}} {
 		if _, err := exec.LookPath(c[0]); err == nil {
 			cmd := exec.Command(c[0], c[1:]...)
 			cmd.Stdin = strings.NewReader(s)
 			if cmd.Run() == nil {
-				return "copied the link"
+				return "copied " + what
 			}
 		}
 	}
 	// OSC 52: the terminal (and tmux with set-clipboard) copies it
 	fmt.Fprintf(os.Stderr, "\033]52;c;%s\a", b64(s))
-	return "copied the link (OSC 52)"
+	return "copied " + what + " (OSC 52)"
 }
 
 // notOnWhatsApp: what key s would do that narada can't do on WhatsApp

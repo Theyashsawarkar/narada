@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Theyashsawarkar/narada/internal/cli"
 	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // narada's keys work like Vim's: NORMAL moves and acts, i writes (INSERT),
@@ -51,7 +53,14 @@ func (m Model) leaderKeys() []leaderKey {
 		{"f", "Find anything (also /)", mauve, func(m *Model) (tea.Model, tea.Cmd) { return m.findAnything(true) }},
 		{"/", "Search here", mauve, func(m *Model) (tea.Model, tea.Cmd) { return m.findAnything(false) }},
 		{"n", "Write a new mail or message", green, keys("c")},
-		{"N", "Start a conversation", green, func(m *Model) (tea.Model, tea.Cmd) { m.tab = tabChat; m.openConvo(); return *m, nil }},
+		{"N", "Start a conversation", green, func(m *Model) (tea.Model, tea.Cmd) {
+			if m.tab != tabChat {
+				mm, _ := m.goPlace(1)
+				*m = mm.(Model)
+			}
+			m.openConvo()
+			return *m, nil
+		}},
 		{"S", "Star / unstar", yellow, keys("*")},
 		{"l", "Label", mauve, keys("L")},
 		{"u", "Unread only", red, func(m *Model) (tea.Model, tea.Cmd) { return m.goSection("Unread") }},
@@ -66,6 +75,8 @@ func (m Model) leaderKeys() []leaderKey {
 		{"R", "Rename this chat", sub, func(m *Model) (tea.Model, tea.Cmd) {
 			if sp, ok := m.curSpace(); ok {
 				m.mode, m.input = modeRename, []rune(cli.SpaceTitle(sp))
+			} else {
+				m.say("Space R renames a chat: pick one in Chat or WhatsApp")
 			}
 			return *m, nil
 		}},
@@ -85,7 +96,7 @@ func (m Model) leaderMenu() []string {
 	s := m.styles
 	ks := m.leaderKeys()
 	w := m.w - 4
-	cols := max(1, min(4, (w-4)/32))
+	cols := max(1, min(4, (w-4)/26))
 	colW := (w - 4) / cols
 	rows := (len(ks) + cols - 1) / cols
 	border := fg(s.c.Mauve)
@@ -146,9 +157,18 @@ func (m Model) vimKey(s string) (tea.Model, tea.Cmd, string, bool) {
 		mm, cmd := m.leaderKey(s)
 		return mm, cmd, "", true
 	}
+	if sw := m.swallow; sw != "" {
+		m.swallow = ""
+		if s == sw && sw == "d" {
+			return m, nil, "", true
+		}
+	}
 	if m.prefix != "" {
 		two := m.prefix + s
 		m.prefix = ""
+		if s == "esc" || s == "ctrl+c" {
+			return m, nil, "", true // never mind
+		}
 		return m.twoKeys(two)
 	}
 	if m.visual {
@@ -164,13 +184,14 @@ func (m Model) vimKey(s string) (tea.Model, tea.Cmd, string, bool) {
 		m.prefix = s
 		return m, nil, "", true
 	case ":":
-		m.mode, m.input = modeCommand, nil
+		m.mode, m.input, m.cmdAt = modeCommand, nil, len(m.cmdHist)
 		return m, nil, "", true
 	case "/", "ctrl+k":
 		mm, cmd := m.findAnything(true)
 		return mm, cmd, "", true
-	case "[", "]":
-		return m, nil, map[string]string{"[": "h", "]": "l"}[s], false // the old h / l: sections
+	case "[", "]", "tab", "shift+tab":
+		// sections, like tabs anywhere (the old h / l)
+		return m, nil, map[string]string{"[": "h", "]": "l", "tab": "l", "shift+tab": "h"}[s], false
 	case "ctrl+p", "ctrl+n":
 		return m, nil, map[string]string{"ctrl+p": "[", "ctrl+n": "]"}[s], false // the old [ / ]: chats
 	case "h":
@@ -190,9 +211,13 @@ func (m Model) vimKey(s string) (tea.Model, tea.Cmd, string, bool) {
 	case "u":
 		return m, nil, "z", false // the old z: undo, or cancel a send
 	case "#":
+		if m.tab != tabMail || m.pickingMsg() {
+			m.say("# trashes mail · dd deletes a picked message")
+			return m, nil, "", true
+		}
 		return m, nil, "d", false // the old d: to the trash
 	case "Y":
-		return m, nil, "y", false
+		return m, nil, "Y", false
 	case "v":
 		if m.pickingMsg() {
 			return m, nil, "", true
@@ -227,6 +252,11 @@ func (m Model) vimKey(s string) (tea.Model, tea.Cmd, string, bool) {
 func (m Model) twoKeys(two string) (tea.Model, tea.Cmd, string, bool) {
 	switch two {
 	case "gg":
+		if m.visual {
+			m.sel = 0
+			m.visualRange()
+			return m, nil, "", true
+		}
 		return m, nil, "g", false
 	case "gt", "gT":
 		step := map[string]int{"gt": 1, "gT": 3}[two]
@@ -279,24 +309,27 @@ func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
 		case "G":
 			m.sel = max(0, m.count()-1)
 		}
-		m.selected = map[string]bool{}
-		for i := min(m.visualFrom, m.sel); i <= max(m.visualFrom, m.sel); i++ {
-			if k := m.keyAt(i); k != "" && !strings.Contains(k, outboxPrefix) {
-				m.selected[k] = true
-			}
-		}
-		m.loadPreview(true)
+		m.visualRange()
 		return m, nil, true
 	case "d", "m", "M", "*", "y":
 		m.visual = false
+		m.swallow = s // a second d (dd from habit) does nothing
 		switch {
 		case s == "y":
-			var keys []string
-			for k := range m.selected {
-				keys = append(keys, k)
+			// what's picked, as you'd write it: subjects, or chat names
+			var names []string
+			for i := range m.count() {
+				if !m.selected[m.keyAt(i)] {
+					continue
+				}
+				if m.tab == tabMail && i < len(m.threads) {
+					names = append(names, m.threads[i].Participants+": "+m.threads[i].Subject)
+				} else if i < len(m.spaces) {
+					names = append(names, cli.SpaceTitle(m.spaces[i]))
+				}
 			}
 			m.selected = map[string]bool{}
-			m.say(copyText(strings.Join(keys, "\n")))
+			m.say(copyAs(strings.Join(names, "\n"), fmt.Sprintf("%d %s", len(names), map[bool]string{true: "subjects", false: "chat names"}[m.tab == tabMail])))
 			return m, nil, true
 		case s == "d" && m.tab == tabMail:
 			return m, m.modify("e"), true
@@ -311,6 +344,17 @@ func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
 	return m, nil, false
 }
 
+// visualRange picks everything between where v started and here.
+func (m *Model) visualRange() {
+	m.selected = map[string]bool{}
+	for i := min(m.visualFrom, m.sel); i <= max(m.visualFrom, m.sel); i++ {
+		if k := m.keyAt(i); k != "" && !strings.Contains(k, outboxPrefix) {
+			m.selected[k] = true
+		}
+	}
+	m.loadPreview(true)
+}
+
 // ------------------------------------------------------------ moving
 
 // placeAt is the place you're in: 0 Mail, 1 Chat, 2 WhatsApp, 3 AI requests.
@@ -321,14 +365,16 @@ func (m Model) placeAt() int {
 	return m.place()
 }
 
-// goPlace goes to Mail, Chat, WhatsApp or the AI requests.
+// goPlace goes to Mail, Chat, WhatsApp or the AI requests (always: an
+// empty list says how requests arrive).
 func (m *Model) goPlace(i int) (tea.Model, tea.Cmd) {
+	m.visual, m.leader = false, false
 	if i == 3 {
-		if len(m.waiting) == 0 {
-			m.say("no AI requests waiting")
-			return *m, nil
+		kind := ""
+		if len(m.waiting) > 0 {
+			kind = m.waiting[0].Kind
 		}
-		m.goToAI(m.waiting[0].Kind)
+		m.goToAI(kind)
 		return *m, nil
 	}
 	m.visual, m.leader = false, false
@@ -339,10 +385,40 @@ func (m *Model) goPlace(i int) (tea.Model, tea.Cmd) {
 	if i == 0 {
 		m.tab = tabMail
 	}
-	m.sec, m.sel, m.offset, m.filter, m.search, m.ai, m.focus = 0, 0, 0, "", nil, "", 0
+	m.sec, m.sel, m.offset, m.filter, m.search, m.ai = 0, 0, 0, "", nil, ""
 	m.selected = map[string]bool{}
+	m.toList()
 	m.reload()
 	return *m, nil
+}
+
+// aiKey: on an AI request only its own keys answer it, the raw key and
+// nothing that a key turns into, so no other key can send an agent's
+// message. done is false for keys that move around as anywhere else.
+func (m Model) aiKey(s string) (tea.Model, tea.Cmd, bool) {
+	it, ok := m.curOutbox()
+	switch s {
+	case "y", "e", "n":
+		if !ok || it.Status != store.StatusApproval {
+			m.say("no AI request picked")
+			return m, nil, true
+		}
+		m.apID = it.ID
+		if s == "n" && m.armDecline != it.ID {
+			m.armDecline = it.ID
+			m.say("n again declines it: nothing is sent, and the agent is told")
+			return m, nil, true
+		}
+		m.armDecline = 0
+		mm, cmd := m.approveKey(s)
+		return mm, cmd, true
+	case "j", "k", "down", "up", "g", "G", "enter", "1", "2", "3", "4", "tab", "shift+tab", " ", "space", "/", "?", ":",
+		"q", "esc", "ctrl+d", "ctrl+u", "J", "K", "h", "l", "[", "]", "ctrl+c", "alt+m", "alt+c", "alt+w":
+		m.armDecline = 0
+		return m, nil, false
+	}
+	m.say("on an AI request: y sends it · e edits it first · n declines · Enter shows it all")
+	return m, nil, true
 }
 
 // goSection opens the place's section of that name (Unread…).
@@ -502,9 +578,18 @@ func (m Model) commandKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.input = []rune(c[0].name)
 		}
 		return m, nil
-	case "up":
+	case "up", "down":
+		// further back with ↑, forward again with ↓
 		if n := len(m.cmdHist); n > 0 {
-			m.input = []rune(m.cmdHist[n-1])
+			if k.String() == "up" {
+				m.cmdAt = max(0, min(n, m.cmdAt)-1)
+			} else {
+				m.cmdAt = min(n, m.cmdAt+1)
+			}
+			m.input = nil
+			if m.cmdAt < n {
+				m.input = []rune(m.cmdHist[m.cmdAt])
+			}
 		}
 		return m, nil
 	case "enter":
@@ -514,6 +599,7 @@ func (m Model) commandKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.cmdHist = append(m.cmdHist, line)
+		m.cmdAt = len(m.cmdHist)
 		name := strings.Fields(line)[0]
 		for _, c := range commands {
 			if c.name == name {

@@ -106,6 +106,10 @@ func (m Model) View() string {
 	if m.w == 0 {
 		return ""
 	}
+	if m.hits == nil {
+		m.hits = &hits{}
+	}
+	m.hits.reset()
 	rows := []string{m.topBar(), m.sectionStrip()}
 	bh := m.bodyHeight()
 	// under a popup, draw what it was opened over
@@ -128,13 +132,15 @@ func (m Model) View() string {
 		body = strings.Split(m.composerPanes(bh), "\n")
 	case m.narrow():
 		// one pane at a time: the list, or what's open
-		if m.focus == 0 && under != modeReview && under != modeApprove {
+		if m.focus == 0 && under != modeReview && under != modeApprove && m.mode != modeChatMsg && !m.inAISection() {
 			body = m.pane(m.w, bh, m.listTitle(), m.listView(m.w-2, bh-1))
+			m.hits.listX, m.hits.rightX = m.w, m.w
 		} else {
 			body = m.rightPane(under, m.w, bh)
 		}
 	default:
 		lw := m.listWidth()
+		m.hits.listX, m.hits.rightX = lw, lw
 		left := m.pane(lw, bh, m.listTitle(), m.listView(lw-2, bh-1))
 		right := m.rightPane(under, m.w-lw, bh)
 		for i := range left {
@@ -256,25 +262,33 @@ func (m Model) box(w, h int, title, content string, focus bool, color string) st
 }
 
 func (m Model) listTitle() string {
-	if m.tab == tabMail {
-		n := len(m.threads)
-		t := fmt.Sprintf("%s · %d", m.currentSection().Name, n)
-		if m.filter != "" {
-			t += " · /" + m.filter
-		}
-		if len(m.selected) > 0 {
-			t += fmt.Sprintf(" · %d selected", len(m.selected))
-		}
-		return t
+	// the strip above names the section: here only what it doesn't say
+	var t string
+	switch {
+	case m.inAISection():
+		t = fmt.Sprintf("%d waiting", len(m.threads))
+	case m.tab == tabMail:
+		t = fmt.Sprintf("%d thread%s", len(m.threads), plural(len(m.threads)))
+	case m.isStatusList():
+		t = fmt.Sprintf("%d %s with a status", len(m.spaces), map[bool]string{true: "person", false: "people"}[len(m.spaces) == 1])
+	default:
+		t = fmt.Sprintf("%d chat%s", len(m.spaces), plural(len(m.spaces)))
 	}
-	t := fmt.Sprintf("%s · %d chat%s", chatSections[m.sec%len(chatSections)], len(m.spaces), plural(len(m.spaces)))
 	if m.filter != "" {
 		t += " · /" + m.filter
 	}
 	if len(m.selected) > 0 {
 		t += fmt.Sprintf(" · %d picked", len(m.selected))
 	}
+	if f := m.accountFilter(); len(f) == 1 && len(m.accounts) > 1 && !m.wa {
+		t += " · " + f[0]
+	}
 	return t
+}
+
+// isStatusList: the list is WhatsApp's Status section.
+func (m Model) isStatusList() bool {
+	return m.tab == tabChat && m.wa && chatSections[m.sec%len(chatSections)] == "Status"
 }
 
 func (m Model) aiLines(w int) []string {
@@ -394,15 +408,4 @@ func (m Model) inputView() string {
 		under, rest = string(m.input[cur]), string(m.input[cur+1:])
 	}
 	return " " + s.accent2.Bold(true).Render(prompt) + s.text.Render(string(m.input[:cur])) + lipgloss.NewStyle().Reverse(true).Render(under) + s.text.Render(rest)
-}
-
-// nextTab: where Tab goes from here.
-func (m Model) nextTab() string {
-	switch {
-	case m.tab == tabMail:
-		return "chat"
-	case !m.wa:
-		return "whatsapp"
-	}
-	return "mail"
 }
