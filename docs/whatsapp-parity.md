@@ -76,10 +76,13 @@ Archive, pin, mute, unread and star are meant to sync with the phone both ways.
 
 | Feature | CLI | Screen | MCP |
 |---|---|---|---|
-| See the last day's updates, as they arrive while narada is online | `status` | Status section | — |
+| See the last day's updates, by person, including ones from before narada was online | `status` | Status section | `whatsapp_statuses` |
+| Reply to one, or react (WhatsApp's quick reaction: the emoji as a reply) | `status reply`, `status react` | — | `whatsapp_send` with `reply_to` a status |
 | Post text, a photo or a video | `status post` | — | — (on purpose) |
 
 Agents can't post a status, and a plain send can't reach the status chat.
+An answer to a status goes to whoever posted it, in your chat with them,
+quoting the status; nothing goes to the status chat, so nobody else sees it.
 
 ## What's left
 
@@ -92,8 +95,9 @@ Could be done, not done yet:
   for now: an agent acting on your messages should be something you ask for.
 - **Delete for me on your other devices.** It stays on this machine: whatsmeow
   has no builder for that app-state change.
-- **Status:** older updates from before narada was online; telling people you
-  looked (narada doesn't send that receipt).
+- **Status:** telling people you looked (narada doesn't send that receipt);
+  WhatsApp's newer status "like" (a heart only the poster sees, sent apart
+  from a reply).
 - **Votes from before narada saw the poll**, and votes in the phone's history,
   don't count in the tally.
 - **Profile:** your name, photo and about; other people's profile pictures;

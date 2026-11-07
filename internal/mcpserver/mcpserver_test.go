@@ -73,7 +73,7 @@ func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any)
 func TestTools(t *testing.T) {
 	a, g, cs := session(t)
 	tools, err := cs.ListTools(context.Background(), nil)
-	if err != nil || len(tools.Tools) != 15 {
+	if err != nil || len(tools.Tools) != 16 {
 		t.Fatalf("tools: %v %v", len(tools.Tools), err)
 	}
 	out := call(t, cs, "mail_list", map[string]any{"today": true})
