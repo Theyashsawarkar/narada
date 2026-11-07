@@ -293,13 +293,14 @@ type Account struct {
 	MailSynced int64  `json:"mail_synced"`
 	ChatSynced int64  `json:"chat_synced"`
 	LastError  string `json:"last_error,omitempty"`
+	MyName     string `json:"my_name,omitempty"` // WhatsApp: your profile name
 }
 
 // Accounts are the Google accounts (WhatsApp is apart: WhatsApp()).
 func (s *Store) Accounts() ([]Account, error) { return s.accounts(KindGoogle) }
 
 func (s *Store) accounts(kind string) ([]Account, error) {
-	rows, err := s.db.Query(`SELECT name,email,chat,history_id,chat_user,mail_synced,chat_synced,last_error FROM accounts WHERE kind=? ORDER BY position, name`, kind)
+	rows, err := s.db.Query(`SELECT name,email,chat,history_id,chat_user,mail_synced,chat_synced,last_error,my_name FROM accounts WHERE kind=? ORDER BY position, name`, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +308,7 @@ func (s *Store) accounts(kind string) ([]Account, error) {
 	var out []Account
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.Name, &a.Email, &a.Chat, &a.HistoryID, &a.ChatUser, &a.MailSynced, &a.ChatSynced, &a.LastError); err != nil {
+		if err := rows.Scan(&a.Name, &a.Email, &a.Chat, &a.HistoryID, &a.ChatUser, &a.MailSynced, &a.ChatSynced, &a.LastError, &a.MyName); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -332,6 +333,12 @@ func (s *Store) WhatsApp() (acc Account, ok bool) {
 		return Account{}, false
 	}
 	return all[0], true
+}
+
+// SetMyName keeps your own name on an account (WhatsApp: your profile name).
+func (s *Store) SetMyName(account, name string) error {
+	_, err := s.db.Exec(`UPDATE accounts SET my_name=? WHERE name=?`, name, account)
+	return err
 }
 
 // AddWhatsApp records the linked WhatsApp account (me: your JID).

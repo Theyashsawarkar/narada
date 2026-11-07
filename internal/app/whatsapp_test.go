@@ -1357,3 +1357,38 @@ func TestWhatsAppStatusReplyAndReact(t *testing.T) {
 		}
 	}
 }
+
+// You're shown by name: your WhatsApp profile name once WhatsApp says it,
+// your number before that; on Google your name, else your address's name.
+func TestMyName(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	acc, _ := a.Store.WhatsApp()
+	if got := a.MyName(store.WhatsAppAccount); got != acc.Email {
+		t.Fatalf("before WhatsApp names you: %q (want the number %q)", got, acc.Email)
+	}
+	w.MyName = "Sam Lee"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	deadline := time.Now().Add(2 * time.Second)
+	for a.MyName(store.WhatsAppAccount) != "Sam Lee" && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := a.MyName(store.WhatsAppAccount); got != "Sam Lee" {
+		t.Fatalf("WhatsApp: %q", got)
+	}
+	if err := a.Store.AddAccount(store.Account{Name: "work", Email: "sam.lee@acme.example", Chat: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.MyName("work"); got != "sam.lee" {
+		t.Fatalf("Google without a name: %q", got)
+	}
+	_ = a.Store.SetChatSynced("work", "users/7")
+	_ = a.Store.PutUser("work", "users/7", "Sam Lee", "sam.lee@acme.example")
+	if got := a.MyName("work"); got != "Sam Lee" {
+		t.Fatalf("Google: %q", got)
+	}
+}

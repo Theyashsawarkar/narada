@@ -289,6 +289,8 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			_ = a.Store.SetWhatsAppReaction(store.WhatsAppReaction{Space: r.Chat, Msg: r.Msg, Reactor: reactor, Emoji: r.Emoji})
 			a.showWhatsAppReactions(r.Chat, r.Msg)
 		}
+	case e.MyName != "":
+		_ = a.Store.SetMyName(acc, e.MyName)
 	case e.State != "":
 		switch e.State {
 		case "connected":

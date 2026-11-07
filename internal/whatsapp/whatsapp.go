@@ -115,6 +115,7 @@ type Event struct {
 	Star      *Star      // a message starred or unstarred (on another device)
 	Presence  *Presence  // someone online, away or typing
 	State     string     // connected, disconnected, logged-out, replaced, banned
+	MyName    string     // your WhatsApp profile name, when it's known or changes
 	Err       error
 }
 
@@ -471,6 +472,9 @@ func (cl *Client) event(evt any) {
 	switch e := evt.(type) {
 	case *events.Connected:
 		cl.emit(Event{State: "connected"})
+		if n := cl.c.Store.PushName; n != "" {
+			cl.emit(Event{MyName: n})
+		}
 		cl.emit(Event{Contacts: cl.contacts(ctx)})
 		go cl.groups(ctx)
 	case *events.Disconnected:
@@ -552,6 +556,10 @@ func (cl *Client) event(evt any) {
 		cl.emit(Event{Presence: &Presence{Who: cl.chatJID(ctx, e.Sender), Chat: cl.chatJID(ctx, e.Chat), Online: true, Typing: typing}})
 	case *events.Presence:
 		cl.emit(Event{Presence: &Presence{Who: cl.chatJID(ctx, e.From), Online: !e.Unavailable, LastSeen: e.LastSeen}})
+	case *events.PushNameSetting:
+		if n := e.Action.GetName(); n != "" {
+			cl.emit(Event{MyName: n})
+		}
 	case *events.PushName:
 		cl.emit(Event{Contacts: map[string]string{cl.chatJID(ctx, e.JID): e.NewPushName}})
 	case *events.GroupInfo:

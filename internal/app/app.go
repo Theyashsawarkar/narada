@@ -174,3 +174,37 @@ func Executable() string {
 	}
 	return p
 }
+
+// MyName is how you appear on an account, for the screen to show instead
+// of a number or an address. WhatsApp: your profile name, else your own
+// name in your contacts, else your number (WhatsApp usernames aren't
+// available to linked devices). Google: your Google name, else your
+// address's name part, else the account's name.
+func (a *App) MyName(account string) string {
+	if account == store.WhatsAppAccount {
+		acc, ok := a.Store.WhatsApp()
+		if !ok {
+			return "WhatsApp"
+		}
+		if acc.MyName != "" {
+			return acc.MyName
+		}
+		if n, _, ok := a.Store.User(store.WhatsAppAccount, acc.ChatUser); ok && n != "" && !strings.HasPrefix(n, "+") {
+			return strings.TrimPrefix(n, "~")
+		}
+		return firstNonEmpty(acc.Email, "WhatsApp")
+	}
+	acc, err := a.Store.Account(account)
+	if err != nil {
+		return account
+	}
+	if acc.ChatUser != "" {
+		if n, _, ok := a.Store.User(account, acc.ChatUser); ok && n != "" {
+			return n
+		}
+	}
+	if local, _, ok := strings.Cut(acc.Email, "@"); ok && local != "" {
+		return local
+	}
+	return firstNonEmpty(acc.Email, acc.Name)
+}
