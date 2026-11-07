@@ -150,7 +150,7 @@ func (a *App) deliverWhatsAppAction(ctx context.Context, c WhatsAppConn, it stor
 		if err := c.Edit(ctx, m.Space, id, out.Body); err != nil {
 			return "", err
 		}
-		return out.Target, a.Store.EditChatText(store.WhatsAppAccount, out.Target, out.Body)
+		return out.Target, a.Store.EditChatText(store.WhatsAppAccount, out.Target, out.Body, "")
 	case ActPin:
 		if err := c.PinMessage(ctx, m.Space, m.Sender, id, out.PinSecs > 0, out.PinSecs); err != nil {
 			return "", err

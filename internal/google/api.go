@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Theyashsawarkar/narada/internal/chatfmt"
 	"github.com/Theyashsawarkar/narada/internal/mime"
 )
 
@@ -553,8 +554,20 @@ func (c *Client) Spaces(ctx context.Context) ([]ChatSpace, error) {
 }
 
 type ChatMsg struct {
-	Name       string `json:"name"`
-	Text       string `json:"text"`
+	Name string `json:"name"`
+	Text string `json:"text"`
+	// the text with its formatting, as Markdown (Text has lost it)
+	FormattedText string `json:"formattedText"`
+	Annotations   []struct {
+		Type        string `json:"type"`
+		StartIndex  int    `json:"startIndex"`
+		Length      int    `json:"length"`
+		UserMention *struct {
+			User struct {
+				Name string `json:"name"`
+			} `json:"user"`
+		} `json:"userMention"`
+	} `json:"annotations"`
 	CreateTime string `json:"createTime"`
 	Sender     struct {
 		Name        string `json:"name"`
@@ -631,7 +644,7 @@ func (c *Client) DeleteReaction(ctx context.Context, name string) error {
 
 // EditMessage changes the text of a message you sent.
 func (c *Client) EditMessage(ctx context.Context, msg, text string) error {
-	return c.do(ctx, "PATCH", c.chat+"/"+escapePath(msg)+"?updateMask=text", map[string]string{"text": text}, nil)
+	return c.do(ctx, "PATCH", c.chat+"/"+escapePath(msg)+"?updateMask=text", map[string]string{"text": chatfmt.ForSend(text), "markupSyntax": chatMarkup}, nil)
 }
 
 // DeleteMessage deletes a message you sent.
@@ -789,10 +802,14 @@ func escapePath(p string) string {
 	return strings.Join(parts, "/")
 }
 
+// chatMarkup: Chat is told to read a message as Markdown (chatfmt.ForSend
+// writes it), rather than left to its default.
+const chatMarkup = "MARKUP_SYNTAX_MARKDOWN"
+
 // PostMessage posts text (and files) in a space: in a thread when thread
 // is set, quoting another message when quote is (its name).
 func (c *Client) PostMessage(ctx context.Context, space, text, thread, quote string, files ...json.RawMessage) (string, error) {
-	body := map[string]any{"text": text}
+	body := map[string]any{"text": chatfmt.ForSend(text), "markupSyntax": chatMarkup}
 	if quote != "" {
 		q, err := c.GetChatMessage(ctx, quote)
 		if err != nil {

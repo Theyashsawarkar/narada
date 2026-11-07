@@ -106,7 +106,7 @@ func newServer(ctx context.Context, a *app.App, h Helpers) *mcp.Server {
 	mcp.AddTool(srv, &mcp.Tool{Name: "chat_read", Annotations: ro,
 		Description: "Read a chat space's recent messages, oldest first. space is an id (spaces/...) or part of its name."}, s.chatRead)
 	mcp.AddTool(srv, &mcp.Tool{Name: "chat_send",
-		Description: "Post a message in a chat space or DM (space), or to people by email (to: opens your DM with them, or starts one), optionally in a thread, with local files, or later (send_at)."}, s.chatSend)
+		Description: "Post a message in a chat space or DM (space), or to people by email (to: opens your DM with them, or starts one), optionally in a thread, with local files, or later (send_at). Formatting shows in Chat as written: line breaks stay, \"- \" lines are bullets, *bold*, _italic_, ~~strike~~, `code`, [text](url)."}, s.chatSend)
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_chats", Annotations: ro,
 		Description: "List the user's WhatsApp chats (people and groups), most recent first, with unread counts and the last message."}, s.waChats)
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_read", Annotations: ro,
@@ -506,7 +506,7 @@ func (s *server) chatRead(ctx context.Context, _ *mcp.CallToolRequest, in chatRe
 		if m.Mine {
 			who = "the user"
 		}
-		fmt.Fprintf(&b, "[%s] %s (thread %s): %s\n", s.h.When(m.Created), who, m.Thread, m.Text)
+		fmt.Fprintf(&b, "[%s] %s (thread %s): %s\n", s.h.When(m.Created), who, m.Thread, m.Source())
 		for i, f := range m.Files {
 			fmt.Fprintf(&b, "    file %d: %s (message %s)\n", i+1, f.Name, m.Name)
 		}
