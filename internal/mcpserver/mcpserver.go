@@ -109,6 +109,8 @@ func newServer(ctx context.Context, a *app.App, h Helpers) *mcp.Server {
 		Description: "Post a message in a chat space or DM (space), or to people by email (to: opens your DM with them, or starts one), optionally in a thread, with local files, or later (send_at). Formatting shows in Chat as written: line breaks stay, \"- \" lines are bullets, *bold*, _italic_, ~~strike~~, `code`, [text](url)."}, s.chatSend)
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_chats", Annotations: ro,
 		Description: "List the user's WhatsApp chats (people and groups), most recent first, with unread counts and the last message."}, s.waChats)
+	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_statuses", Annotations: ro,
+		Description: "List people's WhatsApp status updates from the last day, by person, with their ids. Looking doesn't tell them. To answer one (only the poster sees it): whatsapp_send with reply_to set to its id."}, s.waStatuses)
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_read", Annotations: ro,
 		Description: "Read a WhatsApp chat's recent messages, oldest first. chat is a contact or group name, a phone number or a chat id from whatsapp_chats. Photos, voice notes and other media show as a label (\"📷 Photo: caption\") with their files listed; attachment_save downloads them."}, s.waRead)
 	mcp.AddTool(srv, &mcp.Tool{Name: "whatsapp_send",
@@ -722,6 +724,26 @@ type waReadIn struct {
 	MarkRead bool   `json:"mark_read,omitempty" jsonschema:"also mark it read (the sender sees blue ticks)"`
 }
 
+type waStatusesIn struct{}
+
+func (s *server) waStatuses(ctx context.Context, _ *mcp.CallToolRequest, _ waStatusesIn) (*mcp.CallToolResult, any, error) {
+	groups, err := s.a.Statuses()
+	if err != nil {
+		return fail(err)
+	}
+	if len(groups) == 0 {
+		return text("No status updates in the last day (they arrive while narada is online)."), nil, nil
+	}
+	var b strings.Builder
+	for _, g := range groups {
+		fmt.Fprintf(&b, "%s:\n", g.Name)
+		for _, m := range g.Items {
+			fmt.Fprintf(&b, "  [%s] (status %s): %s\n", s.h.When(m.Created), m.Name, oneLine(m.Text, 300))
+		}
+	}
+	return text(untrusted(b.String())), nil, nil
+}
+
 func (s *server) waRead(ctx context.Context, _ *mcp.CallToolRequest, in waReadIn) (*mcp.CallToolResult, any, error) {
 	sp, err := s.a.WhatsAppChat(ctx, in.Chat)
 	if err != nil {
@@ -753,9 +775,9 @@ func (s *server) waRead(ctx context.Context, _ *mcp.CallToolRequest, in waReadIn
 }
 
 type waSendIn struct {
-	To          string   `json:"to" jsonschema:"a contact or group name, a phone number with country code (+91...), or a chat id"`
+	To          string   `json:"to,omitempty" jsonschema:"a contact or group name, a phone number with country code (+91...), or a chat id (not needed when reply_to is a status)"`
 	Text        string   `json:"text,omitempty" jsonschema:"the message (with attachments: the first file's caption; may be empty then)"`
-	ReplyTo     string   `json:"reply_to,omitempty" jsonschema:"a message id from whatsapp_read to reply to (quoting it); a group's message sent to a person replies to it privately"`
+	ReplyTo     string   `json:"reply_to,omitempty" jsonschema:"a message id from whatsapp_read to reply to (quoting it); a group's message sent to a person replies to it privately. A status id from whatsapp_statuses answers that status: it goes only to whoever posted it, in your chat with them (an emoji alone as text is WhatsApp's quick reaction)"`
 	PollOptions []string `json:"poll_options,omitempty" jsonschema:"ask a poll instead: text is the question, these its 2 to 12 options"`
 	PollMulti   bool     `json:"poll_multi,omitempty" jsonschema:"with poll_options: people may pick several"`
 	Location    string   `json:"location,omitempty" jsonschema:"share a place instead: 'latitude,longitude' (text, if any, names the place)"`
@@ -795,6 +817,23 @@ func (s *server) waSend(ctx context.Context, req *mcp.CallToolRequest, in waSend
 		return text("WhatsApp isn't linked to narada, so its click-to-chat page was opened with the message typed in. NOT sent yet: the user presses Send there themselves."), nil, nil
 	}
 	_, _ = s.a.StartWhatsApp(s.ctx)
+	if app.IsStatus(in.ReplyTo) {
+		if in.SendAt != "" {
+			return fail(fmt.Errorf("an answer to a status goes now: statuses only last a day"))
+		}
+		out := store.Outgoing{Body: in.Text, AskFirst: in.AskFirst, Why: in.Why}
+		for _, p := range in.Attachments {
+			out.Files = append(out.Files, store.File{Source: p})
+		}
+		out, err := s.a.StatusReply(in.ReplyTo, out)
+		if err != nil {
+			return fail(err)
+		}
+		return s.send(ctx, req, store.WhatsAppAccount, "whatsapp", out)
+	}
+	if strings.TrimSpace(in.To) == "" {
+		return fail(fmt.Errorf("to is needed: who the message goes to"))
+	}
 	sp, err := s.a.WhatsAppChat(ctx, in.To)
 	if err != nil {
 		return fail(err)

@@ -295,6 +295,24 @@ func TestWhatsAppStatusCommands(t *testing.T) {
 	if _, err := run(t, a, "send", "status@broadcast", "hi all"); err == nil {
 		t.Fatal("whatsapp send reached the status chat")
 	}
+	// someone's status: answered in your chat with them
+	_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: store.WhatsAppAccount, Name: "status@broadcast/S9", Space: "status@broadcast",
+		Sender: "919800000002@s.whatsapp.net", SenderName: "Ravi", Text: "Summit!", Created: time.Now().UnixMilli()}}) // as if it came while narada was online
+	if out, _ := run(t, a, "status"); !strings.Contains(out, "[status@broadcast/S9]") || !strings.Contains(out, "You\n") {
+		t.Fatalf("status by person:\n%s", out)
+	}
+	if _, err := run(t, a, "status", "reply", "status@broadcast/S9", "Congrats", "Ravi!"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, a, "status", "react", "status@broadcast/S9", "🔥"); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(w.Sent); n != 3 || w.Sent[1].Chat != "919800000002@s.whatsapp.net" || w.Sent[1].Text != "Congrats Ravi!" || w.Sent[2].Text != "🔥" || w.Sent[2].Quoted != "S9" {
+		t.Fatalf("answers: %+v", w.Sent)
+	}
+	if _, err := run(t, a, "status", "react", "status@broadcast/S9"); err == nil {
+		t.Fatal("a reaction without an emoji")
+	}
 }
 
 func TestWhatsAppPinMessageCommands(t *testing.T) {

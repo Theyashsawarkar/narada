@@ -263,16 +263,30 @@ func (a *App) statusTarget(status string) (store.ChatMessage, store.Space, error
 // chat, so nobody else sees it. out carries the text (and an agent's Agent,
 // Why, AskFirst); it goes through the outbox like any send.
 func (a *App) ReplyToStatus(status string, out store.Outgoing, origin string) (store.OutboxItem, error) {
-	_, sp, err := a.statusTarget(status)
+	out, err := a.StatusReply(status, out)
 	if err != nil {
 		return store.OutboxItem{}, err
 	}
-	if strings.TrimSpace(out.Body) == "" && len(out.Files) == 0 {
-		return store.OutboxItem{}, errors.New("the reply is empty")
-	}
-	out.Space, out.SpaceName, out.Quote = sp.Name, firstNonEmpty(sp.Alias, sp.DisplayName, phoneOf(sp.Name)), status
 	return a.Queue(store.WhatsAppAccount, "whatsapp", out, origin)
 }
+
+// StatusReply fills in where an answer to a status goes (your chat with
+// whoever posted it, quoting the status), for a caller that queues it
+// itself.
+func (a *App) StatusReply(status string, out store.Outgoing) (store.Outgoing, error) {
+	_, sp, err := a.statusTarget(status)
+	if err != nil {
+		return out, err
+	}
+	if strings.TrimSpace(out.Body) == "" && len(out.Files) == 0 {
+		return out, errors.New("the reply is empty")
+	}
+	out.Space, out.SpaceName, out.Quote = sp.Name, firstNonEmpty(sp.Alias, sp.DisplayName, phoneOf(sp.Name)), status
+	return out, nil
+}
+
+// IsStatus: name is a status message's name (its id in the status chat).
+func IsStatus(name string) bool { return strings.HasPrefix(name, whatsapp.StatusChat+"/") }
 
 // ReactToStatus is WhatsApp's quick reaction to a status: the emoji alone,
 // as a reply quoting it, in your chat with whoever posted it.

@@ -301,26 +301,49 @@ func whatsApp(a *app.App, args []string) error {
 			}
 			return waAct(a, func() (store.OutboxItem, error) { return a.PostWhatsAppStatus(strings.Join(pos, " "), files) })
 		}
-		fs := flags("narada whatsapp status", "narada whatsapp status [--json]\nnarada whatsapp status post [text...] [--attach FILE]\n\nPeople's status updates from the last day (narada doesn't tell them you looked),\nor post your own. Their photos and videos: narada whatsapp save <id>.")
+		if len(rest) > 0 && (rest[0] == "reply" || rest[0] == "react") {
+			what := rest[0]
+			fs := flags("narada whatsapp status "+what, "narada whatsapp status reply <status-id> <text...>\nnarada whatsapp status react <status-id> <emoji>\n\nAnswer someone's status, as WhatsApp does: a message in your chat with them\nthat quotes the status (a reaction is the emoji alone). Only they see it.\nStatus ids are in brackets in narada whatsapp status.")
+			pos, err := parse(fs, rest[1:])
+			if err != nil {
+				return err
+			}
+			if len(pos) < 2 {
+				return usageError("whatsapp status %s needs a status id and %s", what, map[string]string{"reply": "the text", "react": "an emoji"}[what])
+			}
+			if what == "react" {
+				return waAct(a, func() (store.OutboxItem, error) {
+					return a.ReactToStatus(pos[0], strings.Join(pos[1:], " "), store.Outgoing{}, app.OriginYou)
+				})
+			}
+			return waAct(a, func() (store.OutboxItem, error) {
+				return a.ReplyToStatus(pos[0], store.Outgoing{Body: strings.Join(pos[1:], " ")}, app.OriginYou)
+			})
+		}
+		fs := flags("narada whatsapp status", "narada whatsapp status [--json]\nnarada whatsapp status post [text...] [--attach FILE]\nnarada whatsapp status reply <status-id> <text...>\nnarada whatsapp status react <status-id> <emoji>\n\nPeople's status updates from the last day, by person (narada doesn't tell them\nyou looked); post your own, or answer someone's. Their photos and videos:\nnarada whatsapp save <id>.")
 		asJSON := fs.Bool("json", false, "JSON output")
 		if _, err := parse(fs, rest); err != nil {
 			return err
 		}
-		msgs, err := a.Store.ChatMessages(store.WhatsAppAccount, whatsapp.StatusChat, 200)
+		groups, err := a.Statuses()
 		if err != nil {
 			return err
 		}
 		if *asJSON {
-			if msgs == nil {
-				msgs = []store.ChatMessage{}
+			if groups == nil {
+				groups = []app.StatusGroup{}
 			}
-			return printJSON(msgs)
+			return printJSON(groups)
 		}
-		if len(msgs) == 0 {
+		if len(groups) == 0 {
 			fmt.Println("no status updates in the last day (they arrive while narada is online)")
 		}
-		for _, m := range msgs {
-			fmt.Printf("%s  %s  [%s]\n%s\n\n", m.SenderName, When(m.Created), m.Name, m.Text)
+		for _, g := range groups {
+			fmt.Printf("%s\n", g.Name)
+			for _, m := range g.Items {
+				fmt.Printf("  %s  [%s]\n  %s\n", When(m.Created), m.Name, strings.ReplaceAll(m.Text, "\n", "\n  "))
+			}
+			fmt.Println()
 		}
 		return nil
 	case "pin-message", "unpin-message":
