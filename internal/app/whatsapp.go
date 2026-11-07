@@ -54,6 +54,7 @@ func (a *App) dialWhatsApp(ctx context.Context) (WhatsAppConn, error) {
 	if a.DialWhatsApp != nil {
 		return a.DialWhatsApp(ctx)
 	}
+	whatsapp.Log = filepath.Join(a.Paths.State, "whatsapp.log")
 	return whatsapp.Open(ctx, a.WhatsAppKeys())
 }
 

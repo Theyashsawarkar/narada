@@ -17,12 +17,14 @@ import (
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	_ "modernc.org/sqlite" // the keys' database, like the local copy's
 )
 
@@ -152,6 +154,7 @@ type Client struct {
 	c     *whatsmeow.Client
 	store *sqlstore.Container
 
+	log       waLog.Logger
 	mu        sync.Mutex
 	handler   func(Event)
 	disappear map[string]int // chat → its disappearing-messages timer (seconds)
@@ -176,8 +179,8 @@ func Open(ctx context.Context, path string) (*Client, error) {
 		sc.Close()
 		return nil, err
 	}
-	cl := &Client{store: sc}
-	cl.c = whatsmeow.NewClient(dev, waLog.Noop)
+	cl := &Client{store: sc, log: newLog(Log, "")}
+	cl.c = whatsmeow.NewClient(dev, cl.log.Sub("client"))
 	cl.c.EmitAppStateEventsOnFullSync = true // archived, pinned and muted chats from the phone, at linking too
 	cl.c.AddEventHandler(cl.event)
 	return cl, nil
@@ -433,6 +436,31 @@ func Digits(phone string) string {
 // PhoneJID is a phone number's chat JID, without asking WhatsApp.
 func PhoneJID(phone string) string { return Digits(phone) + "@" + types.DefaultUserServer }
 
+// statusKind is a status's kind, for the log.
+func statusKind(m Message) string {
+	if m.Media != nil {
+		return m.Media.Kind
+	}
+	return "text"
+}
+
+// messageKinds names the parts a message has, for the log: what a
+// dropped status was.
+func messageKinds(msg *waE2E.Message) string {
+	if msg == nil {
+		return "empty"
+	}
+	var kinds []string
+	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
+		kinds = append(kinds, string(f.Name()))
+		return true
+	})
+	if len(kinds) == 0 {
+		return "empty"
+	}
+	return strings.Join(kinds, ",")
+}
+
 // IsGroup: the JID is a group chat.
 func IsGroup(jid string) bool { return strings.HasSuffix(jid, "@"+types.GroupServer) }
 
@@ -467,7 +495,16 @@ func (cl *Client) event(evt any) {
 		if r, ok := cl.reaction(ctx, e); ok {
 			cl.emit(Event{Reactions: []Reaction{r}})
 		} else if m, ok := cl.convert(ctx, e); ok {
+			if e.Info.Chat == types.StatusBroadcastJID {
+				cl.note("status %s by %s stored (%s)", m.ID, m.Sender, statusKind(m))
+			}
 			cl.emit(Event{Messages: []Message{m}})
+		} else if e.Info.Chat == types.StatusBroadcastJID {
+			cl.note("status %s by %s dropped: nothing narada shows (%s)", e.Info.ID, e.Info.Sender, messageKinds(e.Message))
+		}
+	case *events.UndecryptableMessage:
+		if e.Info.Chat == types.StatusBroadcastJID {
+			cl.note("status %s by %s could not be decrypted (WhatsApp asks the phone to send it again)", e.Info.ID, e.Info.Sender)
 		}
 	case *events.HistorySync:
 		cl.history(ctx, e)
@@ -595,7 +632,7 @@ func historyTicks(status int, group bool) int {
 
 func (cl *Client) chatJID(ctx context.Context, j types.JID) string {
 	j = j.ToNonAD()
-	if j.Server == types.HiddenUserServer {
+	if j.Server == types.HiddenUserServer && cl.c.Store.LIDs != nil {
 		if pn, err := cl.c.Store.LIDs.GetPNForLID(ctx, j); err == nil && !pn.IsEmpty() {
 			return pn.ToNonAD().String()
 		}
@@ -604,6 +641,9 @@ func (cl *Client) chatJID(ctx context.Context, j types.JID) string {
 }
 
 func (cl *Client) contacts(ctx context.Context) map[string]string {
+	if cl.c.Store.Contacts == nil { // not linked yet
+		return nil
+	}
 	all, err := cl.c.Store.Contacts.GetAllContacts(ctx)
 	if err != nil {
 		return nil
@@ -627,7 +667,15 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 	var reactions []Reaction
 	for _, conv := range e.Data.GetConversations() {
 		jid, err := types.ParseJID(conv.GetID())
-		if err != nil || Hidden(jid.String()) || jid.Server == types.BroadcastServer || jid.Server == types.NewsletterServer {
+		if err != nil {
+			continue
+		}
+		if jid == types.StatusBroadcastJID {
+			// people's statuses: only the ones still up (a day)
+			msgs = append(msgs, cl.historyStatuses(ctx, conv.GetMessages())...)
+			continue
+		}
+		if Hidden(jid.String()) || jid.Server == types.BroadcastServer || jid.Server == types.NewsletterServer {
 			continue
 		}
 		ch := Chat{JID: cl.chatJID(ctx, jid), Name: conv.GetName(), Group: jid.Server == types.GroupServer,
@@ -668,6 +716,32 @@ func (cl *Client) history(ctx context.Context, e *events.HistorySync) {
 		cl.emit(Event{Reactions: reactions})
 	}
 	cl.emit(Event{Contacts: cl.contacts(ctx)})
+}
+
+// StatusLife is how long a status stays up.
+const StatusLife = 24 * time.Hour
+
+// historyStatuses are the statuses in the phone's history that are
+// still up.
+func (cl *Client) historyStatuses(ctx context.Context, hms []*waHistorySync.HistorySyncMsg) []Message {
+	var out []Message
+	for _, hm := range hms {
+		evt, err := cl.c.ParseWebMessage(types.StatusBroadcastJID, hm.GetMessage())
+		if err != nil {
+			cl.note("status from history: unreadable: %v", err)
+			continue
+		}
+		if time.Since(evt.Info.Timestamp) > StatusLife {
+			continue
+		}
+		if m, ok := cl.convert(ctx, evt); ok {
+			out = append(out, m)
+			cl.note("status from history: %s by %s stored", m.ID, m.Sender)
+		} else {
+			cl.note("status from history: %s by %s dropped: nothing narada shows", evt.Info.ID, evt.Info.Sender)
+		}
+	}
+	return out
 }
 
 // reaction is a message that's someone's reaction, as ours.
