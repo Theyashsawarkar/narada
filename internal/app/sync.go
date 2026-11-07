@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 
+	"github.com/Theyashsawarkar/narada/internal/chatfmt"
 	"github.com/Theyashsawarkar/narada/internal/google"
 	"github.com/Theyashsawarkar/narada/internal/mime"
 	"github.com/Theyashsawarkar/narada/internal/store"
@@ -589,7 +591,7 @@ func (a *App) chatMessage(ctx context.Context, c *google.Client, account, space 
 		name = a.userName(ctx, c, account, m.Sender.Name)
 	}
 	cm := store.ChatMessage{Account: account, Name: m.Name, Space: space, Thread: m.Thread.Name, Sender: m.Sender.Name,
-		SenderName: name, Text: mime.Clean(m.Display()), Created: google.ParseTime(m.CreateTime).UnixMilli()}
+		SenderName: name, Text: mime.Clean(m.Display()), Formatted: chatFormatted(a, account, m), Created: google.ParseTime(m.CreateTime).UnixMilli()}
 	if q := m.QuotedMessageMetadata; q != nil {
 		cm.Quoted = q.Name
 	}
@@ -606,6 +608,30 @@ func (a *App) chatMessage(ctx context.Context, c *google.Client, account, space 
 		cm.Files = append(cm.Files, f)
 	}
 	return cm
+}
+
+// chatFormatted is a message's Markdown, its mention tags turned into names:
+// as the plain text spells them, else as we know them.
+func chatFormatted(a *App, account string, m google.ChatMsg) string {
+	if m.FormattedText == "" {
+		return ""
+	}
+	u := utf16.Encode([]rune(m.Text))
+	named := map[string]string{}
+	for _, an := range m.Annotations {
+		if an.UserMention != nil && an.StartIndex >= 0 && an.Length > 0 && an.StartIndex+an.Length <= len(u) {
+			named[an.UserMention.User.Name] = string(utf16.Decode(u[an.StartIndex : an.StartIndex+an.Length]))
+		}
+	}
+	return mime.Clean(chatfmt.Mentions(m.FormattedText, func(user string) string {
+		if n := named[user]; n != "" {
+			return n
+		}
+		if n, _, ok := a.Store.User(account, user); ok && n != "" {
+			return "@" + n
+		}
+		return ""
+	}))
 }
 
 // reactionSummary is "👍 2 · 😂 1".

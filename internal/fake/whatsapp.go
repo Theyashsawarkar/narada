@@ -27,6 +27,7 @@ import (
 type WhatsApp struct {
 	mu      sync.Mutex
 	Me      string // your JID once linked
+	MyName  string // your profile name, told on connecting
 	linked  bool
 	handler func(whatsapp.Event)
 	nextID  int
@@ -150,8 +151,12 @@ func (c *WhatsAppConn) Connect(handler func(whatsapp.Event)) error {
 	for k, v := range w.People {
 		people[k] = v
 	}
+	myName := w.MyName
 	w.mu.Unlock()
 	handler(whatsapp.Event{State: "connected"})
+	if myName != "" {
+		handler(whatsapp.Event{MyName: myName})
+	}
 	handler(whatsapp.Event{Contacts: people})
 	if first {
 		if len(chats) > 0 {

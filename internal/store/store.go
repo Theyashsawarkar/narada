@@ -16,6 +16,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/Theyashsawarkar/narada/internal/chatfmt"
 )
 
 type Store struct {
@@ -97,7 +99,7 @@ func Open(path string) (*Store, error) {
 }
 
 // schemaVersion: bump it with a step in migrate.
-const schemaVersion = 16
+const schemaVersion = 17
 
 func migrate(db *sql.DB) error {
 	var v int
@@ -255,6 +257,23 @@ func migrate(db *sql.DB) error {
 			}
 		}
 	}
+	if v < 17 {
+		// v17: Google Chat messages with their formatting (recent
+		// conversations are fetched again to fill it in), and your own name
+		// on each account (WhatsApp: your profile name), shown instead of
+		// a number or an address
+		for _, q := range []string{
+			`ALTER TABLE chat_messages ADD COLUMN formatted TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE accounts ADD COLUMN my_name TEXT NOT NULL DEFAULT ''`,
+		} {
+			if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+				return err
+			}
+		}
+		if _, err := db.Exec(`UPDATE spaces SET synced_to=0 WHERE last_active > ? AND account IN (SELECT name FROM accounts WHERE kind='google')`, time.Now().AddDate(0, 0, -14).UnixMilli()); err != nil {
+			return err
+		}
+	}
 	_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version=%d`, schemaVersion))
 	return err
 }
@@ -274,13 +293,14 @@ type Account struct {
 	MailSynced int64  `json:"mail_synced"`
 	ChatSynced int64  `json:"chat_synced"`
 	LastError  string `json:"last_error,omitempty"`
+	MyName     string `json:"my_name,omitempty"` // WhatsApp: your profile name
 }
 
 // Accounts are the Google accounts (WhatsApp is apart: WhatsApp()).
 func (s *Store) Accounts() ([]Account, error) { return s.accounts(KindGoogle) }
 
 func (s *Store) accounts(kind string) ([]Account, error) {
-	rows, err := s.db.Query(`SELECT name,email,chat,history_id,chat_user,mail_synced,chat_synced,last_error FROM accounts WHERE kind=? ORDER BY position, name`, kind)
+	rows, err := s.db.Query(`SELECT name,email,chat,history_id,chat_user,mail_synced,chat_synced,last_error,my_name FROM accounts WHERE kind=? ORDER BY position, name`, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +308,7 @@ func (s *Store) accounts(kind string) ([]Account, error) {
 	var out []Account
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.Name, &a.Email, &a.Chat, &a.HistoryID, &a.ChatUser, &a.MailSynced, &a.ChatSynced, &a.LastError); err != nil {
+		if err := rows.Scan(&a.Name, &a.Email, &a.Chat, &a.HistoryID, &a.ChatUser, &a.MailSynced, &a.ChatSynced, &a.LastError, &a.MyName); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -313,6 +333,12 @@ func (s *Store) WhatsApp() (acc Account, ok bool) {
 		return Account{}, false
 	}
 	return all[0], true
+}
+
+// SetMyName keeps your own name on an account (WhatsApp: your profile name).
+func (s *Store) SetMyName(account, name string) error {
+	_, err := s.db.Exec(`UPDATE accounts SET my_name=? WHERE name=?`, name, account)
+	return err
 }
 
 // AddWhatsApp records the linked WhatsApp account (me: your JID).
@@ -960,6 +986,7 @@ type ChatMessage struct {
 	Sender     string     `json:"-"`
 	SenderName string     `json:"from"`
 	Text       string     `json:"text"`
+	Formatted  string     `json:"-"` // Google Chat: the text as Markdown, its formatting kept
 	Created    int64      `json:"time"`
 	Mine       bool       `json:"mine,omitempty"`
 	Files      []ChatFile `json:"files,omitempty"`
@@ -1231,6 +1258,21 @@ func (s *Store) DoneWhatsAppReads(reads []WhatsAppRead) error {
 	return nil
 }
 
+// Source is a message's text to read or edit: with its formatting when it
+// has any, files listed as in Text.
+func (m ChatMessage) Source() string {
+	if m.Formatted == "" {
+		return m.Text
+	}
+	src := chatfmt.Source(m.Formatted)
+	for _, l := range strings.Split(m.Text, "\n") {
+		if strings.HasPrefix(l, "📎 ") {
+			src += "\n" + l
+		}
+	}
+	return src
+}
+
 // ChatFile is a file in a chat message: Ref is Chat's media name (it can
 // be downloaded), Drive a Drive file id (opened in the browser).
 type ChatFile struct {
@@ -1321,8 +1363,8 @@ func (s *Store) RaiseTicks(account string, names []string, level int) error {
 func (s *Store) ChatMessage(account, name string) (ChatMessage, error) {
 	var m ChatMessage
 	var files string
-	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,starred,pinned FROM chat_messages WHERE account=? AND name=?`, account, name).
-		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred, &m.Pinned)
+	err := s.db.QueryRow(`SELECT account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,starred,pinned,formatted FROM chat_messages WHERE account=? AND name=?`, account, name).
+		Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred, &m.Pinned, &m.Formatted)
 	if err != nil {
 		return m, err
 	}
@@ -1635,8 +1677,8 @@ func (s *Store) FinishWhatsAppAction(id int64, result, errText string) error {
 }
 
 // EditChatText changes a stored message's text (after an edit).
-func (s *Store) EditChatText(account, name, text string) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET text=?, edited=1 WHERE account=? AND name=?`, text, account, name)
+func (s *Store) EditChatText(account, name, text, formatted string) error {
+	_, err := s.db.Exec(`UPDATE chat_messages SET text=?, formatted=?, edited=1 WHERE account=? AND name=?`, text, formatted, account, name)
 	return err
 }
 
@@ -1732,11 +1774,11 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 		if m.Files == nil {
 			files = []byte("[]")
 		}
-		if _, err := tx.Exec(`INSERT INTO chat_messages(account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
-		  ON CONFLICT(account,name) DO UPDATE SET text=excluded.text, files=excluded.files, quoted=excluded.quoted, reactions=excluded.reactions, edited=excluded.edited,
+		if _, err := tx.Exec(`INSERT INTO chat_messages(account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,formatted) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		  ON CONFLICT(account,name) DO UPDATE SET text=excluded.text, formatted=excluded.formatted, files=excluded.files, quoted=excluded.quoted, reactions=excluded.reactions, edited=excluded.edited,
 		    ticks=MAX(ticks, excluded.ticks),
 		    sender_name=CASE WHEN excluded.sender_name<>'' THEN excluded.sender_name ELSE sender_name END`,
-			m.Account, m.Name, m.Space, m.Thread, m.Sender, m.SenderName, m.Text, m.Created, string(files), m.Quoted, m.Reactions, m.Edited, m.Ticks); err != nil {
+			m.Account, m.Name, m.Space, m.Thread, m.Sender, m.SenderName, m.Text, m.Created, string(files), m.Quoted, m.Reactions, m.Edited, m.Ticks, m.Formatted); err != nil {
 			return err
 		}
 	}
@@ -1796,7 +1838,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited, c.ticks, c.starred, c.pinned
+	rows, err := s.db.Query(`SELECT c.account,c.name,c.space,c.thread,c.sender,c.sender_name,c.text,c.created, c.sender=a.chat_user, c.files, c.quoted, c.reactions, c.edited, c.ticks, c.starred, c.pinned, c.formatted
 	  FROM chat_messages c JOIN accounts a ON a.name=c.account WHERE c.account=? AND c.space=? ORDER BY c.created DESC LIMIT ?`, account, space, limit)
 	if err != nil {
 		return nil, err
@@ -1806,7 +1848,7 @@ func (s *Store) ChatMessages(account, space string, limit int) ([]ChatMessage, e
 	for rows.Next() {
 		var m ChatMessage
 		var files string
-		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred, &m.Pinned); err != nil {
+		if err := rows.Scan(&m.Account, &m.Name, &m.Space, &m.Thread, &m.Sender, &m.SenderName, &m.Text, &m.Created, &m.Mine, &files, &m.Quoted, &m.Reactions, &m.Edited, &m.Ticks, &m.Starred, &m.Pinned, &m.Formatted); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(files), &m.Files)
@@ -1921,11 +1963,12 @@ func (s *Store) UnreadChatMessages(account, space string) ([]ChatMessage, error)
 // RepairWhatsAppNames fixes names stored before narada knew better:
 // WhatsApp's service chat goes, Meta AI gets its name, and in one-to-one
 // chats the other person's messages carry the chat's name (not the one
-// they gave themselves).
+// they gave themselves). Statuses stay: they used to be dropped here on
+// every connect, so none was ever kept.
 func (s *Store) RepairWhatsAppNames() error {
 	for _, q := range []string{
-		`DELETE FROM chat_messages WHERE account='whatsapp' AND (space='0@s.whatsapp.net' OR space LIKE 'status@%')`,
-		`DELETE FROM spaces WHERE account='whatsapp' AND (name='0@s.whatsapp.net' OR name LIKE 'status@%')`,
+		`DELETE FROM chat_messages WHERE account='whatsapp' AND space='0@s.whatsapp.net'`,
+		`DELETE FROM spaces WHERE account='whatsapp' AND name='0@s.whatsapp.net'`,
 		`UPDATE spaces SET display_name='Meta AI' WHERE account='whatsapp' AND name='13135550002@s.whatsapp.net'`,
 		`UPDATE chat_messages SET sender_name=(SELECT sp.display_name FROM spaces sp WHERE sp.account=chat_messages.account AND sp.name=chat_messages.space)
 		  WHERE account='whatsapp' AND sender=space AND space NOT LIKE '%@g.us'

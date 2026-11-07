@@ -555,9 +555,14 @@ as a poll. `X` sets a chat's messages to disappear (24 hours, again 7 days,
 90 days, then off); its top line shows the timer, and what you send there
 disappears too. A place or a contact card goes from the shell: `narada
 whatsapp send --location` and `--contact`. The Status section shows people's
-status updates from the last day, as they arrive while narada is online
-(narada doesn't tell them you looked); `narada whatsapp status post` posts
-yours, which only you can: agents can't, and nothing else sends there. While a chat is open, its top line
+status updates from the last day, by person, including ones posted before
+narada came online (narada doesn't tell them you looked); `narada whatsapp
+status reply` and `status react` answer one, as WhatsApp does: a message in
+your chat with whoever posted it, quoting the status, so only they see it.
+`narada whatsapp status post` posts yours, which only you can: agents
+can't, and nothing else sends there. What happens to each status narada
+hears (kept, dropped and why) goes in `~/.local/state/narada/whatsapp.log`,
+beside WhatsApp's own warnings. While a chat is open, its top line
 says when they're typing (or recording a voice note), online, or when they
 were last seen (if they share it), and they see you typing, as with
 WhatsApp Web. The status
@@ -656,7 +661,8 @@ claude  → contacts_find → mail_send
 | `chat_send` | Post in a space, DM or thread | **asks you** |
 | `whatsapp_chats` | WhatsApp chats with unread counts | reads |
 | `whatsapp_read` | A WhatsApp chat's recent messages (by name, number or id) | reads |
-| `whatsapp_send` | One message to one WhatsApp chat (or `forward`: a message forwarded there; `poll_options`: a poll; `location`, `contact`: a place or a contact card), optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message; opens click-to-chat when not linked (text only) | **always asks you** |
+| `whatsapp_statuses` | People's WhatsApp status updates from the last day, by person, with ids | reads |
+| `whatsapp_send` | One message to one WhatsApp chat (or `forward`: a message forwarded there; `poll_options`: a poll; `location`, `contact`: a place or a contact card), optionally with local files (`attachments`, up to 2 GB each, only ones you asked for: each goes as its own message, the text as the first one's caption) or replying to a message (`reply_to` a status id answers that status, only to whoever posted it; an emoji alone is the quick reaction); opens click-to-chat when not linked (text only) | **always asks you** |
 | `attachment_save` | Download a mail's attachments or a chat or WhatsApp message's files into `~/Downloads/narada` | saves files |
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
@@ -737,7 +743,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp poll <to> <question> <option>... [--multi]` | Ask a poll (2 to 12 options; `--multi`: several may be picked) |
 | `narada whatsapp vote <poll> [option...]` | Vote by option number or text; none takes your vote back |
 | `narada whatsapp disappear <chat> 24h\|7d\|90d\|off` | Turn disappearing messages on or off for a chat |
-| `narada whatsapp status [--json]` / `status post [text] [--attach FILE]` | People's status updates from the last day; post yours (all your contacts see it) |
+| `narada whatsapp status [--json]` / `status post [text] [--attach FILE]` / `status reply <id> <text>` / `status react <id> <emoji>` | People's status updates from the last day, by person; post yours (all your contacts see it); answer one (only its poster sees it) |
 | `narada whatsapp pin-message <message> [--for 24h\|7d\|30d]` / `unpin-message <message>` | Pin a message in its chat, for everyone |
 | `narada whatsapp list --archived` | The archived chats (left out of `list` otherwise) |
 | `narada whatsapp edit <message> <text>` | Change the text of a message you sent (WhatsApp allows 15 minutes) |

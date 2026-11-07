@@ -1,20 +1,20 @@
 package app
 
 import (
-	"fmt"
-	"github.com/Theyashsawarkar/narada/internal/google"
-	"github.com/Theyashsawarkar/narada/internal/mime"
-	"strconv"
-	"strings"
-
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/Theyashsawarkar/narada/internal/chatfmt"
 	"github.com/Theyashsawarkar/narada/internal/config"
+	"github.com/Theyashsawarkar/narada/internal/google"
+	"github.com/Theyashsawarkar/narada/internal/mime"
 	"github.com/Theyashsawarkar/narada/internal/store"
 	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
@@ -417,7 +417,7 @@ func (a *App) EditChatMessage(ctx context.Context, account, msg, text string) er
 	if err := c.EditMessage(ctx, msg, text); err != nil {
 		return chatWrite(err)
 	}
-	return a.Store.EditChatText(account, msg, mime.Clean(text))
+	return a.Store.EditChatText(account, msg, mime.Clean(text), chatfmt.ForSend(mime.Clean(text)))
 }
 
 // DeleteChatMessage deletes a message you sent.

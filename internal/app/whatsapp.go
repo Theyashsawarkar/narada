@@ -54,6 +54,7 @@ func (a *App) dialWhatsApp(ctx context.Context) (WhatsAppConn, error) {
 	if a.DialWhatsApp != nil {
 		return a.DialWhatsApp(ctx)
 	}
+	whatsapp.Log = filepath.Join(a.Paths.State, "whatsapp.log")
 	return whatsapp.Open(ctx, a.WhatsAppKeys())
 }
 
@@ -288,6 +289,8 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			_ = a.Store.SetWhatsAppReaction(store.WhatsAppReaction{Space: r.Chat, Msg: r.Msg, Reactor: reactor, Emoji: r.Emoji})
 			a.showWhatsAppReactions(r.Chat, r.Msg)
 		}
+	case e.MyName != "":
+		_ = a.Store.SetMyName(acc, e.MyName)
 	case e.State != "":
 		switch e.State {
 		case "connected":
@@ -361,7 +364,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 				continue
 			case m.Edit && m.Text != "":
 				if _, err := a.Store.ChatMessage(acc, name); err == nil {
-					_ = a.Store.EditChatText(acc, name, m.Text)
+					_ = a.Store.EditChatText(acc, name, m.Text, "")
 					continue
 				}
 			}

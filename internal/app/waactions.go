@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -150,7 +151,7 @@ func (a *App) deliverWhatsAppAction(ctx context.Context, c WhatsAppConn, it stor
 		if err := c.Edit(ctx, m.Space, id, out.Body); err != nil {
 			return "", err
 		}
-		return out.Target, a.Store.EditChatText(store.WhatsAppAccount, out.Target, out.Body)
+		return out.Target, a.Store.EditChatText(store.WhatsAppAccount, out.Target, out.Body, "")
 	case ActPin:
 		if err := c.PinMessage(ctx, m.Space, m.Sender, id, out.PinSecs > 0, out.PinSecs); err != nil {
 			return "", err
@@ -183,4 +184,117 @@ func (a *App) deliverWhatsAppAction(ctx context.Context, c WhatsAppConn, it stor
 		return waName(out.Space, nid), nil
 	}
 	return "", fmt.Errorf("unknown WhatsApp action %q", out.Action)
+}
+
+// StatusGroup is one person's statuses that are still up, oldest first.
+// Mine marks your own.
+type StatusGroup struct {
+	Sender, Name string
+	Mine         bool
+	Items        []store.ChatMessage
+}
+
+// Statuses are the statuses up now (a day), one group per person: yours
+// first, then whoever posted last.
+func (a *App) Statuses() ([]StatusGroup, error) {
+	msgs, err := a.Store.ChatMessages(store.WhatsAppAccount, whatsapp.StatusChat, 2000)
+	if err != nil {
+		return nil, err
+	}
+	since := time.Now().Add(-whatsapp.StatusLife).UnixMilli()
+	var groups []StatusGroup
+	at := map[string]int{}
+	for _, m := range msgs { // oldest first
+		if m.Created < since {
+			continue
+		}
+		i, ok := at[m.Sender]
+		if !ok {
+			i = len(groups)
+			at[m.Sender] = i
+			name := m.SenderName
+			if m.Mine {
+				name = "You"
+			}
+			groups = append(groups, StatusGroup{Sender: m.Sender, Name: firstNonEmpty(name, phoneOf(m.Sender), m.Sender), Mine: m.Mine})
+		}
+		groups[i].Items = append(groups[i].Items, m)
+	}
+	last := func(g StatusGroup) int64 { return g.Items[len(g.Items)-1].Created }
+	slices.SortStableFunc(groups, func(x, y StatusGroup) int {
+		switch {
+		case x.Mine != y.Mine:
+			if x.Mine {
+				return -1
+			}
+			return 1
+		case last(x) > last(y):
+			return -1
+		case last(x) < last(y):
+			return 1
+		}
+		return 0
+	})
+	return groups, nil
+}
+
+// statusTarget checks status is someone's status still up and gives the
+// chat a reply to it goes in: yours with whoever posted it.
+func (a *App) statusTarget(status string) (store.ChatMessage, store.Space, error) {
+	m, err := a.Store.ChatMessage(store.WhatsAppAccount, status)
+	if err != nil || m.Space != whatsapp.StatusChat {
+		return m, store.Space{}, fmt.Errorf("%q isn't a status (see `narada whatsapp status`)", status)
+	}
+	if m.Mine {
+		return m, store.Space{}, errors.New("that's your own status")
+	}
+	if m.Sender == "" || whatsapp.IsGroup(m.Sender) {
+		return m, store.Space{}, errors.New("this status has no sender to answer")
+	}
+	sp, err := a.Store.Space(store.WhatsAppAccount, m.Sender)
+	if err != nil {
+		sp = store.Space{Account: store.WhatsAppAccount, Name: m.Sender, DisplayName: a.waChatName(m.Sender, m.SenderName), Type: "DIRECT_MESSAGE"}
+	}
+	return m, sp, nil
+}
+
+// ReplyToStatus answers someone's status, as WhatsApp does: a message in
+// your chat with them that quotes the status. Nothing goes to the status
+// chat, so nobody else sees it. out carries the text (and an agent's Agent,
+// Why, AskFirst); it goes through the outbox like any send.
+func (a *App) ReplyToStatus(status string, out store.Outgoing, origin string) (store.OutboxItem, error) {
+	out, err := a.StatusReply(status, out)
+	if err != nil {
+		return store.OutboxItem{}, err
+	}
+	return a.Queue(store.WhatsAppAccount, "whatsapp", out, origin)
+}
+
+// StatusReply fills in where an answer to a status goes (your chat with
+// whoever posted it, quoting the status), for a caller that queues it
+// itself.
+func (a *App) StatusReply(status string, out store.Outgoing) (store.Outgoing, error) {
+	_, sp, err := a.statusTarget(status)
+	if err != nil {
+		return out, err
+	}
+	if strings.TrimSpace(out.Body) == "" && len(out.Files) == 0 {
+		return out, errors.New("the reply is empty")
+	}
+	out.Space, out.SpaceName, out.Quote = sp.Name, firstNonEmpty(sp.Alias, sp.DisplayName, phoneOf(sp.Name)), status
+	return out, nil
+}
+
+// IsStatus: name is a status message's name (its id in the status chat).
+func IsStatus(name string) bool { return strings.HasPrefix(name, whatsapp.StatusChat+"/") }
+
+// ReactToStatus is WhatsApp's quick reaction to a status: the emoji alone,
+// as a reply quoting it, in your chat with whoever posted it.
+func (a *App) ReactToStatus(status, emoji string, out store.Outgoing, origin string) (store.OutboxItem, error) {
+	emoji = strings.TrimSpace(emoji)
+	if emoji == "" || strings.ContainsAny(emoji, " \n") || len(emoji) > 32 {
+		return store.OutboxItem{}, fmt.Errorf("%q isn't one emoji", emoji)
+	}
+	out.Body, out.Files = emoji, nil
+	return a.ReplyToStatus(status, out, origin)
 }

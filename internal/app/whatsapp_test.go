@@ -1292,3 +1292,103 @@ func TestWhatsAppOldContextLeavesNewConnection(t *testing.T) {
 		t.Fatal("the first context's end stopped the second connection")
 	}
 }
+
+// Answering a status goes to whoever posted it, in your chat with them,
+// quoting the status, and never to the status chat; an agent's answer
+// waits for approval like any send. A reaction is the emoji alone.
+func TestWhatsAppStatusReplyAndReact(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	a.Config.ChatUndoSeconds = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	const ravi, meena = "919800000002@s.whatsapp.net", "919800000003@s.whatsapp.net"
+	w.Receive(whatsapp.Message{ID: "S1", Chat: whatsapp.StatusChat, Sender: ravi, SenderName: "Ravi", Text: "At the top!", Time: time.Now().Add(-time.Hour)})
+	w.Receive(whatsapp.Message{ID: "S2", Chat: whatsapp.StatusChat, Sender: meena, SenderName: "Meena", Text: "📷 Photo", Time: time.Now().Add(-time.Minute)})
+	w.Receive(whatsapp.Message{ID: "S3", Chat: whatsapp.StatusChat, Sender: ravi, SenderName: "Ravi", Text: "Down again", Time: time.Now().Add(-30 * time.Second)})
+	w.Receive(whatsapp.Message{ID: "S0", Chat: whatsapp.StatusChat, Sender: meena, SenderName: "Meena", Text: "old", Time: time.Now().Add(-25 * time.Hour)})
+	// they outlive a reconnect (which once dropped every status)
+	a.StopWhatsApp()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	groups, err := a.Statuses()
+	if err != nil || len(groups) != 2 || groups[0].Sender != ravi || len(groups[0].Items) != 2 || groups[1].Sender != meena || !strings.Contains(groups[1].Name, "Meena") || len(groups[1].Items) != 1 {
+		t.Fatalf("statuses: %+v %v", groups, err)
+	}
+	status := waName(whatsapp.StatusChat, "S1")
+	it, err := a.ReplyToStatus(status, store.Outgoing{Body: "Wow, where is this?"}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, it); got.Status != store.StatusSent {
+		t.Fatalf("reply: %s %s", got.Status, got.Error)
+	}
+	if s := w.Sent[len(w.Sent)-1]; s.Chat != ravi || s.Text != "Wow, where is this?" {
+		t.Fatalf("sent: %+v", s)
+	}
+	if q := w.Quotes[len(w.Quotes)-1]; q.ID != "S1" || q.Chat != whatsapp.StatusChat || q.Sender != ravi {
+		t.Fatalf("quote: %+v", q)
+	}
+	it, err = a.ReactToStatus(waName(whatsapp.StatusChat, "S2"), "😍", store.Outgoing{}, OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := deliver(t, a, ctx, it); got.Status != store.StatusSent || w.Sent[len(w.Sent)-1].Chat != meena || w.Sent[len(w.Sent)-1].Text != "😍" {
+		t.Fatalf("react: %s %+v", got.Status, w.Sent[len(w.Sent)-1])
+	}
+	for _, s := range w.Sent {
+		if s.Chat == whatsapp.StatusChat {
+			t.Fatalf("something went to the status chat: %+v", s)
+		}
+	}
+	// an agent's waits for you
+	it, err = a.ReplyToStatus(status, store.Outgoing{Body: "Nice", Agent: "Claude Code", Why: "say nice to Ravi's status"}, OriginAgent)
+	if err != nil || it.Status != store.StatusApproval {
+		t.Fatalf("agent: %+v %v", it, err)
+	}
+	for _, bad := range []struct{ status, emoji string }{{waName(ravi, "H1"), "👍"}, {status, ""}, {status, "two words"}} {
+		if _, err := a.ReactToStatus(bad.status, bad.emoji, store.Outgoing{}, OriginYou); err == nil {
+			t.Fatalf("reacted: %+v", bad)
+		}
+	}
+}
+
+// You're shown by name: your WhatsApp profile name once WhatsApp says it,
+// your number before that; on Google your name, else your address's name.
+func TestMyName(t *testing.T) {
+	a, w := setupWhatsApp(t)
+	acc, _ := a.Store.WhatsApp()
+	if got := a.MyName(store.WhatsAppAccount); got != acc.Email {
+		t.Fatalf("before WhatsApp names you: %q (want the number %q)", got, acc.Email)
+	}
+	w.MyName = "Sam Lee"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
+	deadline := time.Now().Add(2 * time.Second)
+	for a.MyName(store.WhatsAppAccount) != "Sam Lee" && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := a.MyName(store.WhatsAppAccount); got != "Sam Lee" {
+		t.Fatalf("WhatsApp: %q", got)
+	}
+	if err := a.Store.AddAccount(store.Account{Name: "work", Email: "sam.lee@acme.example", Chat: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.MyName("work"); got != "sam.lee" {
+		t.Fatalf("Google without a name: %q", got)
+	}
+	_ = a.Store.SetChatSynced("work", "users/7")
+	_ = a.Store.PutUser("work", "users/7", "Sam Lee", "sam.lee@acme.example")
+	if got := a.MyName("work"); got != "Sam Lee" {
+		t.Fatalf("Google: %q", got)
+	}
+}

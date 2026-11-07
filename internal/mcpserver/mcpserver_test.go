@@ -73,7 +73,7 @@ func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any)
 func TestTools(t *testing.T) {
 	a, g, cs := session(t)
 	tools, err := cs.ListTools(context.Background(), nil)
-	if err != nil || len(tools.Tools) != 15 {
+	if err != nil || len(tools.Tools) != 16 {
 		t.Fatalf("tools: %v %v", len(tools.Tools), err)
 	}
 	out := call(t, cs, "mail_list", map[string]any{"today": true})
@@ -257,6 +257,32 @@ func TestWhatsAppTools(t *testing.T) {
 	}
 	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek", "attachments": []string{filepath.Join(dir, "missing.pdf")}}); !strings.Contains(out, "missing.pdf") {
 		t.Fatalf("a missing file: %q", out)
+	}
+	// statuses: listed by person; answering one goes only to its poster
+	if out = call(t, cs, "whatsapp_statuses", nil); !strings.Contains(out, "No status updates") {
+		t.Fatalf("no statuses: %s", out)
+	}
+	w.Receive(whatsapp.Message{ID: "S1", Chat: whatsapp.StatusChat, Sender: "919800000002@s.whatsapp.net", SenderName: "Ravi", Text: "At the top!", Time: time.Now()})
+	out = call(t, cs, "whatsapp_statuses", nil)
+	if !strings.Contains(out, "(status status@broadcast/S1): At the top!") || !strings.Contains(out, "<untrusted") {
+		t.Fatalf("whatsapp_statuses: %s", out)
+	}
+	go func() {
+		for i := 0; i < 50; i++ {
+			time.Sleep(100 * time.Millisecond)
+			if items, _ := a.Store.Outbox(store.StatusApproval); len(items) > 0 {
+				_ = a.Approve(items[0].ID, nil)
+				return
+			}
+		}
+	}()
+	sentBefore := len(w.Sent)
+	out = call(t, cs, "whatsapp_send", map[string]any{"reply_to": "status@broadcast/S1", "text": "😍", "why": "react to Ravi's status"})
+	if out != "Sent." || len(w.Sent) != sentBefore+1 || w.Sent[sentBefore].Chat != "919800000002@s.whatsapp.net" || w.Sent[sentBefore].Quoted != "S1" {
+		t.Fatalf("answering a status: %q %+v", out, w.Sent[sentBefore:])
+	}
+	if out = call(t, cs, "whatsapp_send", map[string]any{"text": "hi"}); !strings.Contains(out, "to is needed") {
+		t.Fatalf("no to: %q", out)
 	}
 	if out = call(t, cs, "whatsapp_send", map[string]any{"to": "trek"}); !strings.Contains(out, "empty") {
 		t.Fatalf("nothing to send: %q", out)

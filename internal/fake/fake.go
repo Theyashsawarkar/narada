@@ -666,7 +666,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chatJSON(m *ChatMessage, atts []any) map[string]any {
-	j := map[string]any{"name": m.Name, "text": m.Text, "createTime": m.Created.UTC().Format(time.RFC3339Nano),
+	j := map[string]any{"name": m.Name, "text": m.Text, "formattedText": m.Text, "createTime": m.Created.UTC().Format(time.RFC3339Nano),
 		"sender": map[string]string{"name": m.Sender, "type": "HUMAN"}, "thread": map[string]string{"name": m.Thread}, "attachment": atts}
 	if m.Quoted != "" {
 		j["quotedMessageMetadata"] = map[string]string{"name": m.Quoted, "lastUpdateTime": m.Created.UTC().Format(time.RFC3339Nano)}

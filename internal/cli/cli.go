@@ -814,7 +814,7 @@ func chat(a *app.App, args []string) error {
 			if m.Mine {
 				who = "you"
 			}
-			fmt.Printf("%s  %s\n%s\n", who, When(m.Created), m.Text)
+			fmt.Printf("%s  %s\n%s\n", who, When(m.Created), m.Source())
 			if len(m.Files) > 0 {
 				fmt.Printf("  ↳ narada chat save %s\n", m.Name)
 			}
