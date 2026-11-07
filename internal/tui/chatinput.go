@@ -226,8 +226,7 @@ func (m Model) chatBoxLines(inner, maxRows int, focused bool, placeholder, hint 
 	}
 	out := []string{border.Render("╭" + strings.Repeat("─", tw+2) + "╮")}
 	for _, r := range rows {
-		pad := max(0, tw-lipgloss.Width(r))
-		out = append(out, border.Render("│ ")+r+strings.Repeat(" ", pad)+border.Render(" │"))
+		out = append(out, border.Render("│ ")+fit(r, tw)+border.Render(" │"))
 	}
 	out = append(out, border.Render("╰"+strings.Repeat("─", tw+2)+"╯"))
 	if hint != "" {
@@ -241,4 +240,4 @@ func (m Model) chatBoxLines(inner, maxRows int, focused bool, placeholder, hint 
 func (m Model) chatAccent() string { return m.partColor() }
 
 // previewInner is the text width inside the preview pane.
-func (m Model) previewInner() int { return m.w - m.listWidth() - 4 }
+func (m Model) previewInner() int { return m.previewWidth() }

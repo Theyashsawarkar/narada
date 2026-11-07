@@ -245,7 +245,7 @@ func (m Model) approveKey(s string) (tea.Model, tea.Cmd) {
 		if err := m.a.Approve(it.ID, nil); err != nil {
 			m.err = err.Error()
 		} else {
-			m.say(fmt.Sprintf("approved · sends in %ds · z cancels", int(m.a.UndoWindow(it.Kind).Seconds())))
+			m.say(fmt.Sprintf("approved · sends in %ds · u cancels", int(m.a.UndoWindow(it.Kind).Seconds())))
 			m.undo = &undo{what: "send", outboxID: it.ID}
 		}
 	case "n":

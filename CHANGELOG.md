@@ -2,7 +2,48 @@
 
 Newest first.
 
-## Unreleased
+## v0.11.0 -- 2026-11-07
+
+- **A new screen.** The places sit in a top bar (Mail, Chat, WhatsApp, the AI
+  requests), each in its colour with its count, and you on the right, by name; the
+  place's sections are one strip under it. Lists are rows with a bar in the place's
+  colour on the picked one; messages hang off a bar in the sender's colour, yours
+  indented in mauve with your ticks; mail is a thread of messages under their senders.
+  Every colour comes from varna's theme, every one of them (teal, sky, pink, mauve,
+  lavender…), and each means something. Below 100 columns the list and what's open
+  take turns.
+- **Keys work like Vim's** (ADR 8): `i` writes, `Esc` back to NORMAL, `v` picks a
+  range, `:` runs a command (`:archive`, `:mute`, `:account`, Tab completes), and
+  **Space is the leader**: wait after it and a menu shows everything else. What moved:
+  `g`→`gg`, `e` (archive)→`dd`, `d` (trash)→`#`, `z` (undo)→`u`, `h`/`l`
+  (sections)→`[`/`]`, `[`/`]` (chats)→`Ctrl+p`/`Ctrl+n`, `1`/`2` (focus)→`h`/`l`
+  (`1`–`4` are the places), `x`/`Ctrl+x`→`v`/`V`, `v`/`V` (files)→`gf`/`gF`,
+  `o`→`gx` (`o` stays), `E`/`Q` (folds)→`za`/`zq`, `y`→`yy` (message) and `Y`
+  (link), `a` (reply all)→`R`, `R` (sync)→`Space r`, `u` (account)→`Space x`,
+  `n` (rename)→`Space R`, `N` (new chat)→`Space N`, `A`→`4`. `n`/`N` jump to the
+  next / previous unread, `Space Space` opens it.
+- **`/` finds anything**: actions with their keys (type `archive` and Enter
+  archives), chats, people, messages and mail, everywhere; `Space /` only here.
+- **Hindi, Marathi and other Indian scripts no longer break the screen** in tmux under
+  kitty: rows stay in line, frames stay closed, no stray characters. narada lays
+  rows out by the terminal's count and splits joined consonants with a ZWNJ when it
+  draws them; Vayu's tmux.conf gives vowel signs no cell (Troubleshooting).
+- **WhatsApp statuses show, and you can answer them.** Every reconnect deleted them
+  (a leftover from before statuses were shown), and the phone's history of them was
+  skipped. The Status section lists them by person, yours first; `r` on one replies
+  and `e` sends a quick reaction, both as a message to whoever posted it, quoting the
+  status, as WhatsApp does, never to everyone. From the shell: `whatsapp status reply
+  <id> <text>` and `status react <id> <emoji>`; agents: `whatsapp_statuses` and
+  `whatsapp_send` with `reply_to`. `~/.local/state/narada/whatsapp.log` says why a
+  status was dropped.
+- **Google Chat formatting both ways**: what you send keeps its line breaks, `•` and
+  `- ` lines are bullets and `*this*` is bold, as in Chat's own box (narada sends
+  Markdown and says so); what comes back shows its bullets, bold, italics, code and
+  quotes, and editing or copying a message keeps them. Recent chats are fetched again
+  once to fill this in.
+- **You, by name**: the top bar shows your WhatsApp profile name or your Google name,
+  your number or address only when there's nothing else.
+- Mentions are pink, links sky blue, files yellow: everywhere the same.
 
 - **WhatsApp takes big files**: up to 2 GB a file, as WhatsApp itself does (an app
   build of 90 MB goes), from the screen, `whatsapp send --attach` and agents. Mail
@@ -23,7 +64,7 @@ Newest first.
   failing with "try again". Big files stream to disk both ways (sending and saving),
   and a long download no longer holds up sends.
 - **Edit, delete, forward and reply privately on WhatsApp**: `E` on your message edits
-  it (within 15 minutes), `d d` deletes it for everyone, or someone else's for you
+  it (within 15 minutes), `dd` twice deletes it for everyone, or someone else's for you
   (here only); `f` forwards the picked message, photo or file and all, marked
   forwarded; `R` on a group message answers its sender privately, quoting it. From
   the shell: `whatsapp edit|delete [--for-me]|forward`, and `whatsapp send
@@ -32,7 +73,7 @@ Newest first.
   agent's wait for you and each counts against `whatsapp_per_hour`. Forwarded messages
   you receive say so.
 - **Archive, pin, mute, mark unread, star and block on WhatsApp**, synced with your
-  phone both ways: `e` archives a chat (into a new Archived section), `p` pins it on
+  phone both ways: `dd` archives a chat (into a new Archived section), `p` pins it on
   your phone too, `M` marks it unread there too, `Z` mutes it (8 hours, a week,
   always; muted chats don't notify), `B B` blocks, `*` stars a message. From the
   shell: `whatsapp archive|unarchive|pin|unpin|unread|mute [--for]|unmute|block|
@@ -41,7 +82,7 @@ Newest first.
   recording, online, or last seen; they see you typing. Only while you have a chat
   open, as WhatsApp Web, so your phone keeps its notifications otherwise.
 - **WhatsApp groups**: `narada whatsapp group new|info|rename|about|add|remove|promote|
-  demote|link [--reset]|join|leave`. In the screen `n` renames a group for everyone
+  demote|link [--reset]|join|leave`. In the screen `Space R` renames a group for everyone
   and `I` shows its people, admins and description. A group you leave moves to
   Archived.
 - **WhatsApp polls**: polls show their options and a live tally (yours marked ●);

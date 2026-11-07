@@ -482,6 +482,19 @@ func (w *WhatsApp) SeedWhatsApp() {
 	w.linked = true
 }
 
+// SeedStatuses adds made-up status updates from the last day (the demo's,
+// after SeedWhatsApp): two of Ravi's, one of Sneha's.
+func (w *WhatsApp) SeedStatuses() {
+	now := time.Now()
+	at := func(d time.Duration) time.Time { return now.Add(-d) }
+	ravi := "919800000002@s.whatsapp.net"
+	w.History = append(w.History,
+		whatsapp.Message{ID: "D1", Chat: whatsapp.StatusChat, Sender: ravi, SenderName: "Ravi", Text: "Shipped the new release today 🚀", Time: at(6 * time.Hour)},
+		whatsapp.Message{ID: "D2", Chat: whatsapp.StatusChat, Sender: ravi, SenderName: "Ravi", Text: "📷 Photo: team lunch", Time: at(5 * time.Hour),
+			Media: &whatsapp.Media{Kind: "image", Name: "lunch.png", Mime: "image/png", Raw: []byte("demo-photo"), Size: int64(len(w.Files["demo-photo"]))}},
+		whatsapp.Message{ID: "D3", Chat: whatsapp.StatusChat, Sender: "919800000003@s.whatsapp.net", SenderName: "Sneha", Text: "Trek prep: bags packed, alarm at 4:30", Time: at(90 * time.Minute)})
+}
+
 // demoPhoto is a made-up photo: a sunset gradient with a sun.
 func demoPhoto() []byte {
 	const W, H = 480, 320

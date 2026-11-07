@@ -335,7 +335,14 @@ func (m *Model) goPlace(i int) (tea.Model, tea.Cmd) {
 	if i == m.place() && !m.inAISection() {
 		return *m, nil
 	}
-	return m.actKey(map[int]string{0: "alt+m", 1: "alt+c", 2: "alt+w"}[i])
+	m.tab, m.wa = tabChat, i == 2
+	if i == 0 {
+		m.tab = tabMail
+	}
+	m.sec, m.sel, m.offset, m.filter, m.search, m.ai, m.focus = 0, 0, 0, "", nil, "", 0
+	m.selected = map[string]bool{}
+	m.reload()
+	return *m, nil
 }
 
 // goSection opens the place's section of that name (Unread…).

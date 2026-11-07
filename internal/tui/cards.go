@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
+	"github.com/Theyashsawarkar/narada/internal/chatfmt"
 	"github.com/Theyashsawarkar/narada/internal/cli"
 	"github.com/Theyashsawarkar/narada/internal/mime"
 	"github.com/Theyashsawarkar/narada/internal/render"
@@ -100,10 +101,12 @@ func (m Model) selEdge() string {
 
 func fg(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(c)) }
 
-// fit pads or cuts a styled string to exactly w cells.
+// fit pads or cuts a styled string to exactly w cells on the terminal:
+// cut by narada's count, padded by the terminal's, which is narrower for
+// Indian scripts (see termText), so a border after it stays in line.
 func fit(s string, w int) string {
-	s = ansi.Truncate(s, w, "…")
-	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
+	s = termText(ansi.Truncate(s, w, "…"))
+	return s + strings.Repeat(" ", max(0, w-ansi.StringWidthWc(s)))
 }
 
 // cardBox draws a card of inner width w around lines: rounded in the
@@ -499,10 +502,10 @@ func (m *Model) listView(w, h int) string {
 				if chatKind(it.Kind) {
 					to = "→ # " + it.Out.SpaceName
 				}
-				hint := map[string]string{store.StatusQueued: "z cancels", store.StatusFailed: "R sends it again · ⏎ edits",
+				hint := map[string]string{store.StatusQueued: "u cancels", store.StatusFailed: "R sends it again · ⏎ edits",
 					store.StatusApproval: "y send · e edit · n decline", store.StatusSending: "…"}[it.Status]
 				if it.Status == store.StatusQueued && it.Out.ScheduledFor > 0 {
-					hint = "t moves · ⏎ edits · z cancels"
+					hint = "t moves · ⏎ edits · u cancels"
 				}
 				lines = []string{row(s.text.Render(to), fg(col).Render(status), cw), s.text.Render(t.Subject),
 					ansi.Truncate(fg(col).Render(hint)+s.muted.Render("  "+oneLine(it.Out.Body)), cw, "…")}
@@ -533,9 +536,11 @@ func (m *Model) listView(w, h int) string {
 				chips = append([]string{m.sentChip(sentSt)}, chips...)
 			}
 			chipStr := strings.Join(chips, " ")
-			snipW := cw - lipgloss.Width(chipStr) - 1
+			snipW := cw - lipgloss.Width(chipStr) - 1 - lipgloss.Width(m.avatar("x")) - 1
 			snip := ansi.Truncate(s.muted.Render(oneLine(t.Snippet)), max(4, snipW), "…")
-			lines = []string{row(who, s.muted.Render(cli.When(t.LastDate)), cw), subj, row(snip, chipStr, cw)}
+			face := m.avatar(firstNonEmpty(strings.Split(t.Participants, ",")[0], "?")) + " "
+			pad := strings.Repeat(" ", lipgloss.Width(face))
+			lines = []string{row(face+who, s.muted.Render(cli.When(t.LastDate)), cw), pad + subj, row(pad+snip, chipStr, cw)}
 		} else {
 			sp := m.spaces[i]
 			if it, ok := m.outboxRows[sp.Name]; ok {
@@ -557,10 +562,11 @@ func (m *Model) listView(w, h int) string {
 			}
 			title := s.sub.Render(name)
 			if sp.Unread > 0 {
-				title = s.bold.Render(name) + " " + s.round(s.pill, fmt.Sprint(sp.Unread))
+				unread := lipgloss.NewStyle().Background(lipgloss.Color(m.partColor())).Foreground(lipgloss.Color(s.c.Crust)).Bold(true)
+				title = s.bold.Render(name) + " " + s.round(unread, fmt.Sprint(sp.Unread))
 			}
 			if n := m.mentions[sp.Account+"/"+sp.Name]; n > 0 {
-				badge := lipgloss.NewStyle().Background(lipgloss.Color(s.c.Peach)).Foreground(lipgloss.Color(s.c.Base)).Bold(true)
+				badge := lipgloss.NewStyle().Background(lipgloss.Color(s.c.Pink)).Foreground(lipgloss.Color(s.c.Crust)).Bold(true)
 				title = s.bold.Render(name) + " " + s.round(badge, fmt.Sprintf("@%d", n))
 			}
 			if sp.Pinned {
@@ -658,10 +664,10 @@ func (m *Model) buildPreview(w int) {
 	if t, ok := m.curThread(); ok {
 		m.preview = m.mailLines(t, w)
 	} else if it, ok := m.curOutbox(); ok {
-		note := map[string]string{store.StatusQueued: "in its undo window · z cancels", store.StatusSending: "sending now",
+		note := map[string]string{store.StatusQueued: "in its undo window · u cancels", store.StatusSending: "sending now",
 			store.StatusApproval: "an agent's mail waiting for your approval (A)", store.StatusFailed: "failed: " + it.Error + " · R sends it again"}[it.Status]
 		if it.Status == store.StatusQueued && it.Out.ScheduledFor > 0 {
-			note = "⏰ scheduled for " + time.UnixMilli(it.Out.ScheduledFor).Format("Monday 02 January, 15:04") + " · t moves it · enter edits · z cancels"
+			note = "⏰ scheduled for " + time.UnixMilli(it.Out.ScheduledFor).Format("Monday 02 January, 15:04") + " · t moves it · enter edits · u cancels"
 		}
 		m.preview = strings.Split(m.outgoingView(it.Kind, it.Out, note, w), "\n")
 	} else if _, ok := m.curSpace(); ok {
@@ -889,7 +895,7 @@ func (m *Model) chatLines(w int) []string {
 		if t := m.presenceLine(sp); t != "" {
 			head = []string{t}
 		}
-	} else {
+	} else if !m.isStatus() {
 		head = []string{s.muted.Render(ansi.Truncate(strings.Join(people, ", "), w-14, "…") + fmt.Sprintf(" · %d people", len(people)))}
 		if sp, ok := m.curSpace(); ok && sp.Account == store.WhatsAppAccount {
 			if t := m.presenceLine(sp); t != "" {
@@ -901,7 +907,7 @@ func (m *Model) chatLines(w int) []string {
 	if sp, ok := m.curSpace(); ok {
 		newSince = m.newMark[sp.Account+"/"+sp.Name]
 	}
-	mentionStyle := lipgloss.NewStyle().Background(lipgloss.Color(s.c.Accent)).Foreground(lipgloss.Color(s.c.Base))
+	mentionStyle := lipgloss.NewStyle().Background(lipgloss.Color(s.c.Pink)).Foreground(lipgloss.Color(s.c.Crust))
 	mention := func(t string) string { return s.round(mentionStyle, t) }
 	bw := max(24, w*68/100) // a message's widest
 	out := head
@@ -913,7 +919,9 @@ func (m *Model) chatLines(w int) []string {
 		t := time.UnixMilli(c.Created)
 		if day := dayName(t); day != lastDay {
 			lastDay = day
-			out = append(out, "", divider(day, w, s.muted))
+			if !m.isStatus() { // statuses go by person: their times say when
+				out = append(out, "", divider(day, w, s.muted))
+			}
 		}
 		if !newShown && newSince > 0 && !c.Mine && c.Created > newSince {
 			newShown = true
@@ -922,8 +930,9 @@ func (m *Model) chatLines(w int) []string {
 		}
 		// a run: same sender, same day, each within 10 minutes of the last
 		j := i + 1
-		for j < len(m.chatMsgs) && m.chatMsgs[j].Sender == c.Sender && m.chatMsgs[j].Created-m.chatMsgs[j-1].Created < 10*60*1000 &&
-			dayName(time.UnixMilli(m.chatMsgs[j].Created)) == lastDay &&
+		status := m.isStatus() // one person's statuses stay together
+		for j < len(m.chatMsgs) && m.chatMsgs[j].Sender == c.Sender && (status || m.chatMsgs[j].Created-m.chatMsgs[j-1].Created < 10*60*1000) &&
+			(status || dayName(time.UnixMilli(m.chatMsgs[j].Created)) == lastDay) &&
 			!(newSince > 0 && !newShown && !m.chatMsgs[j].Mine && m.chatMsgs[j].Created > newSince) {
 			j++
 		}
@@ -987,7 +996,9 @@ func (m *Model) chatLines(w int) []string {
 					body = append(body, l)
 				}
 			}
-			if strings.TrimSpace(strings.Join(body, "\n")) != "" {
+			if g.Formatted != "" {
+				lines = append(lines, m.chatFormatted(g.Formatted, bw-4, mention)...)
+			} else if strings.TrimSpace(strings.Join(body, "\n")) != "" {
 				for _, l := range wrap(strings.Join(body, "\n"), bw-4) {
 					lines = append(lines, m.chatLinks(styleMentions(l, s.text, mention)))
 				}
@@ -1002,7 +1013,7 @@ func (m *Model) chatLines(w int) []string {
 				lines[len(lines)-1] += s.accent.Render(" 📌")
 			}
 			for _, f := range files {
-				lines = append(lines, "📎 "+s.peach.Render(ansi.Truncate(f, bw-16, "…"))+s.muted.Render(" · v opens"))
+				lines = append(lines, "📎 "+s.peach.Render(ansi.Truncate(f, bw-16, "…"))+s.muted.Render(" · gf opens"))
 			}
 			if len(lines) == 0 {
 				lines = []string{s.muted.Render("…")}
@@ -1082,7 +1093,7 @@ func (m *Model) pendingLines(w int) []string {
 		switch it.Status {
 		case store.StatusQueued:
 			secs := max(0, int(time.Until(time.UnixMilli(it.SendAt)).Seconds()+0.5))
-			note = s.yellow.Render(fmt.Sprintf("sending in %ds", secs)) + s.muted.Render(" · z cancels")
+			note = s.yellow.Render(fmt.Sprintf("sending in %ds", secs)) + s.muted.Render(" · u cancels")
 		case store.StatusSending:
 			note = s.muted.Render("sending…")
 		case store.StatusApproval:
@@ -1126,6 +1137,34 @@ func divider(label string, w int, st lipgloss.Style) string {
 
 var reURL = regexp.MustCompile(`https?://[^\s<>"]+`)
 
+// chatFormatted draws a Google Chat message's formatting: bullets, bold,
+// italics, strikes, code (yellow), quotes.
+func (m *Model) chatFormatted(src string, w int, mention func(string) string) []string {
+	s := m.styles
+	var out []string
+	for _, l := range chatfmt.Lines(chatfmt.Parse(src), w) {
+		var b strings.Builder
+		if l.Kind == chatfmt.Quote {
+			b.WriteString(s.muted.Render(l.Prefix))
+		} else {
+			b.WriteString(fg(m.partColor()).Render(l.Prefix))
+		}
+		for _, sp := range l.Spans {
+			st := s.text
+			switch {
+			case sp.Code:
+				st = s.yellow
+			case l.Kind == chatfmt.Quote:
+				st = s.sub
+			}
+			st = st.Bold(sp.Bold || l.Kind == chatfmt.Heading).Italic(sp.Italic).Strikethrough(sp.Strike)
+			b.WriteString(styleMentions(sp.Text, st, mention))
+		}
+		out = append(out, m.chatLinks(b.String()))
+	}
+	return out
+}
+
 // chatLinks underlines the links in a line and numbers them for o.
 func (m *Model) chatLinks(l string) string {
 	plain := stripANSI(l)
@@ -1135,7 +1174,7 @@ func (m *Model) chatLinks(l string) string {
 	s := m.styles
 	out := reURL.ReplaceAllStringFunc(plain, func(u string) string {
 		m.links = append(m.links, u)
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(s.c.Blue)).Underline(true).Render(u) + s.muted.Render(fmt.Sprintf("[%d]", len(m.links)))
+		return s.sky.Underline(true).Render(u) + s.muted.Render(fmt.Sprintf("[%d]", len(m.links)))
 	})
 	return s.text.Render("") + out
 }

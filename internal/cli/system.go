@@ -317,6 +317,7 @@ func demo(args []string, tui func(*app.App, string) error) error {
 	}
 	w := fake.NewWhatsApp()
 	w.SeedWhatsApp()
+	w.SeedStatuses()
 	w.Receipts = true
 	a.Config.ChatUndoSeconds = max(a.Config.ChatUndoSeconds, 5) // to show the countdown
 	a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }

@@ -249,7 +249,7 @@ func (m Model) box(w, h int, title, content string, focus bool, color string) st
 			l = lines[i]
 		}
 		l = ansi.Truncate(l, inner, "…")
-		out = append(out, b.Render("│")+l+strings.Repeat(" ", max(0, inner-lipgloss.Width(l)))+b.Render("│"))
+		out = append(out, b.Render("│")+fit(l, inner)+b.Render("│"))
 	}
 	out = append(out, b.Render("╰"+strings.Repeat("─", inner)+"╯"))
 	return strings.Join(out, "\n")

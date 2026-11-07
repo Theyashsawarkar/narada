@@ -410,8 +410,15 @@ func (m *Model) reload() {
 		}
 	}
 	_, m.waLinked = m.a.Store.WhatsApp()
-	m.waN = 0
+	m.waN, m.statusN = 0, 0
 	if m.waLinked {
+		if groups, err := m.a.Statuses(); err == nil {
+			for _, g := range groups {
+				if !g.Mine {
+					m.statusN++ // people with a status up
+				}
+			}
+		}
 		wsps, _ := m.a.Store.Spaces([]string{store.WhatsAppAccount}, nil)
 		for _, s := range wsps {
 			if s.Unread > 0 {
@@ -708,6 +715,15 @@ func (m *Model) loadPreview(reset bool) {
 	}
 	if s, ok := m.curSpace(); ok {
 		m.chatMsgs, _ = m.a.Store.ChatMessages(s.Account, s.Name, max(200, m.chatLimit))
+		if s.Type == store.TypeStatus {
+			// statuses by person, yours first, then whoever posted last
+			if groups, err := m.a.Statuses(); err == nil {
+				m.chatMsgs = nil
+				for _, g := range groups {
+					m.chatMsgs = append(m.chatMsgs, g.Items...)
+				}
+			}
+		}
 	}
 	if reset {
 		m.expandAll, m.showQuoted = false, false
@@ -926,7 +942,7 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 		return nil
 	}
 	if it.Out.ScheduledFor > 0 {
-		m.say("scheduled for " + app.SendTime(time.UnixMilli(it.Out.ScheduledFor), time.Now()) + " · in Scheduled: t moves it, z cancels")
+		m.say("scheduled for " + app.SendTime(time.UnixMilli(it.Out.ScheduledFor), time.Now()) + " · in Scheduled: t moves it, u cancels")
 		if !m.a.DaemonRunning() {
 			m.setErr("the background service isn't running, and it's what sends scheduled mail: narada service install")
 		}
@@ -934,7 +950,7 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 	}
 	if w := m.a.UndoWindow(it.Kind); w > 0 {
 		m.undo = &undo{what: "send", outboxID: it.ID}
-		m.say(fmt.Sprintf("sending in %ds · z cancels", int(w.Seconds())))
+		m.say(fmt.Sprintf("sending in %ds · u cancels", int(w.Seconds())))
 		return nil
 	}
 	if !chatKind(it.Kind) {
@@ -1178,7 +1194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.threads = msg.threads
 		m.sel, m.offset = 0, 0
 		m.loadPreview(true)
-		m.say(fmt.Sprintf("%d found · W saves it as a section · h/l leaves", len(msg.threads)))
+		m.say(fmt.Sprintf("%d found · W saves it as a section · [ ] leave", len(msg.threads)))
 		return m, nil
 	case aiMsg:
 		m.aiBusy = false
@@ -1467,6 +1483,22 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.editingMsg = ""
 				a := m.a
 				return m, m.act(map[bool]string{true: "editing…", false: "edited"}[m.wa], func(ctx context.Context) error { return a.EditChatMessage(ctx, sp.Account, name, text) })
+			}
+			if sp, ok := m.curSpace(); ok && sp.Type == store.TypeStatus {
+				// an answer to a status goes to whoever posted it, quoting it
+				if m.replyTo == nil || text == "" {
+					m.say("pick a status and press r to answer it")
+					return m, nil
+				}
+				it, err := m.a.ReplyToStatus(m.replyTo.Name, store.Outgoing{Body: text, Files: m.chatFiles}, app.OriginYou)
+				m.chatFiles = nil
+				if err != nil {
+					m.setErr(err.Error())
+					return m, nil
+				}
+				m.replyTo, m.mode, m.input = nil, modeNormal, nil
+				m.say("your answer goes to " + firstNonEmpty(it.Out.SpaceName, "them") + ", quoting their status")
+				return m, m.sent(it)
 			}
 			if sp, ok := m.curSpace(); ok && (text != "" || len(m.chatFiles) > 0) {
 				if m.wa {
@@ -1920,7 +1952,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 					m.selected[k] = true
 				}
 			}
-			m.say(fmt.Sprintf("%d picked · m marks them read, M unread · ctrl+x again clears", len(m.selected)))
+			m.say(fmt.Sprintf("%d picked · m marks them read, M unread · V again clears", len(m.selected)))
 		}
 		return m, nil
 	case "alt+r":
@@ -2011,7 +2043,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.editingMsg, m.replyTo = c.Name, nil
-			m.mode, m.input = modeChatMsg, []rune(c.Text)
+			m.mode, m.input = modeChatMsg, []rune(c.Source())
 			return m, nil
 		}
 		m.expandAll = !m.expandAll
@@ -2141,7 +2173,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		}
 	case "y":
 		if m.pickingMsg() {
-			m.say(copyText(m.chatMsgs[m.chatSel].Text))
+			m.say(copyText(m.chatMsgs[m.chatSel].Source()))
 		} else if u := m.link(); u != "" {
 			m.say(copyText(u))
 		}

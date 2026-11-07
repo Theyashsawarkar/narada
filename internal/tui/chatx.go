@@ -7,6 +7,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Theyashsawarkar/narada/internal/app"
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // Reactions (e on a picked message) and loading older messages (k past
@@ -42,6 +45,16 @@ func (m Model) sendReaction() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	c, emoji, a := m.chatMsgs[m.chatSel], reactions[m.reactSel], m.a
+	if app.IsStatus(c.Name) {
+		// a quick reaction to a status is a message to whoever posted it
+		it, err := a.ReactToStatus(c.Name, emoji, store.Outgoing{}, app.OriginYou)
+		if err != nil {
+			m.setErr(err.Error())
+			return m, nil
+		}
+		m.say("sent " + emoji + " to " + firstNonEmpty(it.Out.SpaceName, "them") + " about their status")
+		return m, m.sent(it)
+	}
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

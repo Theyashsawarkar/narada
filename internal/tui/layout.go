@@ -47,13 +47,7 @@ func termText(s string) string {
 // fitTerm makes a line exactly w cells wide on the terminal: cut or padded
 // by narada's count, then padded again for what the terminal counts
 // narrower (Indian vowel signs).
-func fitTerm(s string, w int) string {
-	s = termText(fit(s, w))
-	if d := w - ansi.StringWidthWc(s); d > 0 {
-		s += strings.Repeat(" ", d)
-	}
-	return s
-}
+func fitTerm(s string, w int) string { return fit(s, w) }
 
 // wideScreen is what the renderer is told the screen's width is: it cuts
 // lines by its own count, which is wider than the terminal's for Indian

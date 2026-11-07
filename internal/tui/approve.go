@@ -68,7 +68,11 @@ type editedApproval struct{ err error }
 func (m approver) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.w, m.h = msg.Width, msg.Height
+		if msg.Width == wideScreen {
+			return m, nil // the renderer's (widenRenderer)
+		}
+		m.w, m.h = max(20, msg.Width-1), msg.Height // the last column stays free
+		return m, widenRenderer(msg.Height)
 	case approveNext:
 		m.done, m.out, m.scroll, m.facts, m.err = "", nil, 0, 0, ""
 		m.diff, m.shown = true, time.Now()
@@ -495,7 +499,7 @@ func box(lines []string, title, note string, w int, border, label lipgloss.Style
 	out := []string{border.Render(top) + head + border.Render(strings.Repeat("─", fill)) + tail + border.Render("╮")}
 	for _, l := range lines {
 		l = ansi.Truncate(l, max(1, inner-2), "…")
-		out = append(out, border.Render("│ ")+l+strings.Repeat(" ", max(0, inner-2-lipgloss.Width(l)))+border.Render(" │"))
+		out = append(out, border.Render("│ ")+fit(l, inner-2)+border.Render(" │"))
 	}
 	return append(out, border.Render("╰"+strings.Repeat("─", inner)+"╯"))
 }

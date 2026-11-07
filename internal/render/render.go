@@ -650,7 +650,7 @@ func layout(blocks []block, links []string, w int, st Styles, showQuoted bool) R
 		out = append(out, lines...)
 	}
 	if foldAt >= 0 {
-		out[foldAt] = st.Muted.Render("▸ " + itoa(folded) + " quoted lines (Q shows them)")
+		out[foldAt] = st.Muted.Render("▸ " + itoa(folded) + " quoted lines (zq shows them)")
 		res.Folded = folded
 	}
 	for len(out) > 0 && out[len(out)-1] == "" {

@@ -23,6 +23,9 @@ func waModel(t *testing.T, chat string) (Model, *fake.WhatsApp) {
 	m := model(t)
 	w := fake.NewWhatsApp()
 	w.SeedWhatsApp()
+	if chat == whatsapp.StatusChat {
+		w.SeedStatuses()
+	}
 	m.a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }
 	if err := m.a.Store.AddWhatsApp("+919876500000", w.Me); err != nil {
 		t.Fatal(err)
