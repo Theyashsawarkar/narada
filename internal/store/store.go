@@ -1956,11 +1956,12 @@ func (s *Store) UnreadChatMessages(account, space string) ([]ChatMessage, error)
 // RepairWhatsAppNames fixes names stored before narada knew better:
 // WhatsApp's service chat goes, Meta AI gets its name, and in one-to-one
 // chats the other person's messages carry the chat's name (not the one
-// they gave themselves).
+// they gave themselves). Statuses stay: they used to be dropped here on
+// every connect, so none was ever kept.
 func (s *Store) RepairWhatsAppNames() error {
 	for _, q := range []string{
-		`DELETE FROM chat_messages WHERE account='whatsapp' AND (space='0@s.whatsapp.net' OR space LIKE 'status@%')`,
-		`DELETE FROM spaces WHERE account='whatsapp' AND (name='0@s.whatsapp.net' OR name LIKE 'status@%')`,
+		`DELETE FROM chat_messages WHERE account='whatsapp' AND space='0@s.whatsapp.net'`,
+		`DELETE FROM spaces WHERE account='whatsapp' AND name='0@s.whatsapp.net'`,
 		`UPDATE spaces SET display_name='Meta AI' WHERE account='whatsapp' AND name='13135550002@s.whatsapp.net'`,
 		`UPDATE chat_messages SET sender_name=(SELECT sp.display_name FROM spaces sp WHERE sp.account=chat_messages.account AND sp.name=chat_messages.space)
 		  WHERE account='whatsapp' AND sender=space AND space NOT LIKE '%@g.us'

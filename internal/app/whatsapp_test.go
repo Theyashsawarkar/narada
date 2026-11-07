@@ -1310,6 +1310,12 @@ func TestWhatsAppStatusReplyAndReact(t *testing.T) {
 	w.Receive(whatsapp.Message{ID: "S2", Chat: whatsapp.StatusChat, Sender: meena, SenderName: "Meena", Text: "📷 Photo", Time: time.Now().Add(-time.Minute)})
 	w.Receive(whatsapp.Message{ID: "S3", Chat: whatsapp.StatusChat, Sender: ravi, SenderName: "Ravi", Text: "Down again", Time: time.Now().Add(-30 * time.Second)})
 	w.Receive(whatsapp.Message{ID: "S0", Chat: whatsapp.StatusChat, Sender: meena, SenderName: "Meena", Text: "old", Time: time.Now().Add(-25 * time.Hour)})
+	// they outlive a reconnect (which once dropped every status)
+	a.StopWhatsApp()
+	if _, err := a.StartWhatsApp(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitReady(t, a)
 	groups, err := a.Statuses()
 	if err != nil || len(groups) != 2 || groups[0].Sender != ravi || len(groups[0].Items) != 2 || groups[1].Sender != meena || !strings.Contains(groups[1].Name, "Meena") || len(groups[1].Items) != 1 {
 		t.Fatalf("statuses: %+v %v", groups, err)
