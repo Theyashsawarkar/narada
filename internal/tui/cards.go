@@ -64,46 +64,27 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 	if !m.panelList() {
 		return append(m.cardBox(lines, w, border, sel, dot), "")
 	}
-	s := m.styles
+	edge := fg(m.selEdge()).Bold(true)
 	var out []string
 	for i, l := range lines {
+		// the picked row has a bar in the place's colour down its left;
+		// an unread one a dot. Nothing is drawn after the text.
 		gutter := "  "
-		if dot && i == 0 {
-			gutter = s.accent.Bold(true).Render("●") + " "
+		switch {
+		case sel:
+			gutter = edge.Render("▌") + " "
+		case dot && i == 0:
+			gutter = fg(m.partColor()).Bold(true).Render("●") + " "
 		}
-		row := gutter + fit(l, w+2)
-		if sel {
-			row = " " + fit(l, w+2) // the border takes the gutter's place
-			edge := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
-			row = edge.Render("┃") + row + strings.Repeat(" ", max(0, w+2-ansi.StringWidth(row))) + edge.Render("┃")
-		}
-		out = append(out, row)
-	}
-	if sel {
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
-		rw := ansi.StringWidth(out[0])
-		return append(out, c.Render("╰"+strings.Repeat("━", max(0, rw-2))+"╯")) // the card's heavy bottom
+		out = append(out, gutter+l)
 	}
 	return append(out, m.hairline(w))
 }
 
-// appendItem adds an item to the list (each line one space in); the
-// picked one's rounded top replaces the hairline above it.
+// appendItem adds an item to the list, one space in.
 func (m Model) appendItem(out, lines []string, w int, border string, sel, dot bool) []string {
-	start := len(out)
 	for _, l := range m.listItem(lines, w, border, sel, dot) {
 		out = append(out, " "+l)
-	}
-	if sel && m.panelList() && start > 0 && (out[start-1] == " "+m.hairline(w) || strings.TrimSpace(ansi.Strip(out[start-1])) == "") {
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
-		rw := ansi.StringWidth(out[start]) - 1
-		out[start-1] = " " + c.Render("╭"+strings.Repeat("━", max(0, rw-2))+"╮") // the card's heavy top
-	} else if sel && m.panelList() {
-		// first in the list or under a label: the top goes in a row of its own
-		c := lipgloss.NewStyle().Foreground(lipgloss.Color(m.selEdge())).Bold(true)
-		rw := ansi.StringWidth(out[start]) - 1
-		top := " " + c.Render("╭"+strings.Repeat("━", max(0, rw-2))+"╮")
-		out = append(out[:start], append([]string{top}, out[start:]...)...)
 	}
 	return out
 }
@@ -166,10 +147,25 @@ func row(left, right string, w int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// avatarColors are the theme's bright colours, picked per name.
+// avatarColors are the theme's bright colours, picked per name: a person
+// keeps theirs everywhere (avatar, name, the bar by their messages).
 func (s styles) avatarColors() []string {
 	c := s.c
-	return []string{c.Accent2, c.Peach, c.Green, c.Blue, c.Accent, c.Yellow, c.Red}
+	return []string{c.Pink, c.Peach, c.Green, c.Blue, c.Sky, c.Yellow, c.Teal, c.Lavender, c.Flamingo, c.Sapphire, c.Maroon, c.Rosewater}
+}
+
+// personColor is someone's colour (from their name).
+func (m Model) personColor(name string) string {
+	ac := m.styles.avatarColors()
+	return ac[hash(strings.TrimPrefix(name, "~"))%len(ac)]
+}
+
+// accountEmail is the address of one of your Google accounts.
+func (m Model) accountEmail(account string) string {
+	if a, err := m.a.Store.Account(account); err == nil {
+		return a.Email
+	}
+	return ""
 }
 
 // avatar is two initials on a colour picked from the name.
@@ -324,6 +320,49 @@ func (m Model) chatBubble(lines []string, maxW int, mine, sel bool, stamp string
 	return bubble(body, iw+4, color, sel)
 }
 
+// chatMessage draws one message: its lines after a bar in the sender's
+// colour (heavy and bright when picked). Its time and ticks follow its last
+// line when that line is plain enough to measure, else get a line of their
+// own; nothing else is ever drawn after text (see fitTerm).
+func (m Model) chatMessage(lines []string, g store.ChatMessage, later, picked bool, color string, maxW int) []string {
+	s := m.styles
+	bar := fg(color).Render("▎") + " "
+	if picked {
+		bar = s.accent.Bold(true).Render("┃") + " "
+	}
+	stamp := ""
+	if later { // the run's first message has its time in the name line
+		stamp = s.muted.Render(time.UnixMilli(g.Created).Format("15:04"))
+	}
+	if g.Mine {
+		t := strings.TrimSpace(m.tickText(g.Ticks))
+		switch {
+		case g.Ticks == 3:
+			t = s.blue.Render(t)
+		case g.Ticks == store.TickFailed:
+			t = s.red.Render(t)
+		default:
+			t = s.muted.Render(t)
+		}
+		stamp = strings.TrimSpace(stamp + " " + t)
+	}
+	out := make([]string, 0, len(lines)+1)
+	for _, l := range lines {
+		out = append(out, bar+l)
+	}
+	if stamp != "" {
+		last := lines[len(lines)-1]
+		plain := ansi.Strip(last)
+		if ansi.StringWidth(plain) == ansi.StringWidthWc(plain) && ansi.StringWidth(last)+2+ansi.StringWidth(stamp) <= maxW &&
+			!strings.ContainsAny(last, "\U0010EEEE▀") {
+			out[len(out)-1] += "  " + stamp
+		} else {
+			out = append(out, bar+stamp)
+		}
+	}
+	return out
+}
+
 // ticks is WhatsApp's mark for how far your message got: ✓ sent,
 // ✓✓ delivered, blue ✓✓ read.
 func (m Model) ticks(level int) string {
@@ -340,7 +379,6 @@ func (m Model) ticks(level int) string {
 }
 
 func (m Model) avatar(name string) string {
-	h := hash(name)
 	name = strings.TrimPrefix(name, "~") // a name they gave themselves
 	var ini []rune
 	for _, w := range strings.FieldsFunc(name, func(r rune) bool { return r == ' ' || r == '.' || r == '@' || r == '_' || r == ',' || r == '+' }) {
@@ -367,7 +405,7 @@ func (m Model) avatar(name string) string {
 		ini = append(ini, ' ')
 	}
 	ac := m.styles.avatarColors()
-	col := lipgloss.Color(ac[h%len(ac)])
+	col := lipgloss.Color(ac[hash(strings.TrimPrefix(name, "~"))%len(ac)])
 	face := lipgloss.NewStyle().Background(col).Foreground(lipgloss.Color(m.styles.c.Base)).Bold(true).Render(string(ini))
 	if !m.a.Config.NerdFont {
 		return face
@@ -633,17 +671,16 @@ func (m *Model) buildPreview(w int) {
 
 func (m *Model) mailLines(t store.Thread, w int) []string {
 	s := m.styles
-	var out []string
-	out = append(out, wrapStyled(fg(s.c.Text).Bold(true), t.Subject, w)...)
+	var out []string // the pane's header has the subject
 	var chips []string
 	if t.Unread() {
-		chips = append(chips, m.chip("unread", s.c.Accent))
+		chips = append(chips, m.chip("unread", s.c.Red))
 	}
 	if t.Has("INBOX") {
 		chips = append(chips, m.chip("Inbox", s.c.Muted))
 	}
 	for _, l := range userLabels(t.Labels) {
-		chips = append(chips, m.chip(m.labelName(t.Account, l), s.c.Accent2))
+		chips = append(chips, m.chip(m.labelName(t.Account, l), s.c.Mauve))
 	}
 	if t.Starred() {
 		chips = append(chips, m.chip("★ starred", s.c.Yellow))
@@ -654,7 +691,7 @@ func (m *Model) mailLines(t store.Thread, w int) []string {
 	chips = append(chips, m.chip(fmt.Sprintf("%d message%s", len(m.msgs), map[bool]string{true: "s"}[len(m.msgs) != 1]), s.c.Muted))
 	out = append(out, strings.Join(chips, " "), "")
 
-	inner := w - 4
+	inner := w - 3 // the sender's bar and a space
 	rs := m.renderStyles()
 	isOpen := func(i int) bool {
 		msg := m.msgs[i]
@@ -667,8 +704,11 @@ func (m *Model) mailLines(t store.Thread, w int) []string {
 			from = msg.FromAddr
 		}
 		date := time.UnixMilli(msg.Date).Format("Mon 02 Jan, 15:04")
-		head := row(m.avatar(from)+" "+s.bold.Render(from)+s.muted.Render(" <"+msg.FromAddr+">"), s.muted.Render(date), inner)
-		border := s.c.Border
+		color := m.personColor(from)
+		if msg.FromAddr != "" && strings.EqualFold(msg.FromAddr, m.accountEmail(t.Account)) {
+			from, color = "You", s.c.Mauve
+		}
+		head := row(m.avatar(from)+" "+fg(color).Bold(true).Render(from)+s.muted.Render(" "+msg.FromAddr), s.muted.Render(date), w)
 		if !open {
 			// read messages fold to one line each; a long run of them to one
 			// line in all, as Gmail does (Enter opens every message)
@@ -687,22 +727,21 @@ func (m *Model) mailLines(t store.Thread, w int) []string {
 				continue
 			}
 			short := time.UnixMilli(msg.Date).Format("02 Jan")
-			who := m.avatar(from) + " " + s.bold.Render(from) + "  "
-			snip := ansi.Truncate(s.muted.Render(oneLine(msg.Body)), max(8, inner-ansi.StringWidth(who)-ansi.StringWidth(short)-4), "…")
-			out = append(out, m.cardBox([]string{row(who+snip, s.muted.Render(short), inner)}, inner, border, false, false)...)
+			who := fg(color).Render("▏") + " " + fg(color).Bold(true).Render(from) + s.muted.Render(" · ")
+			snip := ansi.Truncate(s.sub.Render(oneLine(msg.Body)), max(8, w-ansi.StringWidth(who)-ansi.StringWidth(short)-3), "…")
+			out = append(out, row(who+snip, s.muted.Render(short), w))
 			continue
 		}
 		if i > 0 && !isOpen(i-1) {
 			out = append(out, "")
 		}
-		var lines []string
-		lines = append(lines, head)
+		out = append(out, head)
 		to := "to " + shortAddrs(msg.To)
 		if msg.Cc != "" {
 			to += " · cc " + shortAddrs(msg.Cc)
 		}
-		lines = append(lines, m.indent()+s.muted.Render(to))
-		sep := len(lines)
+		out = append(out, m.indent()+s.muted.Render(to))
+		var lines []string
 		var res render.Result
 		if strings.TrimSpace(msg.HTML) != "" {
 			res = render.HTML(msg.HTML, inner, rs, m.showQuoted)
@@ -719,24 +758,24 @@ func (m *Model) mailLines(t store.Thread, w int) []string {
 		if len(msg.Attachments) > 0 {
 			lines = append(lines, "")
 			for _, at := range msg.Attachments {
-				lines = append(lines, s.peach.Render("📎 "+at.Name)+s.muted.Render(" · "+sizeOf(at.Size)))
+				lines = append(lines, s.yellow.Render("📎 "+at.Name)+s.muted.Render(" · "+sizeOf(at.Size)))
 			}
-			lines = append(lines, s.muted.Render("   v opens · V saves"))
+			lines = append(lines, s.muted.Render("   gf opens · gF saves"))
 		}
 		if len(res.Links) > 0 {
 			lines = append(lines, "")
 			linkStart := len(lines)
 			for j, l := range res.Links {
-				lines = append(lines, s.muted.Render(fmt.Sprintf("[%d] ", base+j+1))+ansi.Truncate(fg(s.c.Blue).Render(l), inner-6, "…"))
+				lines = append(lines, s.muted.Render(fmt.Sprintf("[%d] ", base+j+1))+ansi.Truncate(s.sky.Underline(true).Render(l), inner-6, "…"))
 			}
 			m.links = append(m.links, res.Links...)
 			_ = linkStart
 		}
-		box := m.cardBox(lines, inner, border, false, false)
-		// a rule between the header and the body
-		rule := fg(border).Render("├" + strings.Repeat("─", inner+2) + "┤")
-		box = append(box[:sep+1], append([]string{rule}, box[sep+1:]...)...)
-		out = append(out, box...)
+		// the body under a bar in the sender's colour: no frame to its right
+		bar := fg(color).Render("▏") + " "
+		for _, l := range lines {
+			out = append(out, bar+l)
+		}
 		out = append(out, "")
 	}
 	return out
@@ -845,9 +884,10 @@ func (m *Model) chatLines(w int) []string {
 	}
 	var head []string
 	if sp, ok := m.curSpace(); ok && sp.Type == "DIRECT_MESSAGE" {
-		// one to one: who it is says it all; WhatsApp adds their number
-		if sp.Account == store.WhatsAppAccount && strings.HasSuffix(sp.Name, "@s.whatsapp.net") {
-			head = []string{s.muted.Render("+"+strings.TrimSuffix(sp.Name, "@s.whatsapp.net")) + m.presenceLine(sp)}
+		// one to one: the header names them (and their number); here only
+		// whether they're online or typing
+		if t := m.presenceLine(sp); t != "" {
+			head = []string{t}
 		}
 	} else {
 		head = []string{s.muted.Render(ansi.Truncate(strings.Join(people, ", "), w-14, "…") + fmt.Sprintf(" · %d people", len(people)))}
@@ -863,7 +903,7 @@ func (m *Model) chatLines(w int) []string {
 	}
 	mentionStyle := lipgloss.NewStyle().Background(lipgloss.Color(s.c.Accent)).Foreground(lipgloss.Color(s.c.Base))
 	mention := func(t string) string { return s.round(mentionStyle, t) }
-	bw := max(24, w*72/100) // a bubble's widest
+	bw := max(24, w*68/100) // a message's widest
 	out := head
 	var lastDay string
 	newShown := false
@@ -891,11 +931,16 @@ func (m *Model) chatLines(w int) []string {
 		if c.Mine {
 			name = "You"
 		}
-		ac := s.avatarColors()
-		color := ac[hash(name)%len(ac)]
+		color := m.personColor(name)
+		if c.Mine {
+			color = s.c.Mauve
+		}
+		mineAt := w * 30 / 100 // yours start here, theirs at the left
 		out = append(out, "")
-		if !c.Mine {
-			out = append(out, m.avatar(name)+" "+fg(color).Bold(true).Render(name))
+		if c.Mine {
+			out = append(out, strings.Repeat(" ", mineAt)+fg(color).Bold(true).Render("You")+s.muted.Render("  "+time.UnixMilli(c.Created).Format("15:04")))
+		} else {
+			out = append(out, m.avatar(name)+" "+fg(color).Bold(true).Render(name)+s.muted.Render("  "+time.UnixMilli(c.Created).Format("15:04")))
 		}
 		for k, g := range m.chatMsgs[i:j] {
 			m.chatMsgLine[g.Name] = len(out)
@@ -962,20 +1007,15 @@ func (m *Model) chatLines(w int) []string {
 			if len(lines) == 0 {
 				lines = []string{s.muted.Render("…")}
 			}
-			stamp := time.UnixMilli(g.Created).Format("15:04")
-			if g.Mine {
-				stamp += m.tickText(g.Ticks)
-			}
 			lit := sel || g.Name == m.flashMsg
-			box := m.chatBubble(lines, bw, g.Mine, lit, stamp, g.Mine && g.Ticks == 3)
-			for n, l := range box {
-				// ▶ beside its first line, in the space left of the frame
+			for n, l := range m.chatMessage(lines, g, k > 0, lit, color, bw) {
+				// ▶ beside its first line, left of the bar
 				mark := "  "
-				if lit && n == 1 {
+				if lit && n == 0 {
 					mark = s.accent.Bold(true).Render("▶") + " "
 				}
 				if g.Mine {
-					out = append(out, padLeft(mark+l, w))
+					out = append(out, strings.Repeat(" ", max(0, mineAt-2))+mark+l)
 				} else {
 					ind := m.indent()
 					out = append(out, ind[:len(ind)-min(2, len(ind))]+mark+l)
@@ -988,9 +1028,9 @@ func (m *Model) chatLines(w int) []string {
 				}
 				line := strings.Join(chips, " ")
 				if g.Mine {
-					out = append(out, padLeft(line, w))
+					out = append(out, strings.Repeat(" ", mineAt+2)+line)
 				} else {
-					out = append(out, m.indent()+" "+line)
+					out = append(out, m.indent()+"  "+line)
 				}
 			}
 		}
@@ -1145,17 +1185,23 @@ func dayName(t time.Time) string {
 
 // previewBox draws the preview pane: the pre-rendered lines, scrolled,
 // with the Claude box and (in chat) the message line under them.
-func (m Model) previewBox(w, h int) string {
+// previewPane is what's open, under a header: the thread's subject, or the
+// chat with its avatar and who's in it.
+func (m Model) previewPane(w, h int) []string {
 	s := m.styles
 	inner := w - 4
-	title := "preview"
+	head := s.muted.Render("Nothing open")
 	if _, ok := m.curOutbox(); ok {
-		title = "outbox"
+		head = s.peach.Bold(true).Render("Outbox")
 	}
 	if t, ok := m.curThread(); ok {
-		title = "thread · " + t.Account
+		head = s.bold.Render(t.Subject)
+		if t.Count > 1 {
+			head += s.muted.Render(fmt.Sprintf(" · %d messages", t.Count))
+		}
 	} else if sp, ok := m.curSpace(); ok {
-		title = map[bool]string{true: "@ ", false: "# "}[sp.Type == "DIRECT_MESSAGE"] + cli.SpaceTitle(sp)
+		name := cli.SpaceTitle(sp)
+		head = m.avatar(name) + " " + s.bold.Render(name) + " " + s.muted.Render(m.spaceMeta(sp))
 	}
 	aiLines := m.aiLines(inner)
 	var bottom []string
@@ -1195,7 +1241,7 @@ func (m Model) previewBox(w, h int) string {
 	if m.tagStart >= 0 && m.mode == modeChatMsg {
 		bottom = append(m.tagBox(min(inner, max(30, inner*2/3))), bottom...)
 	}
-	avail := h - 2 - len(aiLines) - len(bottom)
+	avail := h - 2 - len(aiLines) - len(bottom) // the header and its rule
 	if avail < 3 {
 		aiLines = aiLines[:max(0, len(aiLines)-(3-avail))]
 		avail = 3
@@ -1208,18 +1254,41 @@ func (m Model) previewBox(w, h int) string {
 		view = append(view, "")
 	}
 	if max := len(lines) - avail; max > 0 {
-		title += fmt.Sprintf(" · %d%%", scroll*100/max)
+		head += s.muted.Render(fmt.Sprintf("  %d%%", scroll*100/max))
 	}
-	for i := range view {
-		view[i] = " " + view[i]
+	bar := s.muted.Render("  ")
+	if m.focus == 1 || m.mode == modeChatMsg {
+		bar = fg(m.partColor()).Render("▎ ")
+	}
+	out := []string{fitTerm(bar+head, w), fitTerm(" "+s.muted.Faint(true).Render(strings.Repeat("─", max(1, w-3))), w)}
+	for _, l := range view {
+		out = append(out, fitTerm("  "+l, w))
 	}
 	for _, l := range aiLines {
-		view = append(view, " "+l)
+		out = append(out, fitTerm("  "+l, w))
 	}
 	for _, l := range bottom {
-		view = append(view, " "+l)
+		out = append(out, fitTerm("  "+l, w))
 	}
-	return m.box(w, h, title, strings.Join(view, "\n"), m.focus == 1 && m.mode == modeNormal || m.mode == modeChatMsg, m.partColor())
+	for len(out) < h {
+		out = append(out, strings.Repeat(" ", w))
+	}
+	return out[:h]
+}
+
+// spaceMeta: what kind of chat it is and how many are in it.
+func (m Model) spaceMeta(sp store.Space) string {
+	switch {
+	case sp.Type == store.TypeStatus:
+		return "· status updates from the last day"
+	case sp.Type == "DIRECT_MESSAGE" && sp.Account == store.WhatsAppAccount && strings.HasSuffix(sp.Name, "@s.whatsapp.net"):
+		return "· +" + strings.TrimSuffix(sp.Name, "@s.whatsapp.net")
+	case sp.Type == "DIRECT_MESSAGE":
+		return ""
+	case sp.Members > 0:
+		return fmt.Sprintf("· %d people", sp.Members)
+	}
+	return ""
 }
 
 // dropMediaLabel leaves a WhatsApp message's caption once its photo or

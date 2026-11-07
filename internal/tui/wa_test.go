@@ -98,10 +98,11 @@ func TestReplyPrivatelyFromTheScreen(t *testing.T) {
 func TestDeleteForMeFromTheScreen(t *testing.T) {
 	m, w := waModel(t, "919800000002@s.whatsapp.net")
 	m = pickMsg(t, m, "H4") // Ravi's
-	m = press(m, "d")
+	m = press(m, "d", "d")
 	if !strings.Contains(m.toast, "for you") {
 		t.Fatalf("toast %q", m.toast)
 	}
+	m = press(m, "d")
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 	m = nm.(Model)
 	if cmd != nil {
@@ -182,9 +183,10 @@ func TestChatStateKeys(t *testing.T) {
 	if !sp().Pinned {
 		t.Fatal("p pins")
 	}
-	run("e")
+	run("d")
+	run("d")
 	if !sp().Archived || sp().Pinned {
-		t.Fatal("e archives (and unpins)")
+		t.Fatal("dd archives (and unpins)")
 	}
 	for _, s := range m.spaces {
 		if s.Name == "919800000002@s.whatsapp.net" {
@@ -243,7 +245,7 @@ func TestTypingAndPresence(t *testing.T) {
 func TestRenameWhatsAppGroup(t *testing.T) {
 	m, w := waModel(t, "120363000000000001@g.us")
 	m.focus = 0
-	m = press(m, "n")
+	m = press(m, " ", "R")
 	if m.mode != modeRename || !strings.Contains(m.renamePrompt(), "WhatsApp") {
 		t.Fatalf("n: mode %d, prompt %q", m.mode, m.renamePrompt())
 	}

@@ -88,6 +88,20 @@ type Colors struct {
 	Red     string `toml:"red"`
 	Blue    string `toml:"blue"`
 	Peach   string `toml:"peach"`
+	// the rest of the palette: people's colours, and what each colour means
+	// (a link is sky, a mention pink, a file yellow, Chat teal)
+	Crust     string `toml:"crust"`
+	Surface1  string `toml:"surface1"`
+	Overlay0  string `toml:"overlay0"`
+	Teal      string `toml:"teal"`
+	Sky       string `toml:"sky"`
+	Sapphire  string `toml:"sapphire"`
+	Pink      string `toml:"pink"`
+	Mauve     string `toml:"mauve"`
+	Lavender  string `toml:"lavender"`
+	Flamingo  string `toml:"flamingo"`
+	Rosewater string `toml:"rosewater"`
+	Maroon    string `toml:"maroon"`
 }
 
 type Config struct {
@@ -175,6 +189,8 @@ func Default() Config {
 			Accent: "#74c7ec", Accent2: "#cba6f7", Text: "#cdd6f4", Subtle: "#a6adc8", Muted: "#7f849c",
 			Surface: "#313244", Border: "#585b70", Base: "#1e1e2e", Mantle: "#181825", Green: "#a6e3a1", Yellow: "#f9e2af",
 			Red: "#f38ba8", Blue: "#89b4fa", Peach: "#fab387",
+			Crust: "#11111b", Surface1: "#45475a", Overlay0: "#6c7086", Teal: "#94e2d5", Sky: "#89dceb", Sapphire: "#74c7ec",
+			Pink: "#f5c2e7", Mauve: "#cba6f7", Lavender: "#b4befe", Flamingo: "#f2cdcd", Rosewater: "#f5e0dc", Maroon: "#eba0ac",
 		},
 	}
 }

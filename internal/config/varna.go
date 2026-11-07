@@ -66,6 +66,18 @@ func applyVarna(c *Colors) {
 	pick(&c.Red, "red", "error")
 	pick(&c.Blue, "blue", "info")
 	pick(&c.Peach, "peach", "maroon")
+	pick(&c.Crust, "crust", "mantle")
+	pick(&c.Surface1, "surface1", "selection")
+	pick(&c.Overlay0, "overlay0", "muted")
+	pick(&c.Teal, "teal", "green")
+	pick(&c.Sky, "sky", "sapphire", "info")
+	pick(&c.Sapphire, "sapphire", "sky")
+	pick(&c.Pink, "pink", "mauve")
+	pick(&c.Mauve, "mauve", "pink")
+	pick(&c.Lavender, "lavender", "blue")
+	pick(&c.Flamingo, "flamingo", "rosewater")
+	pick(&c.Rosewater, "rosewater", "flamingo")
+	pick(&c.Maroon, "maroon", "red")
 }
 
 // ThemeStamp changes whenever a file the colours come from changes (the

@@ -19,6 +19,7 @@ type styles struct {
 	c                                             config.Colors
 	text, sub, muted, accent, accent2, bold, warn lipgloss.Style
 	green, blue, yellow, red, peach               lipgloss.Style
+	sky, teal, pink, mauve, lavender              lipgloss.Style
 	tabOn, tabOff, sel, pill, keycap, banner      lipgloss.Style
 	nerd                                          bool // round ends from Nerd Font half circles
 }
@@ -38,6 +39,7 @@ func newStyles(c config.Colors, nerd bool) styles {
 	fg := func(col string) lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color(col)) }
 	return styles{
 		c: c, text: fg(c.Text), sub: fg(c.Subtle), muted: fg(c.Muted), accent: fg(c.Accent), accent2: fg(c.Accent2),
+		sky: fg(c.Sky), teal: fg(c.Teal), pink: fg(c.Pink), mauve: fg(c.Mauve), lavender: fg(c.Lavender),
 		bold: fg(c.Text).Bold(true), warn: fg(c.Peach), green: fg(c.Green), blue: fg(c.Blue), yellow: fg(c.Yellow), red: fg(c.Red), peach: fg(c.Peach),
 		tabOn:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.Base)).Background(lipgloss.Color(c.Accent)).Bold(true).Padding(0, 1),
 		tabOff: fg(c.Muted).Padding(0, 1),
@@ -77,10 +79,10 @@ func thousands(n int) string {
 	return s
 }
 
-func (m Model) listWidth() int { return max(30, m.w*42/100) }
+func (m Model) listWidth() int { return max(34, min(60, m.w*36/100)) }
 
 func (m Model) bodyHeight() int {
-	h := m.h - 2 // tabs + footer
+	h := m.h - 3 // the places, the sections, the footer
 	if m.err != "" {
 		h--
 	}
@@ -94,7 +96,7 @@ func (m Model) previewHeight() int { return m.bodyHeight() - 2 }
 
 func (m Model) inputMode() bool {
 	switch m.mode {
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward, modeVote:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward, modeVote, modeCommand:
 		return true
 	}
 	return false
@@ -104,12 +106,8 @@ func (m Model) View() string {
 	if m.w == 0 {
 		return ""
 	}
-	var rows []string
-	rows = append(rows, m.tabsView())
-	lw := m.listWidth()
-	pw := m.w - lw
+	rows := []string{m.topBar(), m.sectionStrip()}
 	bh := m.bodyHeight()
-	left := m.box(lw, bh, m.listTitle(), m.listView(lw-2, bh-2), m.focus == 0 && m.mode == modeNormal, m.partColor())
 	// under a popup, draw what it was opened over
 	under := m.mode
 	switch {
@@ -120,51 +118,52 @@ func (m Model) View() string {
 	case m.mode == modeConvo && m.convo != nil:
 		under = m.convo.back
 	}
-	var right string
-	switch under {
-	case modeReview:
-		right = m.box(pw, bh, "review: y send · e edit · + file · d draft · n discard", m.reviewView(pw-4, bh-2), true, m.styles.c.Accent2)
-	case modeApprove:
-		if it, ok := m.curWaiting(); ok {
-			right = m.aiCard(it, pw, bh)
+	var body []string
+	switch {
+	case m.mode == modeView && m.viewer != nil:
+		body = m.pane(m.w, bh, m.viewerTitle(), m.viewerView(m.w-4, bh-1))
+	case m.tab == tabChat && m.wa && !m.waLinked:
+		body = m.pane(m.w, bh, "WhatsApp · not linked", m.linkPanel(m.w-2, bh-1))
+	case under == modeCompose && m.comp != nil:
+		body = strings.Split(m.composerPanes(bh), "\n")
+	case m.narrow():
+		// one pane at a time: the list, or what's open
+		if m.focus == 0 && under != modeReview && under != modeApprove {
+			body = m.pane(m.w, bh, m.listTitle(), m.listView(m.w-2, bh-1))
 		} else {
-			right = m.previewBox(pw, bh)
+			body = m.rightPane(under, m.w, bh)
 		}
 	default:
-		if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() {
-			right = m.aiCard(it, pw, bh)
-			break
+		lw := m.listWidth()
+		left := m.pane(lw, bh, m.listTitle(), m.listView(lw-2, bh-1))
+		right := m.rightPane(under, m.w-lw, bh)
+		for i := range left {
+			body = append(body, left[i]+right[i])
 		}
-		right = m.previewBox(pw, bh)
-	}
-	if m.mode == modeView && m.viewer != nil {
-		rows = append(rows, m.box(m.w, bh, m.viewerTitle(), m.viewerView(m.w-4, bh-2), true, m.partColor()))
-	} else if m.tab == tabChat && m.wa && !m.waLinked {
-		rows = append(rows, m.box(m.w, bh, "WhatsApp · not linked", m.linkPanel(m.w-2, bh-2), true, m.styles.c.Green))
-	} else if under == modeCompose && m.comp != nil {
-		rows = append(rows, m.composerPanes(bh))
-	} else {
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, left, right))
 	}
 	switch {
 	case m.mode == modeFind && m.find != nil:
-		rows[len(rows)-1] = overlay(rows[len(rows)-1], m.finderView(), m.w)
+		body = strings.Split(overlay(strings.Join(body, "\n"), m.finderView(), m.w), "\n")
 	case m.mode == modeHelp:
 		box := m.helpPopup()
-		rows[len(rows)-1] = overlayAt(rows[len(rows)-1], box, m.w, max(0, (bh-len(box))/2))
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/2)), "\n")
 	case m.mode == modeReact:
 		box := m.reactPopup()
-		rows[len(rows)-1] = overlayAt(rows[len(rows)-1], box, m.w, max(0, bh/2-2))
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, bh/2-2)), "\n")
 	case m.mode == modeConvo && m.convo != nil:
 		box := m.convoPopup()
-		rows[len(rows)-1] = overlayAt(rows[len(rows)-1], box, m.w, max(0, (bh-len(box))/3))
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/3)), "\n")
 	case m.mode == modeWhen && m.when != nil:
 		box := m.whenPopup()
-		rows[len(rows)-1] = overlayAt(rows[len(rows)-1], box, m.w, max(0, (bh-len(box))/2))
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/2)), "\n")
 	case m.mode == modePick && m.pick != nil:
 		box := m.pickerPopup()
-		rows[len(rows)-1] = overlayAt(rows[len(rows)-1], box, m.w, max(0, (bh-len(box))/2))
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/2)), "\n")
+	case m.leader && m.leaderShown:
+		box := m.leaderMenu()
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, bh-len(box))), "\n")
 	}
+	rows = append(rows, body...)
 	if m.err != "" {
 		e := m.styles.red.Render("● " + m.err)
 		rows = append(rows, " "+ansi.Truncate(e, m.w-14, "…")+m.styles.muted.Render("  esc hides"))
@@ -173,133 +172,57 @@ func (m Model) View() string {
 		rows = append(rows, m.inputView())
 	}
 	rows = append(rows, m.footerView())
+	for i, r := range rows {
+		rows[i] = fitTerm(r, m.w)
+	}
 	return strings.Join(rows, "\n")
 }
 
-// tabLabel: a tab's name with its unread count.
-func (m Model) tabLabel(name string, n int) string {
-	if n > 0 {
-		return fmt.Sprintf("%s %d", name, n)
+// previewWidth is how wide what's open is drawn: beside the list, or the
+// whole screen when there's room for only one pane.
+func (m Model) previewWidth() int {
+	if m.narrow() {
+		return m.w - 4
 	}
-	return name
+	return m.w - m.listWidth() - 4
 }
 
-func (m Model) tabsView() string {
-	s := m.styles
-	// the three places first, the one you're in filled in its colour;
-	// then that place's sections, the current one underlined
-	type place struct {
-		name, icon, color string
-		n, ai             int
-		on                bool
-	}
-	places := []place{
-		{"Mail", "󰇮", s.c.Accent, m.counts[m.sections[0].Name], len(m.waitingOf("mail")), m.tab == tabMail},
-		{"Chat", "󰭹", s.c.Accent2, m.chatN, len(m.waitingOf("chat")), m.tab == tabChat && !m.wa},
-	}
-	places = append(places, place{"WhatsApp", "󰖣", s.c.Green, m.waN, len(m.waitingOf("whatsapp")), m.wa})
-	var parts []string
-	for _, p := range places {
-		label := p.name
-		if s.nerd {
-			label = p.icon + " " + label
+// narrow: too small for the list and what's open side by side.
+func (m Model) narrow() bool { return m.w < 100 }
+
+// rightPane is what's open: a thread, a chat, an AI request or a review.
+func (m Model) rightPane(under mode, w, h int) []string {
+	switch under {
+	case modeReview:
+		return m.pane(w, h, "review", m.reviewView(w-4, h-1))
+	case modeApprove:
+		if it, ok := m.curWaiting(); ok {
+			return strings.Split(m.aiCard(it, w, h), "\n")
 		}
-		if p.n > 0 {
-			label += fmt.Sprintf(" %d", p.n)
-		}
-		if p.ai > 0 {
-			label += fmt.Sprintf(" · %d AI", p.ai)
-		}
-		if p.on {
-			pill := s.tabOn.Background(lipgloss.Color(p.color))
-			parts = append(parts, s.round(pill, label))
-		} else {
-			parts = append(parts, s.tabOff.Render(label))
-		}
-	}
-	parts = append(parts, s.muted.Render("│"))
-	col := lipgloss.NewStyle().Foreground(lipgloss.Color(m.partColor())).Bold(true).Underline(true).Padding(0, 1)
-	section := func(label string, on bool) {
-		if on {
-			parts = append(parts, col.Render(label))
-		} else {
-			parts = append(parts, s.tabOff.Render(label))
-		}
-	}
-	if m.tab == tabMail {
-		for i, sec := range m.sections {
-			label := sec.Name
-			if n := m.counts[sec.Name]; n > 0 {
-				label += fmt.Sprintf(" %d", n)
-			}
-			section(label, i == m.sec && m.search == nil)
-		}
-		if m.search != nil {
-			section(m.search.Name, true)
-		}
-	} else if m.wa && !m.waLinked {
-		parts = append(parts, s.muted.Render(" not linked yet: L links it"))
-	} else {
-		unread := m.chatN
-		if m.wa {
-			unread = m.waN
-		}
-		for i, name := range chatSections {
-			if (name == "Archived" || name == "Status") && !m.wa {
-				continue
-			}
-			label := name
-			switch {
-			case name == "Unread" && unread > 0:
-				// the count sits where those chats are, not on All
-				label += fmt.Sprintf(" %d", unread)
-			case name == "DMs" && m.wa:
-				label = "People"
-			case name == "Spaces" && m.wa:
-				label = "Groups"
-			case name == "Scheduled" && m.chatScheduled > 0:
-				label += fmt.Sprintf(" %d", m.chatScheduled)
-			case name == aiSection:
-				if n := len(m.waitingOf(m.aiKind())); n > 0 {
-					label += fmt.Sprintf(" %d", n)
-				}
-			}
-			section(label, i == m.sec)
-		}
-	}
-	left := " " + strings.Join(parts, " ")
-	var right string
-	acct := "all accounts"
-	if m.wa {
-		wa, _ := m.a.Store.WhatsApp()
-		acct = firstNonEmpty(wa.Email, "WhatsApp")
-	} else if f := m.accountFilter(); len(f) > 0 {
-		acct = f[0]
-	} else if len(m.accounts) == 1 {
-		acct = m.accounts[0]
-	}
-	switch {
-	case m.syncing:
-		right = s.muted.Render("syncing… ") + s.green.Render("●") + " " + acct
-	case m.err != "":
-		right = s.red.Render("● ") + s.text.Render(acct)
 	default:
-		right = s.green.Render("●") + " " + s.sub.Render(acct)
+		if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() {
+			return strings.Split(m.aiCard(it, w, h), "\n")
+		}
 	}
-	if m.launch == "demo" {
-		right = s.peach.Render("demo · example mail ") + right
+	return m.previewPane(w, h)
+}
+
+// pane lays out a pane w wide and h tall: a title line in the place's
+// colour, then its lines, each exactly w cells. No border: nothing is drawn
+// to the right of text (see fitTerm).
+func (m Model) pane(w, h int, title, content string) []string {
+	s := m.styles
+	out := []string{fitTerm(" "+fg(m.partColor()).Bold(true).Render(ansi.Truncate(title, max(1, w-3), "…")), w)}
+	lines := strings.Split(content, "\n")
+	for i := 0; i < h-1; i++ {
+		l := ""
+		if i < len(lines) {
+			l = lines[i]
+		}
+		out = append(out, fitTerm(" "+l, w))
 	}
-	if !m.older.Done && m.older.Total > m.older.Have {
-		const n = 10
-		filled := min(n, m.older.Have*n/max(1, m.older.Total))
-		bar := s.accent.Render(strings.Repeat("▰", filled)) + s.muted.Render(strings.Repeat("▱", n-filled))
-		right = s.muted.Render("older mail ") + bar + s.muted.Render(fmt.Sprintf(" %s / %s   ", thousands(m.older.Have), thousands(m.older.Total))) + right
-	}
-	gap := m.w - lipgloss.Width(left) - lipgloss.Width(right) - 1
-	if gap < 1 {
-		return ansi.Truncate(left, m.w, "…")
-	}
-	return left + strings.Repeat(" ", gap) + right + " "
+	_ = s
+	return out
 }
 
 // box draws a rounded border with a title in it.
@@ -458,6 +381,9 @@ func firstNonEmpty(xs ...string) string {
 
 func (m Model) inputView() string {
 	s := m.styles
+	if m.mode == modeCommand {
+		return m.commandView()
+	}
 	prompt := map[mode]string{modeFilter: "/", modeAsk: "@claude ", modeSearch: "search gmail: ", modeSaveName: "section name (Enter: the search itself): ",
 		modeDraftHint: "draft a reply that says (Enter for Claude's pick): ", modeLink: fmt.Sprintf("open link (1-%d): ", len(m.links)), modeRename: m.renamePrompt(),
 		modePhone: "your WhatsApp number, with its country code: ", modeForward: "forward to (a contact, a group or a number): ",
@@ -470,79 +396,6 @@ func (m Model) inputView() string {
 	return " " + s.accent2.Bold(true).Render(prompt) + s.text.Render(string(m.input[:cur])) + lipgloss.NewStyle().Reverse(true).Render(under) + s.text.Render(rest)
 }
 
-func (m Model) footerView() string {
-	s := m.styles
-	modeName := map[mode]string{modeNormal: "normal", modeFilter: "filter", modeAsk: "ask", modeSearch: "search", modeSaveName: "save",
-		modeDraftHint: "draft", modePhone: "link", modeReview: "review", modeApprove: "approve", modeHelp: "keys", modeChatMsg: "message", modeLink: "link", modeCompose: "compose", modeFind: "search", modeRename: "rename", modePick: "files", modeWhen: "later", modeConvo: "new chat", modeReact: "react", modeView: "picture", modeForward: "forward", modeVote: "vote"}[m.mode]
-	var keys [][2]string
-	switch m.mode {
-	case modeReview:
-		keys = [][2]string{{"y", "send"}, {"t", "later"}, {"e", "edit"}, {"+", "file"}, {"-", "drop file"}, {"d", "save draft"}, {"n", "discard"}}
-		if m.review != nil && m.review.kind == "chat" {
-			keys = [][2]string{{"y", "send"}, {"t", "later"}, {"e", "edit"}, {"+", "file"}, {"-", "drop file"}, {"n", "discard"}}
-		}
-	case modeApprove:
-		keys = [][2]string{{"y", "send"}, {"e", "edit"}, {"n", "decline"}, {"q", "later"}}
-	case modeConvo:
-		keys = [][2]string{{"↑↓", "pick"}, {"tab", "add person"}, {"enter", "open"}, {"esc", "cancel"}}
-	case modeWhen:
-		keys = [][2]string{{"↑↓", "pick"}, {"enter", "schedule"}, {"esc", "cancel"}}
-	case modePick:
-		keys = [][2]string{{"↑↓", "move"}, {"tab", "pick several"}, {"enter", "add"}, {"esc", "close"}}
-	case modeFind:
-		keys = [][2]string{{"↑↓", "move"}, {"enter", "open"}, {"tab", "mail/chat"}, {"esc", "close"}}
-	case modeCompose:
-		keys = [][2]string{{"tab", "next"}, {"↑↓", "pick"}, {"ctrl+o", "attach"}, {"ctrl+b", "cc/bcc"}, {"ctrl+q", "quote"}, {"ctrl+g", "signature"}}
-		if m.comp != nil && m.comp.reply {
-			keys = append(keys, [2]string{"pgup/dn", "original"})
-		}
-		if m.comp != nil && m.comp.approveID > 0 {
-			keys = [][2]string{{"tab", "next"}, {"ctrl+s", "keep changes"}, {"ctrl+e", "editor"}, {"esc", "back"}}
-		}
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward, modeVote:
-		keys = [][2]string{{"enter", "done"}, {"esc", "cancel"}, {"ctrl+u", "clear"}}
-	case modeView:
-		keys = [][2]string{{"h/l", "previous/next"}, {"v", "open in its app"}, {"esc", "back"}}
-	case modeChatMsg:
-		if m.tagStart >= 0 {
-			keys = [][2]string{{"↑↓", "pick"}, {"enter/tab", "tag them"}, {"esc", "no tag"}}
-			break
-		}
-		keys = [][2]string{{"enter", "send"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+v", "paste image"}, {"ctrl+t", "later"}, {"esc", "done"}}
-		if m.editingMsg != "" {
-			keys = [][2]string{{"enter", "save the edit"}, {"esc", "cancel"}}
-		}
-	case modeHelp:
-		keys = [][2]string{{"?", "close"}}
-	default:
-		if m.tab == tabMail {
-			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"m/M", "read/unread"}, {"c", "compose"}, {"r", "reply"},
-				{"e", "archive"}, {"Q", "quoted"}, {"o", "link"}, {"@", "ask"}, {"?", "keys"}}
-		} else if m.pickingMsg() {
-			keys = [][2]string{{"j/k", "pick"}, {"⏎", "to the original"}, {"⌫", "back"}, {"r", "reply"}, {"e", "react"}, {"E", "edit"}, {"d", "delete"}, {"y", "copy"}, {"[ ]", "chats"}, {"1", "list"}}
-		} else {
-			keys = [][2]string{{"j/k", "move"}, {"h/l", "section"}, {"tab", m.nextTab()}, {"⏎", "open"}, {"i", "type"}, {"U", "send a file"}, {"r", "reply"}, {"N", "new chat"},
-				{"m/M", "read/unread"}, {"@", "ask"}, {"?", "keys"}}
-		}
-	}
-	left := s.round(s.pill, modeName)
-	for _, k := range keys {
-		left += " " + s.round(s.keycap, k[0]) + s.muted.Render(" "+k[1])
-	}
-	right := ""
-	if m.toast != "" {
-		right = s.green.Render(m.toast)
-	}
-	rw := lipgloss.Width(right)
-	if rw > m.w/2 {
-		right = ansi.Truncate(right, m.w/2, "…")
-		rw = lipgloss.Width(right)
-	}
-	left = ansi.Truncate(left, max(10, m.w-rw-2), "")
-	gap := max(1, m.w-lipgloss.Width(left)-rw-1)
-	return left + strings.Repeat(" ", gap) + right
-}
-
 // nextTab: where Tab goes from here.
 func (m Model) nextTab() string {
 	switch {
@@ -552,16 +405,4 @@ func (m Model) nextTab() string {
 		return "whatsapp"
 	}
 	return "mail"
-}
-
-// partColor is the colour of the place you're in: Mail, Chat or
-// WhatsApp; its pill, the focused pane's border and the message box use it.
-func (m Model) partColor() string {
-	switch {
-	case m.tab == tabMail:
-		return m.styles.c.Accent
-	case m.wa:
-		return m.styles.c.Green
-	}
-	return m.styles.c.Accent2
 }

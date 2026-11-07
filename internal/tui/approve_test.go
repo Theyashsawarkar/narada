@@ -271,8 +271,8 @@ func TestAIRequestsSection(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.reload()
-	if v := m.tabsView(); !strings.Contains(v, "1 AI") {
-		t.Fatalf("the places don't show it:\n%s", v)
+	if v := ansi.Strip(m.topBar()); !strings.Contains(v, "AI requests 2") {
+		t.Fatalf("the places don't count them:\n%s", v)
 	}
 	m.goToAI("mail")
 	v := m.View()

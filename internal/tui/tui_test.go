@@ -88,6 +88,8 @@ func press(m Model, keys ...string) Model {
 			msg = tea.KeyMsg{Type: tea.KeyCtrlT}
 		case "ctrl+u":
 			msg = tea.KeyMsg{Type: tea.KeyCtrlU}
+		case "ctrl+n":
+			msg = tea.KeyMsg{Type: tea.KeyCtrlN}
 		case "backspace":
 			msg = tea.KeyMsg{Type: tea.KeyBackspace}
 		case "alt+b":
@@ -116,7 +118,7 @@ func TestScreen(t *testing.T) {
 		t.Fatalf("j j selected %s", th.ID)
 	}
 	// / opens the search window: it searches this section, in the background
-	m = press(m, "/", "l", "u", "n", "c", "h")
+	m = press(m, " ", "/", "l", "u", "n", "c", "h")
 	m = runSearch(t, m)
 	if m.mode != modeFind || len(m.find.mail) != 1 || !strings.Contains(m.View(), "in ") {
 		t.Fatalf("search window: %+v", m.find)
@@ -125,7 +127,7 @@ func TestScreen(t *testing.T) {
 	if th, ok := m.curThread(); !ok || th.ID != "t-rohan" || m.search == nil {
 		t.Fatalf("opened: %+v %v", th, m.search)
 	}
-	m = press(m, "h", "tab")
+	m = press(m, "[", "tab")
 	if !strings.Contains(m.View(), "portal-dev") {
 		t.Fatal("chat tab")
 	}
@@ -133,7 +135,7 @@ func TestScreen(t *testing.T) {
 	if !strings.Contains(m.View(), "Claude's summary") {
 		t.Fatal("help sheet")
 	}
-	m = press(m, "esc", "l")
+	m = press(m, "esc", "]")
 	if chatSections[m.sec] != "Unread" || len(m.spaces) != 2 {
 		t.Fatalf("chat Unread section: %d", len(m.spaces))
 	}
@@ -200,7 +202,7 @@ func TestComposer(t *testing.T) {
 	}
 
 	// a reply: recipients and thread filled in, the quote kept under
-	m = press(m, "g", "r")
+	m = press(m, "g", "g", "r")
 	if m.mode != modeCompose || m.comp.focus != fBody || !strings.Contains(m.View(), "ctrl+q shows it") || !strings.Contains(m.View(), "replying to") {
 		t.Fatalf("reply composer: focus %d", m.comp.focus)
 	}
@@ -244,8 +246,8 @@ func runSearch(t *testing.T, m Model) Model {
 func TestSearchScopes(t *testing.T) {
 	m := model(t)
 	// Today: only today's mail; Tab widens to all mail
-	m = press(m, "l") // Today
-	m = press(m, "/")
+	m = press(m, "]") // Today
+	m = press(m, " ", "/")
 	m = typeText(m, "lunch")
 	m = runSearch(t, m)
 	if len(m.find.mail) != 0 || !strings.Contains(m.View(), "Today") {
@@ -259,7 +261,7 @@ func TestSearchScopes(t *testing.T) {
 	m = press(m, "esc")
 	// a chat space: only its messages
 	m = press(m, "tab", "j") // chat, portal-dev
-	m = press(m, "/")
+	m = press(m, " ", "/")
 	m = typeText(m, "smoke")
 	m = runSearch(t, m)
 	if len(m.find.chat) != 1 || len(m.find.mail) != 0 || m.find.chat[0].Space != "spaces/portal-dev" {
@@ -302,19 +304,19 @@ func TestSchedule(t *testing.T) {
 	}
 	// it's in the Scheduled tab (not Sent) with its time; t moves it
 	for m.currentSection().Label != "SENT" {
-		m = press(m, "l")
+		m = press(m, "]")
 	}
 	if strings.Contains(m.View(), "⏰") {
 		t.Fatal("Sent shouldn't list scheduled mail")
 	}
-	m = press(m, "l")
+	m = press(m, "]")
 	if m.currentSection().Label != "SCHEDULED" || !strings.Contains(m.View(), "Scheduled 1") {
 		t.Fatalf("no Scheduled tab:\n%s", m.View())
 	}
 	if !strings.Contains(m.View(), "⏰ in 120 min") && !strings.Contains(m.View(), "⏰ today") && !strings.Contains(m.View(), "⏰ tomorrow") {
 		t.Fatalf("Scheduled doesn't show the mail:\n%s", m.View())
 	}
-	m = press(m, "g", "t")
+	m = press(m, "g", "g", "t")
 	m = typeText(m, "tomorrow 10am")
 	m = press(m, "enter")
 	it, _ := m.a.Store.OutboxItem(q[0].ID)
@@ -335,7 +337,7 @@ func TestScheduledChat(t *testing.T) {
 		t.Fatalf("scheduled chat: %+v", q)
 	}
 	for chatSections[m.sec] != "Scheduled" {
-		m = press(m, "l")
+		m = press(m, "]")
 	}
 	if len(m.spaces) != 1 || !strings.Contains(m.View(), "⏰ tomorrow 09:00") || !strings.Contains(m.View(), "Scheduled 1") {
 		t.Fatalf("chat Scheduled tab:\n%s", m.View())
@@ -343,7 +345,7 @@ func TestScheduledChat(t *testing.T) {
 	if _, ok := m.curSpace(); ok {
 		t.Fatal("a scheduled row is not a space")
 	}
-	m = press(m, "z")
+	m = press(m, "u")
 	if it, _ := m.a.Store.OutboxItem(q[0].ID); it.Status != store.StatusCancelled || len(m.spaces) != 0 {
 		t.Fatalf("z should cancel it: %s, %d rows", it.Status, len(m.spaces))
 	}
@@ -351,7 +353,7 @@ func TestScheduledChat(t *testing.T) {
 
 func TestNewConversation(t *testing.T) {
 	m := model(t)
-	m = press(m, "tab", "N")
+	m = press(m, "tab", " ", "N")
 	if m.mode != modeConvo || !strings.Contains(m.View(), "new conversation") {
 		t.Fatal("N should open (and draw) the new conversation window")
 	}
@@ -411,7 +413,7 @@ func TestGroupNameAndSignIn(t *testing.T) {
 	m := model(t)
 	g := lastFake
 	g.NeedsScope = true
-	m = press(m, "tab", "N")
+	m = press(m, "tab", " ", "N")
 	m = typeText(m, "arj")
 	m = press(m, "tab")
 	m = typeText(m, "neh")
@@ -471,7 +473,7 @@ func TestChatReplies(t *testing.T) {
 		t.Fatalf("after sending: still typing, box empty (mode %v, %q)", m.mode, string(m.input))
 	}
 	// from the list, r replies to the latest message from someone else
-	m = press(m, "esc", "1", "r")
+	m = press(m, "esc", "h", "r")
 	if m.replyTo == nil || m.replyTo.Mine {
 		t.Fatalf("list reply target: %+v", m.replyTo)
 	}
@@ -527,7 +529,7 @@ func TestChatExtras(t *testing.T) {
 			m.chatSel = i
 		}
 	}
-	m = press(m, "d")
+	m = press(m, "d", "d", "d") // dd asks, dd deletes
 	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 	m = runCmds(nm.(Model), cmd)
 	for _, c := range m.chatMsgs {
@@ -543,14 +545,14 @@ func TestChatExtras(t *testing.T) {
 		t.Fatalf("earlier messages: %+v", m.chatMsgs[0])
 	}
 	// pin, and [ ] between chats
-	m = press(m, "1", "j", "p")
+	m = press(m, "h", "j", "p")
 	if !m.spaces[0].Pinned || !strings.Contains(m.View(), "PINNED") {
 		t.Fatalf("pin:\n%s", m.View())
 	}
 	before := m.sel
-	m = press(m, "]")
+	m = press(m, "ctrl+n")
 	if m.sel != before+1 {
-		t.Fatal("] should go to the next chat")
+		t.Fatal("ctrl+n should go to the next chat")
 	}
 }
 

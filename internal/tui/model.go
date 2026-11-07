@@ -46,6 +46,7 @@ const (
 	modeView    // a picture full size
 	modeForward // typing who to forward a WhatsApp message to
 	modeVote    // typing the options to vote for in a WhatsApp poll
+	modeCommand // typing a : command
 )
 
 const (
@@ -140,6 +141,18 @@ type Model struct {
 	launch string // "", popup, demo
 	styles styles
 	w, h   int
+
+	// Vim's ways: Space starts a leader key (its menu shows after a
+	// moment), v picks a range, : takes a command, and keys can come in
+	// twos (gg, dd, yy, za, gf)
+	leader      bool
+	leaderShown bool
+	leaderAt    int // which Space this is, so an old timer doesn't show the menu
+	visual      bool
+	visualFrom  int    // where v started in the list
+	prefix      string // the first key of a two-key command (g, d, y, z)
+	cmdHist     []string
+	statusN     int // people with a status update you haven't seen
 
 	tab      int
 	wa       bool // the chat tab shows WhatsApp instead of Google Chat
@@ -1052,9 +1065,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
-		m.w, m.h = msg.Width, msg.Height
+		if msg.Width == wideScreen {
+			return m, nil // the renderer's, not the terminal's (widenRenderer)
+		}
+		// the last column stays free: the renderer clears the rest of each
+		// row from there, wiping anything a terminal drew too far
+		m.w, m.h = max(20, msg.Width-1), msg.Height
 		m.fixView()
 		m.layoutComposer()
+		return m, widenRenderer(msg.Height)
+	case leaderTick:
+		if m.leader && msg.at == m.leaderAt {
+			m.leaderShown = true
+		}
 		return m, nil
 	case tickMsg:
 		var cmds []tea.Cmd
@@ -1261,9 +1284,8 @@ func (m *Model) fixView() {
 	if m.w == 0 {
 		return
 	}
-	inner := m.w - m.listWidth() - 4
-	m.buildPreview(inner)
-	avail := m.bodyHeight() - 2 - len(m.aiLines(inner))
+	m.buildPreview(m.previewWidth())
+	avail := m.bodyHeight() - 2 - len(m.aiLines(m.previewWidth())) // the header and its rule
 	if _, ok := m.curSpace(); ok {
 		avail -= 3 // the message box
 	}
@@ -1365,6 +1387,8 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.reviewKey(s)
 	case modeApprove:
 		return m.approveKey(s)
+	case modeCommand:
+		return m.commandKey(k)
 	}
 	return m.normalKey(s)
 }
@@ -1603,7 +1627,27 @@ func (m *Model) goToAI(kind string) {
 	m.reload()
 }
 
+// normalKey is a key in NORMAL mode: Vim's keys first (vim.go), then
+// the action it names.
 func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
+	// on an AI request, its own keys answer it, before Vim's
+	if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() && !m.leader && m.prefix == "" {
+		switch s {
+		case "y", "n", "e":
+			m.apID = it.ID
+			return m.approveKey(s)
+		}
+	}
+	mm, cmd, old, done := m.vimKey(s)
+	if done {
+		return mm, cmd
+	}
+	return mm.(Model).actKey(old)
+}
+
+// actKey runs an action by its key name (the names before Vim's keys:
+// vimKey translates, so dd reaches here as e).
+func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 	page := max(1, m.previewHeight()/2)
 	// on an AI request, the approval keys answer it
 	if it, ok := m.curOutbox(); ok && it.Status == store.StatusApproval && m.inAISection() {
@@ -1917,7 +1961,7 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 				}
 				if m.armDelete != c.Name {
 					m.armDelete = c.Name
-					m.say(map[bool]string{false: "d again deletes it, for everyone", true: "d again deletes it for you (here only)"}[forMe])
+					m.say(map[bool]string{false: "dd again deletes it, for everyone", true: "dd again deletes it for you (here only)"}[forMe])
 					return m, nil
 				}
 				m.armDelete = ""
