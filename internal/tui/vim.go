@@ -243,10 +243,29 @@ func (m Model) vimKey(s string) (tea.Model, tea.Cmd, string, bool) {
 			}
 		}
 		return m, nil, "R", false // private reply, or send a failed one again
-	case "s", "Q", "x":
-		return m, nil, s, false
+	}
+	// Only the keys on the key sheet act: anything else used to fall
+	// through to the old single-letter actions (x picked, s searched, Q
+	// folded, D/S/T asked Claude, Ctrl+x picked all) without being
+	// documented anywhere.
+	if !sheetKeys[s] {
+		if r := []rune(s); len(r) == 1 && r[0] > ' ' && r[0] < 0x7f {
+			m.say(s + " does nothing here · ? lists the keys, / finds what you want")
+		}
+		return m, nil, "", true
 	}
 	return m, nil, s, false
+}
+
+// sheetKeys are the single keys the key sheet (keys.go) lists that reach
+// the old actions under their own name.
+var sheetKeys = map[string]bool{
+	"j": true, "k": true, "down": true, "up": true, "G": true, "J": true, "K": true,
+	"ctrl+d": true, "ctrl+u": true, "enter": true, "q": true, "esc": true, "?": true,
+	"+": true, "-": true, "W": true, "X": true, "i": true, "r": true, "f": true, "c": true,
+	"m": true, "M": true, "*": true, "L": true, "b": true, "U": true, "t": true, "p": true,
+	"E": true, "e": true, "Z": true, "I": true, "B": true, "P": true, "alt+r": true,
+	"A": true, "@": true, "backspace": true, "alt+m": true, "alt+c": true, "alt+w": true,
 }
 
 // twoKeys runs gg, gt, gT, gf, gF, gx, dd, yy, za and zq.

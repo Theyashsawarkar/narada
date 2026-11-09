@@ -283,6 +283,7 @@ message or a mail) and shows the key for each, and `?` lists every key.
 | `f` | Send the thread or the picked WhatsApp message on to someone (forward) |
 | `c` | Create a new mail, or a message in this chat (compose) |
 | `dd` | Move the thread or WhatsApp chat out of the inbox (archive; picking: delete yours, dd twice) |
+| `e` | Move the thread or WhatsApp chat out of the inbox (archive at once; u undoes it) |
 | `#` | Move the thread to the trash |
 | `u` | Undo the last change, or cancel a send in its undo window |
 | `m` / `M` | Set it as read / unread (or everything picked) |

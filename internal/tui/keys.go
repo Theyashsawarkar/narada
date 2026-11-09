@@ -41,6 +41,7 @@ var Keys = []Key{
 	{"Act", "f", "Send the thread or the picked WhatsApp message on to someone (forward)"},
 	{"Act", "c", "Create a new mail, or a message in this chat (compose)"},
 	{"Act", "dd", "Move the thread or WhatsApp chat out of the inbox (archive; picking: delete yours, dd twice)"},
+	{"Act", "e", "Move the thread or WhatsApp chat out of the inbox (archive at once; u undoes it)"},
 	{"Act", "#", "Move the thread to the trash"},
 	{"Act", "u", "Undo the last change, or cancel a send in its undo window"},
 	{"Act", "m / M", "Set it as read / unread (or everything picked)"},

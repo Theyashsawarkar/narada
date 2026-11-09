@@ -609,11 +609,11 @@ func TestPickAndMarkAllRead(t *testing.T) {
 	if unread() == 0 {
 		t.Fatal("the demo has unread chats")
 	}
-	m = press(m, "ctrl+x")
+	m = press(m, "V")
 	if len(m.selected) != len(m.spaces) || !strings.Contains(m.View(), "picked") {
 		t.Fatalf("ctrl+x picks every chat: %d of %d", len(m.selected), len(m.spaces))
 	}
-	m = press(m, "ctrl+x")
+	m = press(m, "V")
 	if len(m.selected) != 0 {
 		t.Fatal("ctrl+x again clears")
 	}

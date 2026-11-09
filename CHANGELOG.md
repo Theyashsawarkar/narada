@@ -4,6 +4,7 @@ Newest first.
 
 ## Unreleased
 
+- **Only the keys on the key sheet act.** Any key the Vim layer didn't know used to fall through to the old single-letter actions, none of them documented: `x` picked a row, `s` searched, `Q` folded the quoted text, `D` / `S` / `T` asked Claude, `Ctrl+x` picked everything. They now do nothing (a letter says so). `e` archives at once, as before, and is on the key sheet now (`u` undoes it).
 - **A message you send shows once and stays put.** It appears the moment
   you press Enter with ◷, then the same bubble gets ✓ (✓✓, blue) as it goes
   out. Before, it showed twice while sending (in the chat and again as a

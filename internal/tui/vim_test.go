@@ -241,3 +241,20 @@ func TestOnlySlashSearches(t *testing.T) {
 		t.Fatal("/ didn't open the search")
 	}
 }
+
+// Only the keys on the key sheet act: the old undocumented letters (x
+// picked, s searched, Q folded, D/S/T asked Claude) do nothing now.
+func TestNoHiddenKeys(t *testing.T) {
+	m := model(t)
+	before := m.sel
+	for _, k := range []string{"x", "s", "Q", "D", "S", "T", "%"} {
+		m = press(m, k)
+		if m.mode != modeNormal || len(m.selected) != 0 || m.sel != before || m.find != nil {
+			t.Fatalf("%s acted: mode %v, %d picked, sel %d", k, m.mode, len(m.selected), m.sel)
+		}
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if m = nm.(Model); len(m.selected) != 0 {
+		t.Fatal("Ctrl+x picked everything without being a key")
+	}
+}
