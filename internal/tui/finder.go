@@ -442,7 +442,7 @@ func (m *Model) wantPreview() tea.Cmd {
 		key := "a/" + k.key
 		f.wantPrev = key
 		s := m.styles
-		f.previews[key] = append([]string{s.bold.Render(k.desc), "", s.muted.Render("the key: ") + s.keycap.Render(k.key), ""},
+		f.previews[key] = append([]string{s.bold.Render(k.desc), "", s.muted.Render("the key: ") + s.round(s.keycap, k.key), ""},
 			s.muted.Render("Enter does it now; the key does it any time."))
 		return nil
 	} else if kind == "mail" {
@@ -891,7 +891,7 @@ func (m Model) findList(w int, q string) []string {
 		if base+i == f.sel {
 			l1 += "\x00sel"
 		}
-		out = append(out, row(ansi.Truncate(l1, w-lipgloss.Width(k.key)-3, "…"), s.keycap.Render(k.key), w))
+		out = append(out, row(ansi.Truncate(l1, w-lipgloss.Width(k.key)-3, "…"), s.round(s.keycap, k.key), w))
 	}
 	return out
 }

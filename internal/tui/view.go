@@ -79,10 +79,20 @@ func thousands(n int) string {
 	return s
 }
 
+// topRows is how many rows sit above the panes: the places, a blank row,
+// the sections, a blank row.
+const topRows = 4
+
+// Where the top bar and the section strip are drawn (for clicks).
+const (
+	placesRow   = 0
+	sectionsRow = 2
+)
+
 func (m Model) listWidth() int { return max(34, min(60, m.w*36/100)) }
 
 func (m Model) bodyHeight() int {
-	h := m.h - 3 // the places, the sections, the footer
+	h := m.h - topRows - 1 // the places, the sections (each with room under it), the footer
 	if m.err != "" {
 		h--
 	}
@@ -110,7 +120,7 @@ func (m Model) View() string {
 		m.hits = &hits{}
 	}
 	m.hits.reset()
-	rows := []string{m.topBar(), m.sectionStrip()}
+	rows := []string{m.topBar(), "", m.sectionStrip(), ""} // topRows: room to breathe under each
 	bh := m.bodyHeight()
 	// under a popup, draw what it was opened over
 	under := m.mode
@@ -141,10 +151,12 @@ func (m Model) View() string {
 	default:
 		lw := m.listWidth()
 		m.hits.listX, m.hits.rightX = lw, lw
-		left := m.pane(lw, bh, m.listTitle(), m.listView(lw-2, bh-1))
+		// a rule between the list and what's open, so the two never run together
+		left := m.pane(lw-1, bh, m.listTitle(), m.listView(lw-3, bh-1))
 		right := m.rightPane(under, m.w-lw, bh)
+		rule := m.styles.muted.Faint(true).Render("│")
 		for i := range left {
-			body = append(body, left[i]+right[i])
+			body = append(body, left[i]+rule+right[i])
 		}
 	}
 	switch {

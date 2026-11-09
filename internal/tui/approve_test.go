@@ -249,8 +249,8 @@ func TestMailListUsesFullHeight(t *testing.T) {
 	if m.count() < 2 {
 		t.Skip("the demo mail has too few threads")
 	}
-	if rows := m.cardRows(); rows != 4 {
-		t.Fatalf("a mail row takes 4 lines on the panel, not %d", rows)
+	if rows := m.cardRows(); rows != 6 {
+		t.Fatalf("a mail row takes 6 lines on the panel (padded), not %d", rows)
 	}
 	if v := m.listView(70, bh); lipgloss.Height(v) > bh {
 		t.Fatalf("%d lines in %d", lipgloss.Height(v), bh)

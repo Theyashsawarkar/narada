@@ -15,7 +15,7 @@ import (
 )
 
 // presenceLine says who is typing in a WhatsApp chat, else whether the
-// person is online or when they were last seen ("" when unknown).
+// person is online, when they were last seen, or offline.
 func (m *Model) presenceLine(sp store.Space) string {
 	s := m.styles
 	if typing := m.a.Store.TypingIn(sp.Name); len(typing) > 0 {
@@ -51,14 +51,12 @@ func (m *Model) presenceLine(sp store.Space) string {
 func (m *Model) onlineLine(p store.Presence) string {
 	s := m.styles
 	switch {
-	case p.JID == "" || time.Since(time.UnixMilli(p.At)) > 10*time.Minute && p.Online:
-		return ""
-	case p.Online:
-		return s.green.Render(" · online")
+	case p.Online && time.Since(time.UnixMilli(p.At)) <= 10*time.Minute:
+		return s.green.Render(" ● online")
 	case p.LastSeen > 0:
-		return s.muted.Render(" · last seen " + strings.ToLower(cli.When(p.LastSeen)))
+		return s.muted.Render(" ○ last seen " + strings.ToLower(cli.When(p.LastSeen)))
 	}
-	return ""
+	return s.muted.Render(" ○ offline") // not online, as far as anyone told us
 }
 
 // waTyping tells the chat you're typing (at most every 8 seconds), or

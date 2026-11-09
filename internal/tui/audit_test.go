@@ -169,22 +169,22 @@ func TestMouse(t *testing.T) {
 	}
 	// the WhatsApp place, wherever it was drawn
 	p := m.hits.places[2]
-	click(p.x0+1, 0)
+	click(p.x0+1, placesRow)
 	if !m.wa {
 		t.Fatal("clicking WhatsApp")
 	}
-	click(m.hits.places[0].x0+1, 0)
+	click(m.hits.places[0].x0+1, placesRow)
 	s := m.hits.sections[2]
-	click(s.x0+1, 1)
+	click(s.x0+1, sectionsRow)
 	if m.sec != s.n {
 		t.Fatalf("clicking a section: %d, want %d", m.sec, s.n)
 	}
 	m = press(m, "shift+tab", "shift+tab")
-	click(5, 3+4*2) // the third thread (four rows each)
+	click(5, topRows+1+6*2+1) // the third thread (six rows each: its first line)
 	if m.sel != 2 || m.focus != 0 {
 		t.Fatalf("clicking a row: sel %d", m.sel)
 	}
-	click(5, 3+4*2)
+	click(5, topRows+1+6*2+1)
 	if m.focus != 1 {
 		t.Fatal("a second click opens it")
 	}

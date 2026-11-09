@@ -91,8 +91,15 @@ var Keys = []Key{
 	{"Space", "Space q", "Quit narada"},
 	{"Claude", "Space k / @", "Start a question to Claude, with this thread or chat as context"},
 	{"Claude", "Space s", "Show Claude's summary of the thread or the chat's recent messages"},
-	{"Claude", "Space d", "Create a reply draft with Claude, then edit it in your editor"},
+	{"Claude", "A / Space d", "Create a reply or message with Claude (it reads this chat or mail; you use, edit, change or drop its draft)"},
 	{"Claude", "Space t", "Show today's digest: what came in and what needs you"},
+	{"AI draft", "1 - 4", "Pick one of the four suggested asks for Claude (reply, say yes, say no, …)"},
+	{"AI draft", "Tab", "Toggle more context for Claude (older messages, or your sent mail for tone)"},
+	{"AI draft", "y", "Send Claude's draft as yours (through the undo window)"},
+	{"AI draft", "e", "Edit Claude's draft yourself before sending"},
+	{"AI draft", "c", "Request changes to Claude's draft (shorter, warmer, in Hindi, or your own words)"},
+	{"AI draft", "← / →", "Show the previous / next version of the draft"},
+	{"AI draft", "n / Esc", "Cancel Claude's draft (nothing is sent)"},
 	{"Other", ":", "Run a command: archive, trash, read, unread, star, label, later, mute, rename, account, sync, q (Tab completes)"},
 	{"Other", "?", "Show every key"},
 	{"Insert", "Esc", "Go back to NORMAL mode (what you wrote stays)"},
@@ -101,6 +108,7 @@ var Keys = []Key{
 	{"Insert", "Ctrl+o", "Add a file to the message"},
 	{"Insert", "Ctrl+v", "Paste a copied image (a screenshot) into the message"},
 	{"Insert", "Ctrl+t", "Send the message later (tomorrow 9am, fri 6pm, in 2h)"},
+	{"Insert", "Ctrl+g", "Edit what you typed with Claude: polish it (your words, fixed up)"},
 	{"Insert", "Ctrl+r (WhatsApp)", "Record a voice note (again stops and adds it; Enter sends it, Esc drops it)"},
 	{"Insert", "Ctrl+p (WhatsApp)", "Send what you wrote as a poll: the question, then one option per line"},
 	{"Insert", "@ (WhatsApp)", "Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none)"},
@@ -174,6 +182,8 @@ func KeybindLines() string {
 			scope = "narada approve"
 		case "Setup":
 			scope = "narada setup"
+		case "AI draft":
+			scope = "narada AI draft"
 		}
 		fmt.Fprintf(&b, "# keybind: Tmux/%s | %s | %s\n", scope, k.Keys, k.Desc)
 	}

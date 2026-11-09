@@ -1770,17 +1770,47 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 	}
 	defer tx.Rollback()
 	for _, m := range msgs {
-		files, _ := json.Marshal(m.Files)
-		if m.Files == nil {
-			files = []byte("[]")
-		}
-		if _, err := tx.Exec(`INSERT INTO chat_messages(account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,formatted) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-		  ON CONFLICT(account,name) DO UPDATE SET text=excluded.text, formatted=excluded.formatted, files=excluded.files, quoted=excluded.quoted, reactions=excluded.reactions, edited=excluded.edited,
-		    ticks=MAX(ticks, excluded.ticks),
-		    sender_name=CASE WHEN excluded.sender_name<>'' THEN excluded.sender_name ELSE sender_name END`,
-			m.Account, m.Name, m.Space, m.Thread, m.Sender, m.SenderName, m.Text, m.Created, string(files), m.Quoted, m.Reactions, m.Edited, m.Ticks, m.Formatted); err != nil {
+		if err := putChatMessage(tx, m); err != nil {
 			return err
 		}
+	}
+	return tx.Commit()
+}
+
+func putChatMessage(tx *sql.Tx, m ChatMessage) error {
+	files, _ := json.Marshal(m.Files)
+	if m.Files == nil {
+		files = []byte("[]")
+	}
+	_, err := tx.Exec(`INSERT INTO chat_messages(account,name,space,thread,sender,sender_name,text,created,files,quoted,reactions,edited,ticks,formatted) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	  ON CONFLICT(account,name) DO UPDATE SET text=excluded.text, formatted=excluded.formatted, files=excluded.files, quoted=excluded.quoted, reactions=excluded.reactions, edited=excluded.edited,
+	    ticks=MAX(ticks, excluded.ticks),
+	    sender_name=CASE WHEN excluded.sender_name<>'' THEN excluded.sender_name ELSE sender_name END`,
+		m.Account, m.Name, m.Space, m.Thread, m.Sender, m.SenderName, m.Text, m.Created, string(files), m.Quoted, m.Reactions, m.Edited, m.Ticks, m.Formatted)
+	return err
+}
+
+// ReplacePending swaps a sent message's on-its-way copy (outbox item
+// outboxID) for the real one in one step, at the copy's time: the chat
+// never shows both, or neither, and the message doesn't move. With no
+// copy (it was already replaced) it just stores m.
+func (s *Store) ReplacePending(outboxID int64, m ChatMessage) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var created int64
+	if tx.QueryRow(`SELECT created FROM chat_messages WHERE account=? AND name=?`, m.Account, PendingName(outboxID)).Scan(&created) == nil {
+		if created > 0 {
+			m.Created = created
+		}
+		if _, err := tx.Exec(`DELETE FROM chat_messages WHERE account=? AND name=?`, m.Account, PendingName(outboxID)); err != nil {
+			return err
+		}
+	}
+	if err := putChatMessage(tx, m); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

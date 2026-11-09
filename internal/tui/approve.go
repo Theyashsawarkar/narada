@@ -509,7 +509,7 @@ func (s styles) answer(key, what, bg string) string {
 	if bg != "" {
 		return s.round(lipgloss.NewStyle().Foreground(lipgloss.Color(s.c.Base)).Background(lipgloss.Color(bg)).Bold(true).Padding(0, 1), key+"  "+what)
 	}
-	return s.keycap.Render(key) + " " + s.sub.Render(what)
+	return s.round(s.keycap, key) + " " + s.sub.Render(what)
 }
 
 func (m approver) View() string {

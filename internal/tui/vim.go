@@ -44,6 +44,7 @@ func (m Model) leaderKeys() []leaderKey {
 	}
 	c := func(f func(s styles) string) func(styles) string { return f }
 	blue, teal, green, peach := c(func(s styles) string { return s.c.Blue }), c(func(s styles) string { return s.c.Teal }), c(func(s styles) string { return s.c.Green }), c(func(s styles) string { return s.c.Peach })
+	pink := c(func(s styles) string { return s.c.Pink })
 	mauve, yellow, sky, red, sub := c(func(s styles) string { return s.c.Mauve }), c(func(s styles) string { return s.c.Yellow }), c(func(s styles) string { return s.c.Sky }), c(func(s styles) string { return s.c.Red }), c(func(s styles) string { return s.c.Subtle })
 	return []leaderKey{
 		{"m", "Mail", blue, place(0)},
@@ -68,7 +69,7 @@ func (m Model) leaderKeys() []leaderKey {
 		{"v", "Open the files", yellow, keys("v")},
 		{"V", "Save the files", yellow, keys("V")},
 		{"U", "Send a file here", yellow, keys("U")},
-		{"d", "Draft a reply with Claude", yellow, keys("D")},
+		{"d", "Write a reply or message with Claude (A)", pink, keys("A")},
 		{"s", "Summary by Claude", yellow, keys("S")},
 		{"k", "Ask Claude", yellow, keys("@")},
 		{"t", "Today's digest", yellow, keys("T")},
@@ -186,7 +187,7 @@ func (m Model) vimKey(s string) (tea.Model, tea.Cmd, string, bool) {
 	case ":":
 		m.mode, m.input, m.cmdAt = modeCommand, nil, len(m.cmdHist)
 		return m, nil, "", true
-	case "/", "ctrl+k":
+	case "/": // the one key for search
 		mm, cmd := m.findAnything(true)
 		return mm, cmd, "", true
 	case "[", "]", "tab", "shift+tab":

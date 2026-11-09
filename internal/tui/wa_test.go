@@ -229,6 +229,11 @@ func TestTypingAndPresence(t *testing.T) {
 	if got := ansi.Strip(m.presenceLine(sp)); !strings.Contains(got, "online") {
 		t.Fatalf("presence %q", got)
 	}
+	// it shows in the chat's header, right after their name
+	m.w, m.h = 150, 40
+	if head := ansi.Strip(m.previewPane(80, 20)[0]); !strings.Contains(head, "Ravi Kulkarni ● online") {
+		t.Fatalf("header %q", head)
+	}
 	// typing tells them, once
 	m.mode = modeChatMsg
 	m = typeText(m, "hel")
@@ -377,5 +382,37 @@ func TestPinMessageKey(t *testing.T) {
 	}
 	if sp, _ := m.a.Store.Space(store.WhatsAppAccount, "120363000000000001@g.us"); sp.Pinned {
 		t.Fatal("p in the conversation pins the message, not the chat")
+	}
+}
+
+// A message you send shows once, at once, with ◷; when it goes out the
+// same bubble gets ✓, in the same place: never twice, never gone.
+func TestSentMessageShowsOnceAndStaysPut(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	m = press(m, "i")
+	m = typeText(m, "on my way now")
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	m.loadPreview(false)
+	count := func(m Model) (int, string) {
+		v := ansi.Strip(m.View())
+		return strings.Count(v, "│ on my way now"), v // its bubble (the list's preview doesn't count)
+	}
+	if n, v := count(m); n != 1 || !strings.Contains(v, "◷") {
+		t.Fatalf("before it goes: want it once with ◷, got %d:\n%s", n, v)
+	}
+	before := m.chatMsgs[len(m.chatMsgs)-1].Created
+	m.a.DeliverDue(context.Background())
+	if len(w.Sent) != 1 {
+		t.Fatalf("not sent: %+v", w.Sent)
+	}
+	m.loadPreview(false)
+	m.fixView() // as the screen's refresh does
+	if n, v := count(m); n != 1 || strings.Contains(v, "◷") {
+		t.Fatalf("after it went: want it once, without ◷, got %d:\n%s", n, v)
+	}
+	last := m.chatMsgs[len(m.chatMsgs)-1]
+	if store.IsPending(last.Name) || last.Created != before || last.Ticks < 1 {
+		t.Fatalf("the sent one should take the pending one's place: %+v (was at %d)", last, before)
 	}
 }

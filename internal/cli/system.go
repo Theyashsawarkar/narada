@@ -334,6 +334,9 @@ func demo(args []string, tui func(*app.App, string) error) error {
 			return e
 		}
 	}
+	// who's online: Amma is, Ravi was three hours ago
+	_ = a.Store.SetPresence("919800000001@s.whatsapp.net", true, 0)
+	_ = a.Store.SetPresence("919800000002@s.whatsapp.net", false, time.Now().Add(-3*time.Hour).UnixMilli())
 	return tui(a, "demo")
 }
 

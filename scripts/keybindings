@@ -74,8 +74,15 @@
 # keybind: Tmux/narada | Space q | Quit narada
 # keybind: Tmux/narada | Space k / @ | Start a question to Claude, with this thread or chat as context
 # keybind: Tmux/narada | Space s | Show Claude's summary of the thread or the chat's recent messages
-# keybind: Tmux/narada | Space d | Create a reply draft with Claude, then edit it in your editor
+# keybind: Tmux/narada | A / Space d | Create a reply or message with Claude (it reads this chat or mail; you use, edit, change or drop its draft)
 # keybind: Tmux/narada | Space t | Show today's digest: what came in and what needs you
+# keybind: Tmux/narada AI draft | 1 - 4 | Pick one of the four suggested asks for Claude (reply, say yes, say no, …)
+# keybind: Tmux/narada AI draft | Tab | Toggle more context for Claude (older messages, or your sent mail for tone)
+# keybind: Tmux/narada AI draft | y | Send Claude's draft as yours (through the undo window)
+# keybind: Tmux/narada AI draft | e | Edit Claude's draft yourself before sending
+# keybind: Tmux/narada AI draft | c | Request changes to Claude's draft (shorter, warmer, in Hindi, or your own words)
+# keybind: Tmux/narada AI draft | ← / → | Show the previous / next version of the draft
+# keybind: Tmux/narada AI draft | n / Esc | Cancel Claude's draft (nothing is sent)
 # keybind: Tmux/narada | : | Run a command: archive, trash, read, unread, star, label, later, mute, rename, account, sync, q (Tab completes)
 # keybind: Tmux/narada | ? | Show every key
 # keybind: Tmux/narada writing | Esc | Go back to NORMAL mode (what you wrote stays)
@@ -84,6 +91,7 @@
 # keybind: Tmux/narada writing | Ctrl+o | Add a file to the message
 # keybind: Tmux/narada writing | Ctrl+v | Paste a copied image (a screenshot) into the message
 # keybind: Tmux/narada writing | Ctrl+t | Send the message later (tomorrow 9am, fri 6pm, in 2h)
+# keybind: Tmux/narada writing | Ctrl+g | Edit what you typed with Claude: polish it (your words, fixed up)
 # keybind: Tmux/narada writing | Ctrl+r (WhatsApp) | Record a voice note (again stops and adds it; Enter sends it, Esc drops it)
 # keybind: Tmux/narada writing | Ctrl+p (WhatsApp) | Send what you wrote as a poll: the question, then one option per line
 # keybind: Tmux/narada writing | @ (WhatsApp) | Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none)

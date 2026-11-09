@@ -1,0 +1,1211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Try narada</title>
+<meta name="description" content="narada's screen running in your browser on made-up mail, Google Chat and WhatsApp: use its keys, and have Claude write a reply.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --crust:#11111b;--mantle:#181825;--base:#1e1e2e;--s0:#313244;--s1:#45475a;--s2:#585b70;
+  --ov:#7f849c;--sub:#a6adc8;--text:#cdd6f4;--accent:#cba6f7;--accent2:#f5c2e7;
+  --red:#f38ba8;--green:#a6e3a1;--yellow:#f9e2af;--peach:#fab387;--blue:#89b4fa;--teal:#94e2d5;--sky:#89dceb;
+  --page:#11111b;--card:#181825;--line:#313244;
+  --mono:"JetBrains Mono",ui-monospace,monospace;--sans:Inter,system-ui,sans-serif;
+}
+:root[data-theme="light"]{
+  --crust:#dce0e8;--mantle:#e6e9ef;--base:#eff1f5;--s0:#ccd0da;--s1:#bcc0cc;--s2:#acb0be;
+  --ov:#7c7f93;--sub:#5c5f77;--text:#4c4f69;--accent:#8839ef;--accent2:#ea76cb;
+  --red:#d20f39;--green:#40a02b;--yellow:#df8e1d;--peach:#fe640b;--blue:#1e66f5;--teal:#179299;--sky:#04a5e5;
+  --page:#dce0e8;--card:#e6e9ef;--line:#ccd0da;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+  --crust:#dce0e8;--mantle:#e6e9ef;--base:#eff1f5;--s0:#ccd0da;--s1:#bcc0cc;--s2:#acb0be;
+  --ov:#7c7f93;--sub:#5c5f77;--text:#4c4f69;--accent:#8839ef;--accent2:#ea76cb;
+  --red:#d20f39;--green:#40a02b;--yellow:#df8e1d;--peach:#fe640b;--blue:#1e66f5;--teal:#179299;--sky:#04a5e5;
+  --page:#dce0e8;--card:#e6e9ef;--line:#ccd0da;}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--text);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:var(--blue)}
+.wrap{max-width:1500px;margin:0 auto;padding:24px 16px 64px}
+
+/* ------------------------------------------------ page head */
+.head{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.head svg{width:56px;height:56px;flex:none}
+.head h1{margin:0;font-size:26px;letter-spacing:-.02em}
+.head p{margin:2px 0 0;color:var(--sub);max-width:760px}
+.head p.links{margin-top:6px;font-size:14px}
+.ctrls{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{font:500 13px var(--sans);color:var(--sub);background:none;border:0;border-radius:999px;padding:5px 12px;cursor:pointer}
+.seg button.on{background:var(--s0);color:var(--text)}
+
+/* ------------------------------------------------ layout */
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+@media (max-width:1180px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px}
+.card h3{margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--sub)}
+.side{display:flex;flex-direction:column;gap:14px;position:sticky;top:12px}
+.corners{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.corners button{font:500 12.5px var(--sans);text-align:left;background:var(--base);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:7px 9px;cursor:pointer;line-height:1.3}
+.corners button:hover{border-color:var(--accent)}
+.corners button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--base))}
+.corners button small{display:block;color:var(--ov);font-weight:400}
+.notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:520px;overflow:auto}
+.notes li{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;cursor:pointer;background:var(--base)}
+.notes li:hover{border-color:var(--accent)}
+.notes li b{display:block;font-size:13px}
+.notes li span{color:var(--sub)}
+.notes li i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--accent);float:right}
+.below{color:var(--sub);font-size:13px;margin:10px 4px 0}
+.below kbd,.k{font-family:var(--mono);font-size:12px;background:var(--s0);color:var(--text);border-radius:6px;padding:1px 6px}
+
+/* ------------------------------------------------ the terminal */
+.term{font-family:var(--mono);font-size:13px;line-height:20px;background:var(--base);color:var(--text);
+  border:1px solid var(--s1);border-radius:14px;height:700px;display:flex;flex-direction:column;position:relative;overflow:hidden;outline:none;
+  box-shadow:0 18px 50px -20px rgba(0,0,0,.6)}
+.term:focus{border-color:var(--accent)}
+.term.narrow{max-width:700px}
+.term .row{display:flex;align-items:center;white-space:nowrap}
+.muted{color:var(--ov)}.sub{color:var(--sub)}.acc{color:var(--accent)}.red{color:var(--red)}.grn{color:var(--green)}.yel{color:var(--yellow)}.pch{color:var(--peach)}.blu{color:var(--blue)}
+.b{font-weight:700}
+
+.tb{padding:10px 14px 0;display:flex;gap:6px;align-items:center}
+.place{padding:1px 10px;border-radius:999px;color:var(--sub);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.place:hover{background:var(--s0)}
+.place.on{background:var(--accent);color:var(--crust);font-weight:700}
+.place .n{font-size:11px;background:var(--s0);color:var(--text);border-radius:999px;padding:0 6px;line-height:16px}
+.place.on .n{background:color-mix(in srgb,var(--crust) 25%,transparent);color:var(--crust)}
+.tb .right{margin-left:auto;display:flex;gap:10px;align-items:center}
+.tb .right .sub{display:inline-flex;gap:6px;align-items:center}
+.pill{border-radius:999px;padding:0 8px;line-height:18px;font-size:12px}
+.secs{padding:8px 14px 6px;display:flex;gap:4px;align-items:center}
+.sec{padding:0 8px;border-radius:999px;color:var(--sub);cursor:pointer}
+.sec.on{background:var(--s0);color:var(--text);font-weight:700}
+.sec .c{color:var(--accent);margin-left:4px}
+.secs .right{margin-left:auto}
+
+.body{flex:1;display:flex;min-height:0;border-top:1px solid var(--s0)}
+.list{width:36%;min-width:290px;max-width:470px;display:flex;flex-direction:column;min-height:0}
+.term.narrow .list{width:100%;max-width:none}
+.lhead{padding:8px 14px 4px;display:flex;justify-content:space-between}
+.items{flex:1;overflow:hidden;position:relative;padding-bottom:4px}
+.glabel{padding:6px 16px 2px;font-size:11px;letter-spacing:.1em;color:var(--ov);font-weight:700}
+.item{display:flex;gap:10px;padding:7px 12px 7px 14px;margin:0 8px;border-radius:10px;cursor:pointer;border-left:3px solid transparent;position:relative}
+.term.compact .item{padding:3px 12px 3px 14px}
+.item+.item::before{content:"";position:absolute;left:52px;right:10px;top:0;border-top:1px solid color-mix(in srgb,var(--s0) 70%,transparent)}
+.item.sel::before,.item.sel+.item::before{display:none}
+.item:hover{background:color-mix(in srgb,var(--s0) 45%,transparent)}
+.item.sel{background:color-mix(in srgb,var(--accent) 13%,var(--base));border-left-color:var(--accent)}
+.list.dim .item.sel{background:var(--s0);border-left-color:var(--s2)}
+.av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--crust);font-weight:700;font-size:11px;flex:none;position:relative}
+.av.sm{width:22px;height:22px;font-size:9.5px}
+.av .on{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:var(--green);border:2px solid var(--base)}
+.it{flex:1;min-width:0}
+.it .l1,.it .l2{display:flex;gap:6px;align-items:center;min-width:0}
+.it .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sub)}
+.item.unread .nm{color:var(--text);font-weight:700}
+.it .tm{margin-left:auto;color:var(--ov);font-size:12px;flex:none}
+.item.unread .tm{color:var(--accent)}
+.it .pv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ov);flex:1}
+.badge{border-radius:999px;font-size:11px;line-height:17px;padding:0 6px;font-weight:700;flex:none}
+.badge.u{background:var(--accent);color:var(--crust)}
+.badge.m{background:var(--peach);color:var(--crust)}
+.typing{color:var(--green)}
+.dots i{display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor;margin:0 1px;animation:bl 1.2s infinite}
+.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+@keyframes bl{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.scrollhint{position:absolute;right:6px;width:3px;border-radius:3px;background:var(--s1)}
+
+.vr{width:1px;background:var(--s0);flex:none}
+.pane{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.phead{padding:8px 18px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--s0)}
+.phead .meta{margin-left:auto;display:flex;gap:10px;align-items:center}
+.conv{flex:1;overflow:auto;padding:10px 18px 6px;scrollbar-width:thin;scrollbar-color:var(--s1) transparent}
+.sep{display:flex;align-items:center;gap:10px;color:var(--ov);font-size:12px;margin:12px 0 8px}
+.sep::before,.sep::after{content:"";flex:1;border-top:1px solid var(--s0)}
+.sep.new{color:var(--peach)}.sep.new::before,.sep.new::after{border-color:color-mix(in srgb,var(--peach) 55%,transparent)}
+.sys{text-align:center;margin:8px 0}.sys span{background:var(--mantle);color:var(--sub);border-radius:999px;padding:2px 10px;font-size:12px}
+.run{display:flex;flex-direction:column;align-items:flex-start;margin:12px 0 0;gap:3px}
+.run.me{align-items:flex-end}
+.rh{display:flex;gap:8px;align-items:center;margin-bottom:2px;font-size:12.5px}
+.bw{display:flex;align-items:center;gap:6px;max-width:72%}
+.run.me .bw{flex-direction:row-reverse}
+.run:not(.me) .bw{margin-left:30px}
+.bub{border:1px solid var(--s1);border-radius:12px;padding:5px 11px 4px;background:var(--mantle);white-space:pre-wrap;word-break:break-word;position:relative;min-width:60px}
+.run .bw:not(:first-of-type) .bub{border-top-left-radius:5px}
+.run.me .bw:not(:first-of-type) .bub{border-top-left-radius:12px;border-top-right-radius:5px}
+.run.me .bub{border-color:color-mix(in srgb,var(--accent) 55%,var(--s1));background:color-mix(in srgb,var(--accent) 9%,var(--base))}
+.bub.pick{border:2px solid var(--accent);padding:4px 10px 3px}
+.bub .st{float:right;margin:3px 0 0 12px;font-size:11px;color:var(--ov);line-height:16px}
+.bub .st.read{color:var(--blue)}
+.bub.pend{border-style:dashed;border-color:var(--yellow)}
+.bub.fail{border-color:var(--red)}
+.bub .q{border-left:3px solid var(--teal);background:color-mix(in srgb,var(--teal) 8%,transparent);border-radius:6px;padding:2px 8px;margin:2px 0 4px;font-size:12px;color:var(--sub)}
+.bub .q b{color:var(--teal);display:block}
+.mark{color:var(--accent);width:12px;flex:none;visibility:hidden}.mark.on{visibility:visible}
+.rx{font-size:12px;border:1px solid var(--s1);background:var(--base);border-radius:999px;padding:0 7px;margin:-1px 0 0 30px}
+.run.me .rx{margin:-1px 4px 0 0}
+.img{width:250px;height:150px;border-radius:9px;margin:3px 0 4px;background:linear-gradient(135deg,#f9e2af 0%,#fab387 35%,#f38ba8 70%,#cba6f7 100%);position:relative;overflow:hidden}
+.img::after{content:"🪔";position:absolute;font-size:46px;left:50%;top:50%;transform:translate(-50%,-50%)}
+.img.b2{background:linear-gradient(160deg,#89dceb,#89b4fa 60%,#b4befe)}.img.b2::after{content:"🏏"}
+.voice{display:flex;align-items:center;gap:8px;padding:2px 0}
+.voice .wave{display:flex;gap:2px;align-items:center;height:20px}
+.voice .wave i{width:3px;border-radius:2px;background:var(--sub)}
+.doc{display:flex;gap:8px;align-items:center;border:1px solid var(--s1);border-radius:8px;padding:4px 8px;margin:3px 0}
+.lp{border:1px solid var(--s1);border-radius:8px;padding:5px 8px;margin:4px 0;font-size:12px;border-left:3px solid var(--blue)}
+.pendbar{height:3px;border-radius:3px;background:var(--s0);margin-top:4px;overflow:hidden}
+.pendbar i{display:block;height:100%;background:var(--yellow);border-radius:3px}
+.pendline{font-size:11.5px;margin-top:2px}
+
+.compose{margin:6px 18px 10px;border:1px solid var(--s1);border-radius:12px;padding:7px 12px;min-height:36px;display:flex;gap:8px;align-items:flex-start}
+.compose.ins{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.compose .txt{flex:1;white-space:pre-wrap;word-break:break-word}
+.caret{display:inline-block;width:8px;height:16px;background:var(--accent);vertical-align:-3px;animation:cb 1s steps(1) infinite}
+@keyframes cb{50%{opacity:0}}
+.replychip{margin:0 18px -2px;padding:3px 10px;border:1px solid var(--s1);border-bottom:0;border-radius:10px 10px 0 0;font-size:12px;color:var(--sub);display:flex;gap:8px}
+.replychip b{color:var(--teal)}
+
+.errline{padding:3px 14px;color:var(--red);border-top:1px solid var(--s0)}
+.foot{padding:6px 14px 9px;display:flex;gap:6px;align-items:center;border-top:1px solid var(--s0);flex-wrap:nowrap;overflow:hidden}
+.mode{border-radius:999px;padding:0 9px;font-weight:700;color:var(--crust);background:var(--green)}
+.mode.INSERT{background:var(--blue)}.mode.VISUAL{background:var(--peach)}.mode.COMMAND{background:var(--yellow)}.mode.CONFIRM{background:var(--red)}
+.kk{display:inline-flex;gap:5px;align-items:center;margin-left:6px;color:var(--sub)}
+.kk kbd{font:inherit;background:var(--s0);color:var(--text);border-radius:6px;padding:0 6px}
+.foot .right{margin-left:auto;display:flex}
+
+/* mail */
+.mail{padding:14px 22px;overflow:auto;flex:1}
+.mail h2{font-size:15px;margin:0 0 8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.chip{border:1px solid var(--s1);border-radius:999px;padding:0 8px;font-size:12px;color:var(--sub)}
+.chip.acc{border-color:var(--accent);color:var(--accent)}
+.from{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.mbody{border-left:2px solid var(--blue);padding-left:14px;color:var(--text)}
+.mbody p{margin:0 0 10px}
+.tbl{border:1px solid var(--s1);border-radius:10px;overflow:hidden;display:inline-block;margin:4px 0 10px}
+.tbl div{display:flex}.tbl span{padding:2px 12px;min-width:140px;border-top:1px solid var(--s0)}
+.tbl div:first-child span{border-top:0;color:var(--accent);font-weight:700}
+.fold{color:var(--ov);margin:6px 0}
+.att{display:flex;gap:8px;margin-top:10px}
+.att .doc{border-color:color-mix(in srgb,var(--peach) 50%,var(--s1))}
+
+/* ai */
+.aicard{margin:14px 20px;border:1px solid var(--yellow);border-radius:14px;padding:12px 16px}
+.aicard.done{border-color:var(--green)}.aicard.no{border-color:var(--red)}
+.aicard h4{margin:0 0 6px;font-size:13px;display:flex;gap:8px;align-items:center}
+.why{color:var(--sub);border-left:3px solid var(--s1);padding-left:10px;margin:8px 0}
+.btns{display:flex;gap:8px;margin-top:10px}
+.btn{border-radius:999px;padding:1px 12px;border:1px solid var(--s1)}
+.btn.y{border-color:var(--green);color:var(--green)}.btn.n{border-color:var(--red);color:var(--red)}
+
+/* status */
+.stgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;padding:16px 20px}
+.stc{border:1px solid var(--s1);border-radius:12px;padding:10px;text-align:center}
+.ring{width:54px;height:54px;border-radius:50%;margin:0 auto 6px;padding:3px;background:conic-gradient(var(--green) 0 70%,var(--s1) 0)}
+.ring>div{width:100%;height:100%;border-radius:50%;display:grid;place-items:center;background:var(--base);font-weight:700}
+
+/* overlays */
+.ov{position:absolute;z-index:5;background:var(--mantle);border:1px solid var(--accent);border-radius:14px;box-shadow:0 20px 60px -10px rgba(0,0,0,.6)}
+.wk{right:16px;bottom:44px;padding:10px 14px;min-width:330px}
+.wk h5{margin:0 0 6px;font-size:12px;color:var(--accent)}
+.wk .g{display:grid;grid-template-columns:1fr 1fr;gap:2px 18px}
+.wk .g div{display:flex;gap:8px}
+.wk kbd{font:inherit;color:var(--peach);font-weight:700;min-width:12px}
+.cmd,.find{left:50%;top:18%;transform:translateX(-50%);width:min(620px,90%);padding:6px}
+.cmd .in,.find .in{display:flex;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--s0)}
+.cmd ul,.find ul{list-style:none;margin:0;padding:4px;max-height:300px;overflow:auto}
+.cmd li,.find li{display:flex;gap:10px;padding:3px 10px;border-radius:8px}
+.cmd li.on,.find li.on{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+.cmd li span:last-child,.find li .w{margin-left:auto;color:var(--ov)}
+.find .grp{padding:6px 10px 0;font-size:11px;color:var(--ov);letter-spacing:.1em}
+mark{background:none;color:var(--peach);font-weight:700}
+.help{left:50%;top:50%;transform:translate(-50%,-50%);width:min(840px,94%);padding:14px 18px;max-height:88%;overflow:auto}
+.help .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 22px}
+.help h5{margin:8px 0 4px;color:var(--accent);font-size:12px}
+.help div.k2{display:flex;gap:10px}.help div.k2 kbd{font:inherit;color:var(--peach);min-width:58px}
+.confirm{left:50%;top:40%;transform:translate(-50%,-50%);border-color:var(--red);padding:14px 18px;width:380px}
+.confirm h5{margin:0 0 6px;color:var(--red);font-size:13px}
+.toast{position:absolute;right:16px;bottom:46px;z-index:6;background:var(--mantle);border:1px solid var(--green);border-radius:12px;padding:6px 12px;animation:tin .2s}
+.toast.warn{border-color:var(--yellow)}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
+.about{left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;padding:22px 30px;width:min(560px,92%)}
+.about .sh{font-family:"Noto Sans Devanagari",var(--sans);font-size:15px;color:var(--accent);margin:12px 0 6px;line-height:1.8}
+
+/* corner states */
+.center{flex:1;display:grid;place-items:center;text-align:center;padding:20px;color:var(--sub)}
+.qr{width:150px;height:150px;border-radius:12px;margin:10px auto;background:
+  repeating-conic-gradient(var(--text) 0 25%,var(--base) 0 50%) 0 0/18px 18px;border:6px solid var(--base);outline:1px solid var(--s1)}
+.prog{width:320px;height:6px;border-radius:6px;background:var(--s0);overflow:hidden;margin:10px auto}
+.prog i{display:block;height:100%;width:40%;border-radius:6px;background:var(--accent);animation:pg 1.6s ease-in-out infinite}
+@keyframes pg{0%{margin-left:-40%}100%{margin-left:100%}}
+.skel{height:12px;border-radius:6px;background:var(--s0);margin:6px 0;animation:sk 1.4s infinite}
+@keyframes sk{50%{opacity:.45}}
+.steps{text-align:left;display:inline-block;margin-top:6px}
+
+/* the agent writes: ask box, thinking, the draft */
+.mode.AI{background:var(--accent2)}
+.ask{margin:6px 18px 10px;border:1px solid var(--accent2);border-radius:14px;padding:8px 12px 10px;background:color-mix(in srgb,var(--accent2) 7%,var(--base));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent2) 15%,transparent)}
+.ask .top{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.ask .spark{color:var(--accent2);font-weight:700}
+.ask .q{display:flex;gap:6px;align-items:flex-start;border:1px solid var(--s1);border-radius:10px;padding:5px 10px;background:var(--base);min-height:32px}
+.ask .q .ph{color:var(--ov)}
+.ctx{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0 0}
+.ctx span{border:1px solid var(--s1);border-radius:999px;padding:0 8px;font-size:11.5px;color:var(--sub)}
+.ctx span.on{border-color:color-mix(in srgb,var(--accent2) 60%,var(--s1));color:var(--text)}
+.ctx span.on::before{content:"✓ ";color:var(--green)}
+.ctx span.off::before{content:"○ ";color:var(--ov)}
+.sugg{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.sugg span{border-radius:999px;padding:0 9px;font-size:12px;background:var(--s0);cursor:pointer}
+.sugg span b{color:var(--accent2);margin-right:4px}
+.fine{font-size:11.5px;color:var(--ov);margin-top:6px}
+.bub.ai{border:1.5px dashed var(--accent2);background:color-mix(in srgb,var(--accent2) 8%,var(--base))}
+.bub.ai .lbl{display:block;font-size:11px;color:var(--accent2);margin-bottom:2px}
+.bub.think{border:1.5px dashed var(--accent2);background:color-mix(in srgb,var(--accent2) 6%,var(--base));min-width:300px;color:var(--sub)}
+.shim{height:10px;border-radius:5px;margin:6px 0;background:linear-gradient(90deg,var(--s0) 0%,color-mix(in srgb,var(--accent2) 40%,var(--s0)) 50%,var(--s0) 100%);background-size:200% 100%;animation:shm 1.2s linear infinite}
+@keyframes shm{to{background-position:-200% 0}}
+.aiact{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-top:6px;font-size:12px}
+.aiact span{border:1px solid var(--s1);border-radius:999px;padding:0 9px;cursor:pointer}
+.aiact .y{border-color:var(--green);color:var(--green)}.aiact .n{border-color:var(--red);color:var(--red)}
+.aiact .c{border-color:var(--accent2);color:var(--accent2)}
+.vers{color:var(--ov);font-size:11px;margin-left:8px}
+.mdraft{margin:14px 0 4px;border:1.5px dashed var(--accent2);border-radius:12px;padding:10px 14px;background:color-mix(in srgb,var(--accent2) 6%,var(--base))}
+.mdraft .hd{font-size:12px;color:var(--sub);margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap}
+.mdraft pre{margin:0;font:inherit;white-space:pre-wrap}
+.diffadd{background:color-mix(in srgb,var(--green) 18%,transparent);border-radius:4px}
+
+.flash{outline:2px solid var(--peach)!important;outline-offset:2px;border-radius:12px;transition:outline-color .3s}
+
+/* ------------------------------------------------ spec sheet below */
+.sheet{margin-top:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}
+.sw{display:flex;gap:10px;align-items:center;margin:6px 0;font-size:13.5px}
+.sw i{width:26px;height:26px;border-radius:8px;flex:none}
+.scale div{display:flex;gap:10px;align-items:center;margin:5px 0;font-size:13px}
+.scale span.bar{height:10px;border-radius:5px;background:var(--accent)}
+.changes{margin:0;padding-left:18px;font-size:13.5px}
+.changes li{margin:5px 0}
+.changes b{color:var(--text)}
+.tag{font:600 11px var(--sans);border-radius:999px;padding:1px 8px;margin-right:6px}
+.tag.fix{background:color-mix(in srgb,var(--green) 22%,transparent);color:var(--green)}
+.tag.new{background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent)}
+.tag.edge{background:color-mix(in srgb,var(--peach) 22%,transparent);color:var(--peach)}
+@media (max-width:700px){.term{height:620px;font-size:12px}.list{min-width:0}.corners{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="head">
+  <svg viewBox="0 0 128 128" role="img" aria-label="narada logo"><defs><linearGradient id="gn" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#74c7ec"/><stop offset="1" stop-color="#74c7ec" stop-opacity="0.72"/></linearGradient></defs><rect width="128" height="128" rx="32" fill="#1e1e2e"/><rect width="128" height="128" rx="32" fill="url(#gn)"/><rect x="1" y="1" width="126" height="126" rx="31" fill="none" stroke="white" stroke-opacity="0.25" stroke-width="2"/><g transform="translate(28 28) scale(3)" fill="none" stroke="#1e1e2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="15" height="11" rx="2"/><path d="M1.5 6l7.5 5 7.5-5"/><path d="M14 18.5h5.5a3 3 0 0 0 3-3V12a3 3 0 0 0-3-3h-1"/><path d="M16 18.5l-1.5 2.5"/></g></svg>
+  <div>
+    <h1>Try narada</h1>
+    <p>narada's screen, running in your browser on made-up mail, Google Chat and WhatsApp. Click it and use the keys: press <span class="k">A</span> in a chat or a mail and Claude writes your reply. Pick something from <b>Try these</b>, or click a note in <b>How it works</b> to see that part light up. Nothing leaves this page.</p>
+    <p class="links"><a href="index.html">← narada</a> · <a href="index.html#install">Install it</a> · <a href="https://github.com/Theyashsawarkar/narada">GitHub ↗</a></p>
+  </div>
+  <div class="ctrls">
+    <div class="seg" id="segTheme"><button data-v="dark" class="on">Mocha</button><button data-v="light">Latte</button></div>
+    <div class="seg" id="segWidth"><button data-v="wide" class="on">Wide</button><button data-v="narrow">80 cols</button></div>
+    <div class="seg" id="segDens"><button data-v="comfy" class="on">Comfortable</button><button data-v="compact">Compact</button></div>
+  </div>
+</div>
+
+<div class="layout">
+  <section>
+    <div class="term" id="term" tabindex="0" aria-label="narada demo: click it and use the keys"></div>
+    <p class="below">
+      <span class="k">j</span>/<span class="k">k</span> move · <span class="k">⏎</span>/<span class="k">l</span> open · <span class="k">h</span> back · <span class="k">i</span> write · <span class="k">r</span> reply · <span class="k">dd</span> delete · <span class="k">u</span> undo send · <span class="k">R</span> send again ·
+      <span class="k">H</span>/<span class="k">L</span> places · <span class="k">Tab</span> sections · <span class="k">␣</span> menu · <span class="k">:</span> commands · <span class="k">/</span> find · <span class="k">?</span> all keys. Mouse works too.
+    </p>
+  </section>
+
+  <aside class="side">
+    <div class="card">
+      <h3>Try these</h3>
+      <div class="corners" id="corners"></div>
+    </div>
+    <div class="card">
+      <h3>How it works</h3>
+      <ul class="notes" id="notes"></ul>
+    </div>
+  </aside>
+</div>
+
+<div class="sheet">
+  <div class="card">
+    <h3>Colour means something</h3>
+    <div class="sw"><i style="background:var(--accent)"></i><div><b>Accent</b>: where you are. The picked row, the focused pane, the open place, the caret.</div></div>
+    <div class="sw"><i style="background:var(--green)"></i><div><b>Green</b>: done, or alive. Sent, approved, online, synced, NORMAL mode.</div></div>
+    <div class="sw"><i style="background:var(--yellow)"></i><div><b>Yellow</b>: waiting. Undo window, scheduled, awaiting your approval, queued while offline.</div></div>
+    <div class="sw"><i style="background:var(--red)"></i><div><b>Red</b>: danger or failure. Not sent, blocked, delete confirm, offline.</div></div>
+    <div class="sw"><i style="background:var(--peach)"></i><div><b>Peach</b>: look here. Your mentions, search matches, the "new messages" line, attachments.</div></div>
+    <div class="sw"><i style="background:var(--blue)"></i><div><b>Blue</b>: read (✓✓), links, INSERT mode.</div></div>
+  </div>
+  <div class="card">
+    <h3>About this demo</h3>
+    <p class="sub" style="font-size:13.5px;margin:0 0 8px">Everything here is made up: the people, the mail, the chats. It runs in this page and sends nothing anywhere.</p>
+    <p class="sub" style="font-size:13.5px;margin:0 0 8px">Here Claude's drafts are written ahead of time. In narada, <span class="k">A</span> runs Claude (<code>claude -p</code>, your own login) on the chat or mail you have open, so it writes in the language and tone you use with that person, and nothing goes out until you press <span class="k">y</span>.</p>
+    <p class="sub" style="font-size:13.5px;margin:0">The real thing is a terminal program: Gmail, Google Chat and WhatsApp in one keyboard-driven screen. <a href="index.html#install">Install it</a>.</p>
+  </div>
+  <div class="card">
+    <h3>Keys to start with</h3>
+    <ul class="changes">
+      <li><span class="k">j</span> <span class="k">k</span> move, <span class="k">⏎</span> opens, <span class="k">h</span> goes back</li>
+      <li><span class="k">1</span>–<span class="k">4</span> or <span class="k">H</span> <span class="k">L</span>: Mail, Chat, WhatsApp, AI requests</li>
+      <li><span class="k">i</span> writes, <span class="k">⏎</span> sends, <span class="k">u</span> takes it back while it waits</li>
+      <li><span class="k" style="color:var(--accent2)">A</span> Claude writes it: <span class="k">y</span> use · <span class="k">e</span> edit · <span class="k">c</span> change · <span class="k">n</span> drop</li>
+      <li><span class="k">Ctrl+g</span> while writing: Claude polishes what you typed</li>
+      <li><span class="k">␣</span> the menu, <span class="k">/</span> search everything, <span class="k">?</span> every key</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<script>
+// ------------------------------------------------------------------ data (all dummy)
+const COLORS=['#f38ba8','#fab387','#f9e2af','#a6e3a1','#94e2d5','#89dceb','#89b4fa','#b4befe','#cba6f7','#f5c2e7'];
+const colOf=n=>{let h=0;for(const c of n)h=(h*31+c.codePointAt(0))>>>0;return COLORS[h%COLORS.length]};
+const ini=n=>{const w=n.replace(/[^\p{L}\p{N} ]/gu,'').trim().split(/\s+/);return ((w[0]||'?')[0]+(w[1]?w[1][0]:(w[0]||'?')[1]||'')).toUpperCase()};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const WA=[
+ {name:'Amma',kind:'dm',pinned:1,online:1,num:'+91 98xxx 10001',time:'21:14',last:'Khana kha liya? 🙂',unread:2,msgs:[
+   {sep:'Yesterday'},
+   {who:'Amma',t:'19:02',text:'Diwali ki taiyari ho gayi?'},
+   {who:'me',t:'19:10',text:'Haan amma, rangoli bana li 🎨',st:'read'},
+   {who:'me',t:'19:10',text:'Photo bhejta hoon',st:'read'},
+   {who:'me',t:'19:11',img:1,text:'Ghar ki rangoli 🪔',st:'read',rx:'❤️ 1'},
+   {sep:'Today'},
+   {who:'Amma',t:'20:40',text:'Bahut sundar! 😍'},
+   {who:'Amma',t:'20:41',quote:{who:'You',text:'Ghar ki rangoli 🪔'},text:'Ye wali papa ko bhi dikhayi'},
+   {newsep:2},
+   {who:'Amma',t:'21:13',voice:'0:14'},
+   {who:'Amma',t:'21:14',text:'Khana kha liya? 🙂'},
+ ]},
+ {name:'Family 🏠',kind:'group',time:'21:05',last:'Ravi: @You kal 7 baje aana',unread:5,mention:1,members:'Amma, Papa, Ravi, Neha, Kabir and you',msgs:[
+   {sep:'Today'},
+   {sys:'Ravi added Kabir'},
+   {who:'Papa',t:'18:20',text:'Sab log kal Lakshmi puja ke liye 7 baje tak aa jana'},
+   {who:'Neha',t:'18:22',text:'Main mithai le aaungi 🍬'},
+   {who:'Neha',t:'18:22',text:'Kaju katli ya besan laddoo?'},
+   {who:'me',t:'18:30',text:'Dono 😄',st:'read',rx:'😂 3'},
+   {who:'Kabir',t:'18:31',text:'Hi everyone! 👋'},
+   {newsep:5},
+   {who:'Ravi',t:'21:01',doc:'puja-samagri-list.pdf · 120 KB'},
+   {who:'Ravi',t:'21:05',text:'@You kal 7 baje aana, aur diye le aana',mention:1},
+ ]},
+ {name:'Ravi Kulkarni',kind:'dm',typing:1,num:'+91 98xxx 10002',time:'20:58',last:'Sounds good, see you',msgs:[
+   {sep:'Today'},
+   {who:'Ravi Kulkarni',t:'20:50',text:'Bro, cricket tomorrow at 7am?'},
+   {who:'me',t:'20:55',text:'Count me in 🏏',st:'read'},
+   {who:'me',t:'20:55',text:'Should I bring the new bat?',st:'read'},
+   {who:'Ravi Kulkarni',t:'20:58',text:'Sounds good, see you',edited:1},
+   {who:'Ravi Kulkarni',t:'20:58',link:{title:'Ground booking: Shivaji Park, Net 3',url:'bookings.example.com/net-3'}},
+ ]},
+ {name:'Meera Iyer',kind:'dm',num:'+91 98xxx 10003',time:'20:31',last:'✕ not sent: Happy Diwali Meera! 🪔',failed:1,msgs:[
+   {sep:'Today'},
+   {who:'Meera Iyer',t:'20:10',text:'Happy Diwali in advance! ✨'},
+   {who:'me',t:'20:31',text:'Happy Diwali Meera! 🪔 Hope the new flat is all lit up',st:'failed'},
+ ]},
+ {name:'Arjun Mehta',kind:'dm',num:'+91 98xxx 10004',time:'⏲ 21:30',last:'Scheduled: Wishing you and your family…',sched:1,msgs:[
+   {sep:'Yesterday'},
+   {who:'Arjun Mehta',t:'16:00',text:'The build is green, shipping the release tonight'},
+   {who:'me',t:'16:05',text:'🚀',st:'read'},
+   {sep:'Today'},
+   {who:'me',t:'21:30',text:'Wishing you and your family a very Happy Diwali, Arjun! 🪔✨',st:'scheduled'},
+ ]},
+ {name:'Office Cricket 🏏',kind:'group',muted:1,time:'20:12',last:'Dev: Nets booked for Sunday',unread:12,members:'14 people',msgs:[
+   {sep:'Today'},{who:'Dev Patel',t:'20:12',img:2,text:'Nets booked for Sunday'}]},
+ {name:'Neha',kind:'dm',num:'+91 98xxx 10005',time:'19:40',last:'Draft: I\'ll pick up the diyas on…',draft:1,msgs:[
+   {sep:'Today'},{who:'Neha',t:'19:40',text:'Can you get the diyas? I\'m stuck at work'}]},
+ {name:'Priya Sharma',kind:'dm',online:1,num:'+91 98xxx 10006',time:'18:02',last:'You: Thanks, sending the file now',msgs:[
+   {sep:'Today'},{who:'Priya Sharma',t:'17:55',text:'Can you share the deck?'},{who:'me',t:'18:02',text:'Thanks, sending the file now',st:'delivered'},{who:'me',t:'18:02',doc:'Q4-review.pdf · 2.1 MB',st:'delivered'}]},
+ {name:'Book Club 📚',kind:'group',time:'17:20',last:'Kavya: Next pick is "The Overstory"',members:'9 people',msgs:[{sep:'Today'},{who:'Kavya',t:'17:20',text:'Next pick is "The Overstory" 🌳'}]},
+ {name:'Kabir',kind:'dm',time:'16:44',last:'This message was deleted',msgs:[{sep:'Today'},{who:'Kabir',t:'16:44',deleted:1}]},
+ {name:'Mr. Joshi (landlord)',kind:'dm',time:'Sat',last:'Rent received, thank you 🙏',msgs:[{sep:'Saturday'},{who:'Mr. Joshi (landlord)',t:'10:02',text:'Rent received, thank you 🙏'}]},
+ {name:'Rahul Verma',kind:'dm',time:'Fri',last:'You: 👍',msgs:[{sep:'Friday'},{who:'Rahul Verma',t:'09:00',text:'Standup moved to 10'},{who:'me',t:'09:01',text:'👍',st:'read'}]},
+ {name:'Sneha',kind:'dm',time:'Thu',last:'Haha yes 😂',msgs:[{sep:'Thursday'},{who:'Sneha',t:'22:10',text:'Haha yes 😂'}]},
+ {name:'Trek Gang ⛰️',kind:'group',time:'Wed',last:'Aditi: Harishchandragad in December?',members:'7 people',msgs:[{sep:'Wednesday'},{who:'Aditi',t:'12:00',text:'Harishchandragad in December?'}]},
+ {name:'Dev Patel',kind:'dm',time:'Tue',last:'Sent the invoice',msgs:[{sep:'Tuesday'},{who:'Dev Patel',t:'11:00',text:'Sent the invoice'}]},
+ {name:'Society Committee',kind:'group',muted:1,time:'Mon',last:'Secretary: Water cut on Friday 10–2',members:'48 people',msgs:[{sep:'Monday'},{who:'Secretary',t:'08:00',text:'Water cut on Friday 10–2'}]},
+ {name:'Ananya',kind:'dm',time:'2 Nov',last:'See you at the wedding!',msgs:[{sep:'2 Nov'},{who:'Ananya',t:'13:00',text:'See you at the wedding!'}]},
+ {name:'College Batch 2023 🎓',kind:'group',time:'1 Nov',last:'Prof. Rao: Alumni meet on 20 Dec',members:'112 people',msgs:[{sep:'1 Nov'},{who:'Prof. Rao',t:'10:00',text:'Alumni meet on 20 Dec'}]},
+];
+WA.forEach(c=>c.grp=c.pinned?'PINNED':(/^\d\d:|⏲/.test(c.time)?'TODAY':'EARLIER'));
+
+const CHAT=[
+ {name:'release-3-8',kind:'space',time:'21:02',last:'Priya: tagging after the smoke test',unread:3,members:'Priya, Arjun, Dev and you',msgs:[
+   {sep:'Today'},{who:'Arjun Mehta',t:'20:40',text:'Cache fix merged ✅'},{who:'Priya Sharma',t:'21:02',text:'Tagging after the smoke test'},{who:'Priya Sharma',t:'21:02',text:'@You can you watch the deploy?',mention:1}]},
+ {name:'backend',kind:'space',time:'19:20',last:'Dev: p99 is back under 200ms',members:'11 people',msgs:[{sep:'Today'},{who:'Dev Patel',t:'19:20',text:'p99 is back under 200ms 🎉'},{who:'me',t:'19:25',text:'Nice work!',st:'sent'}]},
+ {name:'Priya Sharma',kind:'dm',online:1,time:'18:10',last:'You: on it',msgs:[{sep:'Today'},{who:'Priya Sharma',t:'18:05',text:'Can you review #482?'},{who:'me',t:'18:10',text:'On it',st:'sent'}]},
+ {name:'design-crit',kind:'space',time:'Fri',last:'Kavya: new icons are up',members:'6 people',msgs:[{sep:'Friday'},{who:'Kavya',t:'15:00',text:'New icons are up in the board'}]},
+ {name:'random',kind:'space',muted:1,time:'Thu',last:'Rahul: who took my charger',members:'40 people',msgs:[{sep:'Thursday'},{who:'Rahul Verma',t:'12:00',text:'who took my charger 😭'}]},
+];
+CHAT.forEach(c=>c.grp=/^\d\d:/.test(c.time)?'TODAY':'EARLIER');
+
+const MAIL=[
+ {name:'Priya Kulkarni',time:'09:42',subj:'Release cut on Thursday?',last:'QA signed off on the 3.8 branch last night…',unread:1,star:1,count:1},
+ {name:'GitHub',time:'09:10',subj:'[acme/portal] Arjun requested your review on #482',last:'Arjun Mehta requested your review…',unread:1,count:1},
+ {name:'Arjun',time:'08:55',subj:'Re: staging DB credentials',last:'Rotated them, the new ones are in the vault…',count:3},
+ {name:'HR',time:'Sun',subj:'Holiday list for 2027',last:'Dear all, please find the 2027 holiday list…',count:1,att:1},
+ {name:'CI',time:'Sun',subj:'Build #1932 passed on main',last:'main @ 4f1c2e9 · 6m 12s · 412 tests passed',count:1},
+ {name:'Rohan, me',time:'Sat',subj:'Lunch Friday?',last:'Sounds good, see you there.',count:2},
+ {name:'Electricity Board',time:'Fri',subj:'Your bill for October is ready',last:'Amount due ₹1,240 by 15 Nov',count:1},
+ {name:'Kavya',time:'Thu',subj:'Book club: The Overstory',last:'Starting Sunday, chapter 1–4…',count:4},
+ {name:'Travel desk',time:'Wed',subj:'Your train ticket: Mumbai → Pune',last:'PNR 4521… Coach B2, seat 34',count:1,att:1},
+ {name:'Newsletter',time:'Tue',subj:'This week in Go',last:'Go 1.27 ships range-over-func…',count:1},
+];
+MAIL.forEach(c=>c.grp='');
+
+const AI=[
+ {name:'Claude → WhatsApp · Meera Iyer',time:'21:16',last:'"Happy Diwali Meera! 🪔 Hope the new flat…"',to:'Meera Iyer',ch:'WhatsApp',
+  why:'"send a happy Diwali message to each of my contacts, personalized"',text:'Happy Diwali Meera! 🪔 Hope the new flat is all lit up and full of sweets ✨',state:'wait'},
+ {name:'Claude → Mail · Priya Kulkarni',time:'21:10',last:'"Yes, let\'s cut on Thursday…"',to:'priya.k@example.com',ch:'Mail · reply',
+  why:'"tell Priya yes to Thursday, but only after the cache fix"',text:'Hi Priya,\n\nYes, let\'s cut on Thursday, once the cache fix is merged.\n\nThanks',state:'wait'},
+ {name:'Claude → Chat · #release-3-8',time:'20:30',last:'"I\'ll watch the deploy 👀"',to:'#release-3-8',ch:'Google Chat',why:'"reply in the release space that I\'m watching the deploy"',text:'I\'ll watch the deploy 👀',state:'done'},
+];
+AI.forEach(c=>c.grp='');
+
+const STATUS=[{name:'Amma',n:'3 updates',t:'20:10'},{name:'Ravi Kulkarni',n:'1 update',t:'19:42'},{name:'Neha',n:'5 updates',t:'18:05'},{name:'Priya Sharma',n:'1 update',t:'Yesterday'},{name:'Kavya',n:'2 updates',t:'Yesterday'}];
+
+const PLACES=[
+ {id:'mail',name:'Mail',icon:'✉',n:2,secs:['Inbox','Today','Unread','Starred','Sent','Scheduled'],data:MAIL},
+ {id:'chat',name:'Chat',icon:'◆',n:3,secs:['All','Unread','Spaces','People','Scheduled'],data:CHAT},
+ {id:'wa',name:'WhatsApp',icon:'◉',n:19,secs:['All','Unread','People','Groups','Scheduled','Archived','Status'],data:WA},
+ {id:'ai',name:'AI requests',icon:'✦',n:2,secs:['Waiting','Done'],data:AI},
+];
+
+// ------------------------------------------------------------------ state
+const S={place:2,sec:0,sel:0,open:0,focus:'list',mode:'NORMAL',ov:null,draft:'',reply:null,msgSel:-1,
+  corner:null,narrow:false,compact:false,toast:null,pend:'',cmd:'',cmdSel:0,find:'',findSel:0,err:'',wkSub:null};
+const T=document.getElementById('term');
+const P=()=>PLACES[S.place];
+
+function items(){
+  const p=P(),sec=p.secs[S.sec];let d=p.data;
+  if(p.id==='wa'){
+    if(sec==='Unread')d=d.filter(c=>c.unread);
+    if(sec==='People')d=d.filter(c=>c.kind==='dm');
+    if(sec==='Groups')d=d.filter(c=>c.kind==='group');
+    if(sec==='Scheduled')d=d.filter(c=>c.sched);
+    if(sec==='Archived')d=[];
+  }
+  if(p.id==='chat'){
+    if(sec==='Unread')d=d.filter(c=>c.unread);
+    if(sec==='Spaces')d=d.filter(c=>c.kind==='space');
+    if(sec==='People')d=d.filter(c=>c.kind==='dm');
+    if(sec==='Scheduled')d=[];
+  }
+  if(p.id==='mail'){
+    if(sec==='Unread')d=d.filter(c=>c.unread);
+    if(sec==='Starred')d=d.filter(c=>c.star);
+    if(sec==='Today')d=d.filter(c=>/^\d\d:/.test(c.time));
+    if(sec==='Sent'||sec==='Scheduled')d=[];
+  }
+  if(p.id==='ai')d=d.filter(c=>sec==='Waiting'?c.state==='wait':c.state!=='wait');
+  return d;
+}
+const cur=()=>items()[S.open];
+
+// ------------------------------------------------------------------ render
+function av(name,sm,online){return `<span class="av${sm?' sm':''}" style="background:${colOf(name)}">${esc(ini(name))}${online?'<span class="on"></span>':''}</span>`}
+function tick(st){
+  return {read:'<span class="blu">✓✓</span>',delivered:'✓✓',sent:'✓',failed:'<span class="red">✕ not sent</span>',
+    scheduled:'<span class="yel">⏲</span>',approval:'<span class="yel">◷</span>',undo:'<span class="yel">◷</span>'}[st]||'';
+}
+
+function render(){
+  T.classList.toggle('narrow',S.narrow);T.classList.toggle('compact',S.compact);
+  let h='';
+  // top bar
+  const sync=S.corner==='offline'?'<span class="pill red">● offline · retrying in 12s</span>'
+    :S.corner==='firstsync'?'<span class="pill acc">⟳ syncing 412 / 3,180</span>'
+    :'<span class="pill grn">● synced</span>';
+  h+=`<div class="tb" data-n="places">${PLACES.map((p,i)=>`<span class="place${i===S.place?' on':''}" data-place="${i}">${p.icon} ${p.name}${p.n&&!S.narrow?` <span class="n">${p.n}</span>`:''}</span>`).join('')}
+    <span class="right" data-n="sync">${sync}${S.narrow?'':` <span class="sub">${av('You',1)} you@example.com</span>`}</span></div>`;
+  // sections
+  const p=P();
+  h+=`<div class="secs" data-n="sections">${p.secs.map((s,i)=>{const c=p.id==='wa'&&s==='Unread'?'<span class="c">5</span>':p.id==='wa'&&s==='Scheduled'?'<span class="c">1</span>':'';return `<span class="sec${i===S.sec?' on':''}" data-sec="${i}">${s}${c}</span>`}).join('')}
+    ${S.narrow?'':'<span class="right muted"><span class="k">Tab</span> sections</span>'}</div>`;
+  // body
+  h+=`<div class="body">`;
+  if(p.id==='wa'&&S.corner==='unlinked'){h+=unlinked()}
+  else if(S.corner==='firstsync'){h+=firstSync()}
+  else{
+    const showList=!S.narrow||S.focus==='list', showPane=!S.narrow||S.focus!=='list';
+    if(showList)h+=listHTML();
+    if(showList&&showPane)h+=`<div class="vr" data-n="rule"></div>`;
+    if(showPane)h+=paneHTML();
+  }
+  h+=`</div>`;
+  if(S.err)h+=`<div class="errline">● ${esc(S.err)} <span class="muted">· esc hides</span></div>`;
+  h+=footHTML();
+  h+=overlayHTML();
+  if(S.toast)h+=`<div class="toast ${S.toast.k||''}">${S.toast.html}</div>`;
+  T.innerHTML=h;
+  const sel=T.querySelector('.item.sel');if(sel)sel.scrollIntoView({block:'nearest'});
+  const pk=T.querySelector('.bub.pick');if(pk)pk.scrollIntoView({block:'nearest'});
+  else{const cv=T.querySelector('.conv');if(cv&&(S.focus!=='chat'||S.msgSel<0||S.ai))cv.scrollTop=cv.scrollHeight}
+  const ml=T.querySelector('.mail');if(ml&&S.ai)ml.scrollTop=ml.scrollHeight;
+}
+
+function listHTML(){
+  const d=items(),p=P();
+  let h=`<div class="list${S.focus!=='list'?' dim':''}" data-n="list"><div class="lhead"><span class="b">${d.length} ${p.id==='mail'?'threads':p.id==='ai'?'requests':'chats'}</span>${S.narrow?'':'<span class="muted">j/k · ⏎</span>'}</div><div class="items">`;
+  if(!d.length){
+    const msg={Scheduled:'Nothing scheduled. While writing, Ctrl+t sends it later.',Archived:'Nothing archived. Space c a archives a chat.',Sent:'Nothing sent from here yet.',Done:'Nothing done yet.'}[p.secs[S.sec]]||'Nothing here.';
+    h+=`<div style="padding:24px 18px" class="sub">${msg}</div>`;
+  }
+  if(p.id==='wa'&&p.secs[S.sec]==='Status'){
+    h+=STATUS.map((s,i)=>`<div class="item${i===S.sel?' sel':''}" data-i="${i}">${av(s.name)}<div class="it"><div class="l1"><span class="nm">${esc(s.name)}</span><span class="tm">${s.t}</span></div><div class="l2"><span class="pv">${s.n}</span></div></div></div>`).join('');
+    return h+'</div></div>';
+  }
+  let g='';
+  d.forEach((c,i)=>{
+    if(c.grp&&c.grp!==g){g=c.grp;h+=`<div class="glabel">${g}</div>`}
+    const mark=c.kind==='group'||c.kind==='space'?'<span class="muted">#</span>':'';
+    let pv=esc(c.last);
+    if(c.typing)pv=`<span class="typing">typing <span class="dots"><i></i><i></i><i></i></span></span>`;
+    else if(c.failed)pv=`<span class="red">✕ not sent</span> <span class="muted">${esc(c.last.replace('✕ not sent: ',''))}</span>`;
+    else if(c.sched)pv=`<span class="yel">⏲ 21:30</span> ${esc(c.last.replace('Scheduled: ',''))}`;
+    else if(c.draft)pv=`<span class="pch">Draft:</span> ${esc(c.last.replace('Draft: ',''))}`;
+    else if(c.state==='wait')pv=`<span class="yel">◷ waiting</span> ${esc(c.last)}`;
+    else if(c.state==='done')pv=`<span class="grn">✓ sent</span> ${esc(c.last)}`;
+    else if(c.state==='no')pv=`<span class="red">✕ declined</span> ${esc(c.last)}`;
+    let l1=p.id==='mail'?`<span class="nm">${esc(c.name)}${c.star?' <span class="yel">★</span>':''}</span>`:`<span class="nm">${mark} ${esc(c.name)}</span>`;
+    let badges='';
+    if(c.mention)badges+=`<span class="badge m">@</span>`;
+    if(c.unread)badges+=`<span class="badge u"${c.muted?' style="background:var(--s1);color:var(--text)"':''}>${c.unread}</span>`;
+    if(c.muted)badges+=`<span class="muted">🔕</span>`;
+    if(c.pinned)badges+=`<span class="muted">📌</span>`;
+    if(c.count>1)badges+=`<span class="chip">${c.count}</span>`;
+    if(c.att)badges+=`<span class="pch">📎</span>`;
+    const avn=p.id==='ai'?'Claude':c.name;
+    h+=`<div class="item${i===S.sel?' sel':''}${c.unread?' unread':''}" data-i="${i}">${av(avn,0,c.online)}<div class="it">
+      <div class="l1">${l1}<span class="tm">${esc(c.time)}</span></div>
+      ${p.id==='mail'?`<div class="l2"><span class="pv" style="color:var(--${c.unread?'text':'sub'})">${esc(c.subj)}</span></div>`:''}
+      <div class="l2"><span class="pv">${pv}</span>${badges}</div></div></div>`;
+  });
+  return h+'</div></div>';
+}
+
+function paneHTML(){
+  const p=P(),c=cur();
+  if(p.id==='wa'&&p.secs[S.sec]==='Status')return `<div class="pane" data-n="pane"><div class="phead"><span class="b">Status</span><span class="meta muted">⏎ views · r answers it privately</span></div><div class="stgrid">${STATUS.map(s=>`<div class="stc"><div class="ring"><div>${esc(ini(s.name))}</div></div><b>${esc(s.name)}</b><div class="muted" style="font-size:12px">${s.n} · ${s.t}</div></div>`).join('')}</div></div>`;
+  if(!c)return `<div class="pane" data-n="pane"><div class="center"><div><div style="font-size:30px">◌</div>Nothing open.<br><span class="muted">Pick something on the left.</span></div></div></div>`;
+  if(p.id==='mail')return mailPane(c);
+  if(p.id==='ai')return aiPane(c);
+  return chatPane(c);
+}
+
+function chatPane(c){
+  const back=S.narrow?'<span class="acc">‹ h</span> ':'';
+  const pres=c.typing?'<span class="grn">typing…</span>':c.online?'<span class="grn">● online</span>':c.kind==='dm'?'<span class="muted">○ last seen 20:45</span>':'';
+  const meta=c.kind==='dm'?(c.num||''):(c.members||'');
+  let h=`<div class="pane" data-n="pane"><div class="phead" data-n="header">${back}${av(c.name,0,c.online)}<span class="b">${esc(c.name)}</span>${pres}
+    <span class="meta">${S.narrow?'':`<span class="muted">${esc(meta)}</span>`}<span class="muted">${c.muted?'🔕 ':''}</span></span></div>`;
+  h+=`<div class="conv" data-n="conv">`;
+  if(S.corner==='emptychat'){h+=`<div class="center" style="height:100%"><div>${av(c.name)}<p><b>${esc(c.name)}</b><br><span class="muted">No messages yet. <span class="k">i</span> says hello.</span></p></div></div>`}
+  else{
+    let run=null,mi=0;const ms=c.msgs;
+    const close=()=>{if(run){h+='</div>';run=null}};
+    ms.forEach((m,idx)=>{
+      if(m.sep){close();h+=`<div class="sep">${esc(m.sep)}</div>`;return}
+      if(m.newsep){close();h+=`<div class="sep new" data-n="newline">${m.newsep} new</div>`;return}
+      if(m.sys){close();h+=`<div class="sys"><span>${esc(m.sys)}</span></div>`;return}
+      const prev=ms[idx-1];
+      const gap=prev&&prev.t&&m.t?(toMin(m.t)-toMin(prev.t)):0;
+      const same=run&&run.who===m.who&&gap<=5;
+      if(!same){
+        close();const me=m.who==='me';run={who:m.who};
+        h+=`<div class="run${me?' me':''}" data-n="run">`;
+        h+=me?`<div class="rh"><b class="acc">You</b><span class="muted">${m.t}</span></div>`
+          :`<div class="rh">${av(m.who,1)}<b style="color:${colOf(m.who)}">${esc(c.kind==='dm'?c.name:m.who)}</b><span class="muted">${m.t}</span></div>`;
+      }
+      const pick=S.focus==='chat'&&S.msgSel===mi;
+      const st=m.st;let cls='bub'+(pick?' pick':'')+(st==='failed'?' fail':'')+(st==='scheduled'||st==='undo'||st==='approval'?' pend':'');
+      let body='';
+      if(m.quote)body+=`<div class="q"><b>${esc(m.quote.who)}</b>${esc(m.quote.text)}</div>`;
+      if(m.img)body+=`<div class="img${m.img===2?' b2':''}"></div>`;
+      if(m.voice)body+=`<div class="voice"><span class="acc">▶</span><span class="wave">${Array.from({length:26},(_,k)=>`<i style="height:${4+((k*7)%15)}px"></i>`).join('')}</span><span class="muted">${m.voice}</span></div>`;
+      if(m.doc)body+=`<div class="doc"><span class="pch">📎</span>${esc(m.doc)}<span class="muted">· gf opens</span></div>`;
+      if(m.link)body+=`<div class="lp"><b>${esc(m.link.title)}</b><br><span class="blu">${esc(m.link.url)}</span></div>`;
+      if(m.deleted)body+=`<span class="muted" style="font-style:italic">⊘ This message was deleted</span>`;
+      if(m.text)body+=m.mention?esc(m.text).replace('@You','<mark>@You</mark>'):esc(m.text);
+      if(m.edited)body+=` <span class="muted">(edited)</span>`;
+      const stamp=(same?m.t+' ':'')+tick(st);
+      if(stamp.trim())body+=`<span class="st">${stamp}</span>`;
+      let extra='';
+      if(st==='undo')extra=`<div class="pendbar"><i style="width:${S.undoPct||100}%"></i></div><div class="pendline yel">sending in ${Math.ceil((S.undoPct||100)/10)}s · <span class="k">u</span> undoes</div>`;
+      if(st==='scheduled')extra=`<div class="pendline yel">⏲ goes at 21:30 · <span class="k">t</span> moves · <span class="k">u</span> cancels</div>`;
+      if(st==='failed')extra=`<div class="pendline red">couldn't reach WhatsApp · <span class="k">R</span> sends again · <span class="k">⏎</span> edits</div>`;
+      if(st==='approval')extra=`<div class="pendline yel">◷ an agent wants to send this · <span class="k">y</span> send · <span class="k">e</span> edit · <span class="k">n</span> decline</div>`;
+      h+=`<div class="bw"><span class="mark${pick?' on':''}">▶</span><div class="${cls}" data-m="${mi}">${body}${extra}</div></div>`;
+      if(m.rx)h+=`<span class="rx">${m.rx}</span>`;
+      mi++;
+    });
+    close();
+    if(c.typing)h+=`<div class="run"><div class="bw"><div class="bub" style="min-width:0"><span class="typing dots"><i></i><i></i><i></i></span></div></div></div>`;
+    h+=aiGhost(c);
+  }
+  h+=`</div>`;
+  if(S.ai&&S.ai.stage==='ask')return h+askBox(c)+'</div>';
+  if(S.reply)h+=`<div class="replychip">↩ replying to <b>${esc(S.reply.who)}</b><span class="muted" style="overflow:hidden;text-overflow:ellipsis">${esc(S.reply.text)}</span><span class="muted" style="margin-left:auto">esc drops it</span></div>`;
+  const ins=S.mode==='INSERT';
+  h+=`<div class="compose${ins?' ins':''}" data-n="compose">${ins?`<span class="txt">${esc(S.draft)}<span class="caret"></span></span><span class="muted">⏎ send · Ctrl+t later · esc</span>`
+     :`<span class="txt muted">${c.draft&&!S.draft?'Draft: I\'ll pick up the diyas on the way home':'Message '+esc(c.name)+'…'}</span><span class="muted"><span class="k">i</span> writes · <span class="k" style="color:var(--accent2)">A</span> asks the agent</span>`}</div>`;
+  return h+'</div>';
+}
+const toMin=t=>{const m=/^(\d\d):(\d\d)$/.exec(t);return m?+m[1]*60+ +m[2]:0};
+
+function mailPane(c){
+  const back=S.narrow?'<span class="acc">‹ h</span> ':'';
+  return `<div class="pane" data-n="pane"><div class="phead" data-n="header">${back}<span class="b">${esc(c.subj)}</span><span class="meta muted">${c.count} message${c.count>1?'s':''}</span></div>
+  <div class="mail">
+   <div class="chips"><span class="chip acc">Inbox</span>${c.star?'<span class="chip" style="color:var(--yellow);border-color:var(--yellow)">★ starred</span>':''}<span class="chip">Work</span></div>
+   <div class="from">${av(c.name)}<div><b>${esc(c.name)}</b> <span class="muted">${esc(c.name.toLowerCase().replace(/[^a-z]+/g,'.'))}@example.com</span><br><span class="muted">to you@example.com · cc Arjun Mehta</span></div><span class="muted" style="margin-left:auto">Mon 09 Nov, ${esc(c.time)}</span></div>
+   <div class="mbody"><p>Hi,</p><p>${esc(c.last)} Are we good to go, or do you want to wait for the cache fix?</p>
+    <div class="tbl"><div><span>Check</span><span>Status</span></div><div><span>Unit tests</span><span class="grn">412 passed</span></div><div><span>Staging smoke</span><span class="grn">green</span></div><div><span>Cache fix</span><span class="yel">in review</span></div></div>
+    <p>Release notes: <span class="blu">release notes</span><span class="muted">[1]</span></p><p>Thanks,<br>${esc(c.name.split(' ')[0])}</p>
+    <div class="fold">▸ 3 quoted lines <span class="k">zq</span></div></div>
+   ${c.att?`<div class="att"><div class="doc"><span class="pch">📎</span>attachment.pdf · 340 KB</div><div class="doc"><span class="pch">📎</span>summary.xlsx · 18 KB</div></div>`:''}
+   ${(c.sentReplies||[]).map(r=>`<div class="mdraft" style="border-style:solid;border-color:var(--green)"><div class="hd"><span class="grn">✓ ${esc(r.st)}</span><span>to ${esc(r.to)}</span></div><pre>${esc(r.text)}</pre></div>`).join('')}
+   ${mailDraft(c)}
+  </div>
+  ${S.ai&&S.ai.stage==='ask'?askBox(c):`<div class="compose" data-n="compose"><span class="txt muted">r replies · R replies to all · f forwards</span><span class="muted"><span class="k" style="color:var(--accent2)">A</span> asks the agent</span></div>`}</div>`;
+}
+
+function aiPane(c){
+  const cls=c.state==='done'?' done':c.state==='no'?' no':'';
+  const head=c.state==='wait'?'<span class="yel">◷ waiting for you</span>':c.state==='done'?'<span class="grn">✓ sent</span>':'<span class="red">✕ declined</span>';
+  return `<div class="pane" data-n="pane"><div class="phead" data-n="header">${av('Claude')}<span class="b">Claude</span><span class="muted">wants to send</span><span class="meta">${head}</span></div>
+   <div class="conv"><div class="aicard${cls}" data-n="ai">
+    <h4>${esc(c.ch)} <span class="muted">→</span> ${esc(c.to)}</h4>
+    <div class="why"><b>Why</b>, in your words: ${esc(c.why)}</div>
+    <div class="run me" style="margin:10px 0"><div class="bw" style="max-width:90%"><div class="bub pend">${esc(c.text)}</div></div></div>
+    ${c.state==='wait'?`<div class="btns"><span class="btn y">y send</span><span class="btn">e edit</span><span class="btn">t later</span><span class="btn n">n decline</span></div>`:''}
+   </div>
+   <p class="muted" style="margin:6px 22px;font-size:12px">Text from mail and chats reaches the agent inside &lt;untrusted&gt; blocks. Nothing an agent writes is sent without passing through here, unless your send policy trusts it.</p></div></div>`;
+}
+
+function unlinked(){
+  return `<div class="center" data-n="pane"><div><b style="font-size:15px;color:var(--text)">Link WhatsApp</b>
+   <div class="qr"></div>
+   <div class="steps">1. On your phone, open WhatsApp › <b>Linked devices</b><br>2. Tap <b>Link a device</b> and point it at this code<br>3. narada becomes one of your linked devices</div>
+   <p class="muted">The code changes every 20s · <span class="k">p</span> links with a phone number instead · <span class="k">esc</span> later</p>
+   <p class="yel" style="font-size:12px">◷ waiting for your phone…</p></div></div>`;
+}
+function firstSync(){
+  return `<div class="list"><div class="lhead"><span class="b">Fetching…</span></div><div style="padding:8px 18px">${Array.from({length:9},(_,i)=>`<div style="display:flex;gap:10px;margin:12px 0"><span class="av" style="background:var(--s0)"></span><div style="flex:1"><div class="skel" style="width:${50+(i*13)%40}%"></div><div class="skel" style="width:${70+(i*7)%25}%"></div></div></div>`).join('')}</div></div>
+   <div class="vr"></div><div class="center"><div><b style="color:var(--text)">Your first sync</b><div class="prog"><i></i></div>412 of 3,180 threads · about 2 minutes left<br><span class="muted">You can read and write as soon as anything arrives; the rest fills in behind.</span></div></div>`;
+}
+
+function footHTML(){
+  const m=S.ov==='confirm'?'CONFIRM':S.ov==='cmd'?'COMMAND':S.mode;
+  let keys;
+  if(m==='INSERT')keys=[['⏎','send'],['Ctrl+t','later'],['Ctrl+o','attach'],['esc','stop']];
+  else if(m==='CONFIRM')keys=[['y','yes, delete'],['n','keep it']];
+  else if(m==='AI'){const st=S.ai&&S.ai.stage;keys=st==='ask'?[['⏎','write'],['1-4','pick one'],...(S.ai.change?[]:[['Tab','more context']]),['esc','cancel']]:st==='think'?[['esc','stop']]:[['y','use it'],['e','edit it'],['c','change it'],['← →','versions'],['n','throw away']]}
+  else if(S.focus==='chat')keys=[['j/k','messages'],['r','reply'],['i','write'],['A','✦ ask AI'],['dd','delete'],['h','list']];
+  else if(P().id==='ai')keys=[['j/k','move'],['y','send'],['e','edit'],['n','decline']];
+  else keys=[['j/k','move'],['⏎','open'],['i','write'],['r','reply'],['A','✦ ask AI']];
+  if(S.pend)keys.unshift([S.pend,'…']);
+  const right=S.narrow?[['?','keys']]:[['/','find'],['␣','menu'],[':','command'],['?','keys']];
+  return `<div class="foot" data-n="footer"><span class="mode ${m}">${m}</span>${keys.map(k=>`<span class="kk"><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}<span class="right">${right.map(k=>`<span class="kk"><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}</span></div>`;
+}
+
+// ------------------------------------------------------------------ the agent writes (A)
+// In a chat or a mail, A asks the agent: it reads what's open (as untrusted
+// data), writes a draft in your voice, and you use it, edit it, change it or
+// throw it away. Nothing is sent until you accept, and then it still goes
+// through the undo window like anything you write.
+const isMail=()=>P().id==='mail';
+const mailAddr=c=>c.name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'')+'@example.com';
+const firstName=c=>c.name.replace(/[^\p{L} ]/gu,'').trim().split(/\s+/)[0]||c.name;
+
+const T_CHAT={
+ 'wa:Amma':{base:'Haan amma, kha liya 🙂 Dal chawal aur aapki bheji hui sabzi. Aap bhi time pe kha lena aur jaldi so jana. Kal subah call karta hoon ❤️',
+   yes:'Haan amma, bilkul 🙂',no:'Amma aaj thoda late ho jayega, kal pakka 🙏',wish:'Happy Diwali amma! 🪔 Aapke bina Diwali adhoori hai, jaldi milte hain ❤️',
+   mr:'Ho aai, jevlo 🙂 Varan-bhaat ani tumhi pathavleli bhaji. Tumhi pan vela var jeva ani lavkar jha. Udya sakali call karto ❤️'},
+ 'wa:Family 🏠':{base:'Haan Ravi, kal 7 baje pakka aa jaunga 🙏 Diye main le aaunga, aur Neha ki mithai ka intezaar rahega 😄',
+   yes:'Haan, 7 baje pakka 👍',no:'Kal thoda late hoga, 8 tak pahunchta hoon 🙏',wish:'Sabko Happy Diwali! 🪔✨ Kal milte hain puja pe',
+   mr:'Ho Ravi, udya 7 la nakki yeto 🙏 Diwe mi gheun yeto, ani Neha chya mithaichi vaat baghtoy 😄'},
+ 'wa:Ravi Kulkarni':{base:'Perfect, see you at 7 at Net 3! Bringing the new bat 🏏',yes:'Done, 7 it is 👍',no:'Can\'t make it tomorrow bro, next week for sure 🙏',wish:'Happy Diwali Ravi! 🪔 Have a blast',
+   mr:'Bhari, udya 7 la Net 3 var bhetu! Navin bat gheun yeto 🏏'},
+ 'wa:Meera Iyer':{base:'Happy Diwali Meera! 🪔 Hope the new flat is glowing. Let\'s catch up after the festival ✨',wish:'Happy Diwali Meera! 🪔✨'},
+ 'wa:Arjun Mehta':{base:'Congrats on shipping the release, Arjun! 🚀 Happy Diwali to you and the family.'},
+ 'wa:Neha':{base:'No worries, I\'ll pick up the diyas on my way home 🪔 Need anything else?',yes:'Sure, I\'ll get them 👍',no:'I\'m late today too 😕 Can Kabir pick them up?'},
+ 'wa:Priya Sharma':{base:'Here you go! Let me know if you need the speaker notes too.'},
+ 'chat:release-3-8':{base:'On it, I\'ll watch the deploy and post here once it\'s green 👀',yes:'Yes, watching it 👀',no:'I\'m in a call till 9:30, can someone else take the first half?'},
+ 'chat:backend':{base:'Great work on the p99, Dev! 🎉 What was the fix?'},
+ 'chat:Priya Sharma':{base:'Reviewing #482 now, comments in 20 minutes.'},
+};
+const T_MAIL={
+ 'Priya Kulkarni':{base:'Hi Priya,\n\nThanks for the update, and great news on QA.\n\nLet\'s cut 3.8 on Thursday, as long as the cache fix is merged by Wednesday evening. If it slips, we ship without it and take it in 3.8.1.\n\nI\'ll watch the deploy on Thursday.\n\nBest regards',
+   yes:'Hi Priya,\n\nYes, Thursday works. Let\'s go ahead with the cut.\n\nThanks',
+   no:'Hi Priya,\n\nThanks for checking. Let\'s hold the cut until the cache fix is in; I\'d rather ship 3.8 once than patch it on Friday. I\'ll confirm a new date tomorrow.\n\nBest regards',
+   time:'Hi Priya,\n\nCould you give me until tomorrow noon? I want to read the cache fix review before we decide.\n\nThanks'},
+};
+function tmplFor(c){
+  if(isMail()){const f=firstName(c);return T_MAIL[c.name]||{base:`Hi ${f},\n\nThanks for this, noted. I'll get back to you by tomorrow.\n\nBest regards`,
+    yes:`Hi ${f},\n\nSounds good, count me in.\n\nThanks`,no:`Hi ${f},\n\nThanks for thinking of me, but I won't be able to this time.\n\nBest regards`,time:`Hi ${f},\n\nCould I get back to you on this by Friday?\n\nThanks`}}
+  return T_CHAT[P().id+':'+c.name]||{base:'Thank you! Happy Diwali to you too 🪔✨',wish:'Happy Diwali, '+firstName(c)+'! 🪔 Wishing you and your family lots of light and sweets ✨'};
+}
+const EMOJI=/\p{Extended_Pictographic}️?/gu;
+function aiWrite(c,instr,prev){
+  const t=(instr||'').toLowerCase(),T=tmplFor(c),mail=isMail();
+  if(prev!==undefined){ // changing a draft
+    if(/short/.test(t)){if(mail){const p=prev.split('\n\n');return [p[0],p[1],p[p.length-1]].join('\n\n')}return prev.split(/(?<=[.!?🙂❤️👍🙏])\s/u)[0]}
+    if(/formal/.test(t))return mail?prev.replace(/^Hi /,'Dear ').replace(/(Thanks|Best regards)$/,'Kind regards'):prev.replace(EMOJI,'').replace(/\s+/g,' ').trim();
+    if(/warm/.test(t))return mail?prev.replace(/\n\n/,'\n\nHope you\'re having a lovely Diwali week! 🪔\n\n'):prev+' Take care ❤️';
+    if(/marathi/.test(t))return T.mr||prev;
+    if(/deadline/.test(t)&&mail){const p=prev.split('\n\n');p.splice(p.length-1,0,'I\'ll confirm by Wednesday, 6 pm.');return p.join('\n\n')}
+    if(/call/.test(t))return mail?prev.replace(/(\n\n[^\n]+)$/,'\n\nHappy to jump on a call tomorrow if that\'s easier.$1'):prev+' 📞 Kal call karta hoon.';
+    const vs=[T.base,T.yes,T.wish,T.no].filter(Boolean);return vs[(vs.indexOf(prev)+1)%vs.length];
+  }
+  if(/\b(no|decline|can'?t|cannot)\b/.test(t)&&T.no)return T.no;
+  if(/\b(yes|accept|sure|ok)\b/.test(t)&&T.yes)return T.yes;
+  if(/time|later/.test(t)&&T.time)return T.time;
+  if(/wish|diwali/.test(t)&&T.wish)return T.wish;
+  if(/marathi/.test(t)&&T.mr)return T.mr;
+  return T.base;
+}
+function polish(s){
+  let o=' '+s.trim()+' ';
+  [[/^ (ya|yeah|ha) /i,' Yeah, '],[/ ill /g," I'll "],[/ im /g," I'm "],[/ (dont|don't) worry/g,", don't worry"],[/ u /g,' you '],[/ r /g,' are '],[/ ur /g,' your '],[/ pls /gi,' please '],[/ tmrw /gi,' tomorrow '],[/ ll /g,' will '],[/ k /g,' okay '],[/ i /g,' I '],[/ dont /g," don't "],[/ cant /g," can't "]].forEach(([a,b])=>o=o.replace(a,b));
+  o=o.trim();o=o[0].toUpperCase()+o.slice(1);
+  if(!/[.!?🙂]$/u.test(o))o+='.';
+  return o+' 🙂';
+}
+function aiStart(){
+  const c=cur(),id=P().id;
+  if(!c||!['wa','chat','mail'].includes(id)||(id==='wa'&&P().secs[S.sec]==='Status')){toast('Open a chat or a mail first, then A','warn');return}
+  S.focus=isMail()?(S.narrow?'pane':'list'):'chat';S.msgSel=-1;
+  S.ai={stage:'ask',instr:'',more:false,versions:[],v:0};S.mode='AI';
+}
+function aiRun(){
+  const a=S.ai,c=cur(),f=firstName(c);
+  const steps=a.polish?['Reading what you typed…','Fixing it, keeping your words…']
+    :isMail()?[`Reading the thread (${c.count} mail${c.count>1?'s':''})…`,`Looking at how you write to ${f}…`,'Writing your reply…']
+    :['Reading the last 30 messages…',c.kind==='dm'?`Matching how you and ${f} talk…`:`Seeing who's who in ${c.name}…`,'Writing…'];
+  const prev=a.change?a.versions[a.v]:undefined,instr=a.instr;
+  a.stage='think';a.step=steps[0];render();
+  let k=0;const iv=setInterval(()=>{
+    if(S.ai!==a){clearInterval(iv);return}
+    k++;if(k<steps.length){a.step=steps[k];render();return}
+    clearInterval(iv);
+    const out=a.polish?polish(a.src):aiWrite(c,instr,prev);
+    a.versions.push(out);a.v=a.versions.length-1;a.stage='draft';a.change=false;a.instr='';render();
+  },600);
+}
+function aiAccept(){
+  const a=S.ai,c=cur(),v=a.versions[a.v];S.ai=null;S.mode='NORMAL';
+  if(isMail()){(c.sentReplies=c.sentReplies||[]).push({st:'sent',to:mailAddr(c),text:v});toast('<span class="grn">✓ reply sent</span> to '+esc(c.name)+' (after its undo window)');return}
+  S.draft=v;send();
+}
+function aiEdit(){
+  const a=S.ai,v=a.versions[a.v];
+  if(isMail()){toast('Opens the reply in your $EDITOR with the draft filled in','warn');return}
+  S.ai=null;S.draft=v;S.mode='INSERT';S.focus='chat';
+}
+function aiSugg(c){
+  const a=S.ai;
+  return a.change?['shorter','warmer','more formal',isMail()?'add a deadline':'in Marathi']
+    :isMail()?['reply to this','say yes','decline politely','ask for more time']:['reply to the last message','say yes','say no politely','wish them'];
+}
+function askBox(c){
+  const a=S.ai,mail=isMail(),f=firstName(c),change=a.change;
+  const ctx=mail?[[`this thread · ${c.count} mail${c.count>1?'s':''}`,1],['how you write here',1],['your sent mail, for tone',a.more]]
+    :[[a.more?'this chat · last 200 messages':'this chat · last 30 messages',1],['how you write here',1],['older messages',a.more]];
+  const sug=aiSugg(c);
+  return `<div class="ask" data-n="ask"><div class="top"><span class="spark">✦ ${change?'Change the draft':'Ask Claude'}</span><span class="muted">${change?'what should be different?':mail?'to reply to '+esc(f):'to write to '+esc(c.name)}</span><span class="muted" style="margin-left:auto">⏎ write · esc ${change?'back':'cancels'}</span></div>
+   <div class="q">${a.instr?esc(a.instr):`<span class="ph">${change?'e.g. shorter, and say I\'ll call tomorrow':mail?'e.g. yes to Thursday, but only after the cache fix':'e.g. tell her I ate, and good night'}</span>`}<span class="caret"></span></div>
+   ${change?'':`<div class="ctx" title="What the agent gets to read">${ctx.map((x,i)=>`<span class="${x[1]?'on':'off'}">${esc(x[0])}${i===2?' <span class="muted">Tab</span>':''}</span>`).join('')}</div>`}
+   <div class="sugg">${sug.map((s,i)=>`<span data-sug="${i}"><b>${i+1}</b>${esc(s)}</span>`).join('')}</div>
+   ${change?'':`<div class="fine">Empty ⏎ writes a fitting reply on its own. What it reads goes to the agent as &lt;untrusted&gt; data, never as instructions. Nothing is sent until you accept.</div>`}</div>`;
+}
+function actRow(){
+  return `<div class="aiact" data-n="aiact"><span class="y" data-ai="y">y use it</span><span data-ai="e">e edit it</span><span class="c" data-ai="c">c change it</span>${S.ai.versions.length>1?'<span data-ai="v">← → versions</span>':''}<span class="n" data-ai="n">n throw away</span></div>`;
+}
+function aiGhost(c){
+  const a=S.ai;if(!a||isMail())return '';
+  if(a.stage==='think')return `<div class="run me"><div class="rh"><b style="color:var(--accent2)">✦ Claude</b><span class="muted">writing for you</span></div><div class="bw"><div class="bub think" data-n="aidraft">${esc(a.step)}<div class="shim" style="width:92%"></div><div class="shim" style="width:58%"></div></div></div></div>`;
+  const v=a.versions[a.v];if(v===undefined)return '';
+  return `<div class="run me"><div class="rh"><b style="color:var(--accent2)">✦ draft</b><span class="muted">${a.polish?'polished from what you typed':'by Claude'}${a.versions.length>1?` · version ${a.v+1} of ${a.versions.length}`:''}</span></div><div class="bw"><div class="bub ai" data-n="aidraft">${esc(v)}</div></div>${a.stage==='draft'?actRow():''}</div>`;
+}
+function mailDraft(c){
+  const a=S.ai;if(!a||!isMail())return '';
+  if(a.stage==='think')return `<div class="mdraft" data-n="aidraft"><div class="hd"><span style="color:var(--accent2)">✦ Claude is writing your reply</span></div><div class="muted">${esc(a.step)}</div><div class="shim" style="width:80%"></div><div class="shim" style="width:95%"></div><div class="shim" style="width:50%"></div></div>`;
+  const v=a.versions[a.v];if(v===undefined)return '';
+  return `<div class="mdraft" data-n="aidraft"><div class="hd"><span style="color:var(--accent2)">✦ draft reply by Claude</span><span>to ${esc(mailAddr(c))}</span><span>Re: ${esc(c.subj)}</span>${a.versions.length>1?`<span class="muted">version ${a.v+1} of ${a.versions.length}</span>`:''}</div><pre>${esc(v)}</pre>${a.stage==='draft'?actRow():''}</div>`;
+}
+function aiKey(k,e){
+  const a=S.ai;
+  if(a.stage==='think'){if(k==='Escape'){S.ai=null;S.mode='NORMAL';toast('Stopped','warn')}return}
+  if(a.stage==='ask'){
+    if(k==='Escape'){if(a.change){a.stage='draft';a.change=false;a.instr=''}else{S.ai=null;S.mode='NORMAL'}}
+    else if(k==='Enter'){aiRun();return}
+    else if(k==='Tab')a.more=!a.more;
+    else if(/^[1-4]$/.test(k)&&!a.instr){a.instr=aiSugg(cur())[+k-1];aiRun();return}
+    else if(k==='Backspace')a.instr=a.instr.slice(0,-1);
+    else if(k.length===1&&!e.ctrlKey&&!e.metaKey)a.instr+=k;
+    return;
+  }
+  if(k==='y')aiAccept();
+  else if(k==='e')aiEdit();
+  else if(k==='c'){a.stage='ask';a.change=true;a.instr=''}
+  else if(k==='n'||k==='Escape'){S.ai=null;S.mode='NORMAL';toast('Draft thrown away','warn')}
+  else if(k==='ArrowLeft'||k==='[')a.v=Math.max(0,a.v-1);
+  else if(k==='ArrowRight'||k===']')a.v=Math.min(a.versions.length-1,a.v+1);
+}
+
+// ------------------------------------------------------------------ overlays
+const WK={
+ root:[['m','Mail'],['c','Chat'],['w','WhatsApp'],['a','AI requests'],['d','✦ write with Claude (A)'],['f','find anything (/)'],['p','pin / unpin'],['u','unread only'],['t','theme (demo)'],['?','all keys']],
+ c:[['m','mute 🔕'],['p','pin 📌'],['a','archive'],['r','mark read'],['b','block ⊘'],['i','info']],
+ m:[['r','reply'],['f','forward'],['s','star ★'],['e','edit'],['c','copy'],['d','delete']],
+ g:[['m','Mail'],['c','Chat'],['w','WhatsApp'],['a','AI requests'],['s','Status']],
+};
+const CMDS=[
+ ['theme dark','Mocha'],['theme light','Latte'],['width narrow','one pane at a time'],['width wide','list and pane'],
+ ['density compact','tighter list'],['density comfy','roomier list'],['place mail','go to Mail'],['place chat','go to Chat'],
+ ['place whatsapp','go to WhatsApp'],['place ai','go to AI requests'],['sync','fetch now'],['about','logo and shloka'],
+ ['corner offline','see offline'],['corner unlinked','see the QR'],['help','all keys'],['q','quit (not in a demo)'],
+];
+function overlayHTML(){
+  if(S.ov==='wk'){
+    const list=WK[S.wkSub||'root'];
+    return `<div class="ov wk" data-n="which-key"><h5>␣ then…</h5><div class="g">${list.map(e=>`<div><kbd>${e[0]}</kbd><span>${e[1]}</span></div>`).join('')}</div><div class="muted" style="font-size:11.5px;margin-top:6px">esc closes · ⌫ goes up</div></div>`;
+  }
+  if(S.ov==='cmd'){
+    const f=CMDS.filter(c=>c[0].startsWith(S.cmd.trim())||c[0].includes(S.cmd.trim()));
+    S.cmdSel=Math.min(S.cmdSel,Math.max(0,f.length-1));
+    return `<div class="ov cmd" data-n="command"><div class="in"><span class="acc b">:</span><span>${esc(S.cmd)}<span class="caret"></span></span><span class="muted" style="margin-left:auto">Tab completes · ⏎ runs</span></div>
+     <ul>${f.map((c,i)=>`<li class="${i===S.cmdSel?'on':''}"><span>${esc(c[0])}</span><span>${esc(c[1])}</span></li>`).join('')||'<li class="muted">No such command</li>'}</ul></div>`;
+  }
+  if(S.ov==='find'){
+    const q=S.find.trim().toLowerCase();const res=searchAll(q);
+    S.findSel=Math.min(S.findSel,Math.max(0,res.length-1));
+    let h=`<div class="ov find" data-n="find"><div class="in"><span class="acc b">/</span><span>${esc(S.find)}<span class="caret"></span></span><span class="muted" style="margin-left:auto">everywhere · ⏎ jumps</span></div><ul>`;
+    if(!q)h+=`<li class="muted">Type to search mail, chats and WhatsApp at once. Try "diwali" or "release".</li>`;
+    else if(!res.length)h+=`<li class="muted">Nothing matches "${esc(S.find)}". <span class="k">esc</span> closes · try fewer words.</li>`;
+    let g='';res.forEach((r,i)=>{if(r.pl!==g){g=r.pl;h+=`<div class="grp">${g.toUpperCase()}</div>`}
+      h+=`<li class="${i===S.findSel?'on':''}">${av(r.c.name,1)}<span><b>${esc(r.c.name)}</b> <span class="muted">${hl(r.text,q)}</span></span><span class="w">${esc(r.c.time)}</span></li>`});
+    return h+'</ul></div>';
+  }
+  if(S.ov==='help'){
+    const sec=(t,rows)=>`<div><h5>${t}</h5>${rows.map(r=>`<div class="k2"><kbd>${r[0]}</kbd><span>${r[1]}</span></div>`).join('')}</div>`;
+    return `<div class="ov help" data-n="help"><div style="display:flex"><b>All keys</b><span class="muted" style="margin-left:auto">esc closes · / filters</span></div><div class="cols">
+     ${sec('Move',[['j k','down, up'],['gg G','top, bottom'],['Ctrl+d u','half a page'],['⏎ l','open'],['h','back to the list'],['H L','places'],['Tab','next section']])}
+     ${sec('Write',[['i','write here'],['r','reply to it'],['R','reply to all (mail)'],['f','forward'],['Ctrl+t','send later'],['Ctrl+o','attach'],['esc','stop writing']])}
+     ${sec('Change',[['dd','delete (asks first)'],['u','undo a send'],['R','send a failed one again'],['y n','approve, decline'],['s','star'],['.','repeat']])}
+     ${sec('Find',[['/','search everywhere'],['n N','next, previous hit'],[':','command bar']])}
+     ${sec('Leader ␣',[['␣ m c w a','Mail, Chat, WhatsApp, AI'],['␣ d','write with Claude'],['␣ f','find anything'],['␣ ?','all keys']])}
+     ${sec('View',[['zq','show quoted'],['Space','full-size photo'],['gf','open the file'],['?','this help']])}
+     ${sec('Agent ✦',[['A','ask it to write'],['␣ d','the same, from the menu'],['Ctrl+g','polish what you typed'],['y','use the draft'],['e','edit it yourself'],['c','change it'],['← →','earlier versions'],['n','throw it away']])}
+    </div></div>`;
+  }
+  if(S.ov==='confirm')return `<div class="ov confirm" data-n="confirm"><h5>Delete this message?</h5><div class="sub" style="margin-bottom:10px">It goes for everyone in this chat. This can't be undone.</div><div class="btns"><span class="btn n">y delete</span><span class="btn">n keep it</span></div></div>`;
+  if(S.ov==='about')return `<div class="ov about" data-n="about">${document.querySelector('.head svg').outerHTML.replace('<svg','<svg style="width:64px;height:64px"')}
+    <div style="font-size:18px;font-weight:700;margin-top:8px">narada <span class="muted" style="font-size:12px">· demo</span></div>
+    <div class="sh">अश्वत्थः सर्ववृक्षाणां देवर्षीणां च नारदः ।<br>गन्धर्वाणां चित्ररथः सिद्धानां कपिलो मुनिः ॥</div>
+    <div class="sub" style="font-style:italic">Among trees I am the sacred fig; among divine sages, Nārada.</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">Bhagavad Gītā 10.26</div>
+    <div class="muted" style="margin-top:12px">Gmail, Google Chat and WhatsApp without leaving the terminal · esc closes</div></div>`;
+  return '';
+}
+function searchAll(q){
+  if(!q)return [];const out=[];
+  [['WhatsApp',WA,2],['Chat',CHAT,1],['Mail',MAIL,0]].forEach(([pl,d,pi])=>d.forEach((c,ci)=>{
+    const texts=[c.name,c.last,c.subj||'',...(c.msgs||[]).map(m=>m.text||'')];
+    const t=texts.find(x=>x&&x.toLowerCase().includes(q));
+    if(t)out.push({pl,c,pi,ci,text:t});
+  }));
+  return out.slice(0,12);
+}
+function hl(t,q){const i=t.toLowerCase().indexOf(q);if(i<0)return esc(t);return esc(t.slice(0,i))+'<mark>'+esc(t.slice(i,i+q.length))+'</mark>'+esc(t.slice(i+q.length))}
+
+// ------------------------------------------------------------------ behaviour
+let toastT;
+function toast(html,k){S.toast={html,k};clearTimeout(toastT);toastT=setTimeout(()=>{S.toast=null;render()},2600)}
+function msgList(c){return (c.msgs||[]).filter(m=>!m.sep&&!m.newsep&&!m.sys)}
+function setPlace(i){S.place=(i+PLACES.length)%PLACES.length;S.sec=0;S.sel=0;S.open=0;S.focus='list';S.msgSel=-1;S.reply=null;if(S.corner!=='offline')S.corner=null;markCorner()}
+function setSec(i){S.sec=(i+P().secs.length)%P().secs.length;S.sel=0;S.open=0;S.focus='list';S.msgSel=-1}
+
+let undoTimer=null;
+function send(){
+  const c=cur();if(!c||!S.draft.trim()){S.mode='NORMAL';return}
+  const now=new Date(),t=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const m={who:'me',t,text:S.draft.trim(),st:S.corner==='offline'?'scheduled':'undo'};
+  if(S.reply)m.quote={who:S.reply.who,text:S.reply.text};
+  c.msgs.push(m);c.last='You: '+m.text;c.time=t;c.draft=0;
+  S.draft='';S.reply=null;S.mode='NORMAL';S.focus='chat';S.msgSel=-1;
+  if(S.corner==='offline'){toast('<span class="yel">◷ queued</span> · it goes when you\'re back online','warn');return}
+  S.undoPct=100;clearInterval(undoTimer);
+  undoTimer=setInterval(()=>{
+    S.undoPct-=10;
+    if(S.undoPct<=0){clearInterval(undoTimer);m.st='sent';render();
+      setTimeout(()=>{m.st='delivered';render()},900);setTimeout(()=>{m.st='read';render()},2200);
+      toast('<span class="grn">✓ sent</span> to '+esc(c.name));return}
+    render();
+  },500);
+}
+function undo(){
+  const c=cur();if(!c)return;const i=c.msgs.findIndex(m=>m.st==='undo'||m.st==='scheduled');
+  if(i<0){toast('Nothing to undo','warn');return}
+  clearInterval(undoTimer);const m=c.msgs.splice(i,1)[0];S.draft=m.text;S.mode='INSERT';S.focus='chat';
+  toast('<span class="yel">↶ not sent</span> · it\'s back in the box','warn');
+}
+function retry(){
+  const c=cur();const m=c&&c.msgs.find(m=>m.st==='failed');if(!m){toast('Nothing failed here','warn');return}
+  m.st='sent';c.failed=0;c.last='You: '+m.text;toast('<span class="grn">✓ sent</span> on the second try');
+  setTimeout(()=>{m.st='delivered';render()},900);
+}
+function runCmd(s){
+  s=s.trim();const [a,b]=s.split(/\s+/);
+  if(a==='theme')setTheme(b==='light'?'light':'dark');
+  else if(a==='width'){S.narrow=b==='narrow';segOn('segWidth',S.narrow?'narrow':'wide')}
+  else if(a==='density'){S.compact=b==='compact';segOn('segDens',S.compact?'compact':'comfy')}
+  else if(a==='place'){setPlace({mail:0,chat:1,whatsapp:2,wa:2,ai:3}[b]??2)}
+  else if(a==='sync')toast('<span class="grn">● synced</span> · 3 new');
+  else if(a==='about')S.ov='about';
+  else if(a==='help')S.ov='help';
+  else if(a==='corner')setCorner(b);
+  else if(a==='q'||a==='quit')toast('This is a demo: nowhere to quit to 🙂 <a href="index.html#install">Install narada</a>','warn');
+  else{S.err='Not a command: '+s+' (Tab completes)'}
+  if(S.ov==='cmd')S.ov=null;
+}
+
+document.addEventListener('keydown',e=>{
+  if(document.activeElement!==T)return;
+  const k=e.key;
+  if(['Tab',' ','/','ArrowUp','ArrowDown'].includes(k)||(e.ctrlKey&&['t','o','d','u','g'].includes(k)))e.preventDefault();
+  // overlays first
+  if(S.ov==='cmd'){
+    const f=CMDS.filter(c=>c[0].startsWith(S.cmd.trim())||c[0].includes(S.cmd.trim()));
+    if(k==='Escape')S.ov=null;else if(k==='Enter'){runCmd(f[S.cmdSel]&&S.cmd.trim()&&!CMDS.some(c=>c[0]===S.cmd.trim())?f[S.cmdSel][0]:S.cmd)}
+    else if(k==='Tab'){if(f[S.cmdSel])S.cmd=f[S.cmdSel][0]}
+    else if(k==='ArrowDown'||(e.ctrlKey&&k==='n'))S.cmdSel++;else if(k==='ArrowUp'||(e.ctrlKey&&k==='p'))S.cmdSel=Math.max(0,S.cmdSel-1);
+    else if(k==='Backspace'){if(!S.cmd)S.ov=null;S.cmd=S.cmd.slice(0,-1)}else if(k.length===1){S.cmd+=k;S.cmdSel=0}
+    return render();
+  }
+  if(S.ov==='find'){
+    const res=searchAll(S.find.trim().toLowerCase());
+    if(k==='Escape')S.ov=null;
+    else if(k==='Enter'&&res[S.findSel]){const r=res[S.findSel];S.place=r.pi;S.sec=0;const idx=items().indexOf(r.c);S.sel=S.open=Math.max(0,idx);S.focus=r.pi===0?'list':'chat';S.msgSel=-1;S.ov=null}
+    else if(k==='ArrowDown'||(e.ctrlKey&&k==='n'))S.findSel++;else if(k==='ArrowUp'||(e.ctrlKey&&k==='p'))S.findSel=Math.max(0,S.findSel-1);
+    else if(k==='Backspace')S.find=S.find.slice(0,-1);else if(k.length===1){S.find+=k;S.findSel=0}
+    return render();
+  }
+  if(S.ov==='confirm'){
+    if(k==='y'){const c=cur(),ml=msgList(c),m=ml[S.msgSel];if(m){m.deleted=1;delete m.text;delete m.img;delete m.doc;delete m.voice;delete m.quote;delete m.rx;m.st=m.who==='me'?m.st:undefined}toast('<span class="red">⊘ deleted</span>','warn')}
+    if(k==='y'||k==='n'||k==='Escape')S.ov=null;return render();
+  }
+  if(S.ov==='wk'){
+    if(k==='Escape'){S.ov=null;S.wkSub=null}
+    else if(k==='Backspace')S.wkSub=null;
+    else if(!S.wkSub&&WK[k]&&k!=='m'&&k!=='c'&&k!=='g')S.wkSub=k;
+    else{
+      const sub=S.wkSub;S.ov=null;S.wkSub=null;
+      if(k==='t')setTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
+      else if(k==='m')setPlace(0);else if(k==='c')setPlace(1);else if(k==='w')setPlace(2);else if(k==='a')setPlace(3);
+      else if(k==='d')aiStart();
+      else if(k==='f'){S.ov='find';S.find=''}
+      else if(k==='?')S.ov='help';
+      else if(k==='u'){setSec(P().secs.indexOf('Unread'));if(S.sec<0)S.sec=0}
+      else if(k==='p'){const c=cur();if(c){c.pinned=!c.pinned;toast(c.pinned?'📌 pinned':'unpinned')}}
+      else if(sub==='g'){const m={m:0,c:1,w:2,a:3}[k];if(m!==undefined)setPlace(m);if(k==='s'){setPlace(2);S.sec=6}}
+      else if(sub==='c'){const c=cur();if(c){if(k==='m'){c.muted=!c.muted;toast(c.muted?'🔕 muted':'🔔 unmuted')}if(k==='p'){c.pinned=!c.pinned;toast(c.pinned?'📌 pinned':'unpinned')}if(k==='r'){c.unread=0;c.mention=0;toast('<span class="grn">✓</span> marked read')}if(k==='a')toast('Archived');if(k==='b')toast('<span class="red">⊘ blocked</span>','warn')}}
+      else if(sub==='m'){if(k==='d'&&S.focus==='chat'&&S.msgSel>=0)S.ov='confirm';else if(k==='r')startReply();else toast('Space m '+k+'')}
+    }
+    return render();
+  }
+  if(S.ov){if(k==='Escape'||k==='q'||k==='?')S.ov=null;return render()}
+  // the agent is writing: its keys first
+  if(S.ai){aiKey(k,e);return render()}
+  // INSERT
+  if(S.mode==='INSERT'){
+    if(k==='Escape'){S.mode='NORMAL';if(!S.draft)S.reply=null}
+    else if(k==='Enter'&&!e.shiftKey)send();
+    else if(k==='Enter')S.draft+='\n';
+    else if(k==='Backspace')S.draft=S.draft.slice(0,-1);
+    else if(e.ctrlKey&&k==='g'){if(S.draft.trim()){S.ai={stage:'think',polish:true,src:S.draft,versions:[],v:0,instr:''};S.mode='AI';S.draft='';aiRun();return}toast('Type a rough version first; Ctrl+g polishes it','warn')}
+    else if(e.ctrlKey&&k==='t'){toast('<span class="yel">⏲</span> When? tomorrow 9am · in 2h · fri 6pm','warn')}
+    else if(k.length===1&&!e.ctrlKey&&!e.metaKey)S.draft+=k;
+    return render();
+  }
+  // NORMAL
+  if(S.err&&k==='Escape'){S.err='';return render()}
+  const d=items(),p=P();
+  if(S.pend){const seq=S.pend+k;S.pend='';
+    if(seq==='gg'){if(S.focus==='chat')S.msgSel=0;else S.sel=0}
+    else if(seq==='dd'){if(S.focus==='chat'&&S.msgSel>=0)S.ov='confirm';else toast('Pick a message first: ⏎ opens the chat, then j/k','warn')}
+    return render();
+  }
+  if(k==='g'||k==='d'){S.pend=k;return render()}
+  const n=p.id==='wa'&&p.secs[S.sec]==='Status'?STATUS.length:d.length;
+  switch(k){
+    case 'j':case 'ArrowDown':
+      if(S.focus==='chat'){S.msgSel=Math.min(msgList(cur()).length-1,S.msgSel+1)}else{S.sel=Math.min(n-1,S.sel+1);S.open=S.sel}break;
+    case 'k':case 'ArrowUp':
+      if(S.focus==='chat'){S.msgSel=Math.max(0,S.msgSel<0?msgList(cur()).length-1:S.msgSel-1)}else{S.sel=Math.max(0,S.sel-1);S.open=S.sel}break;
+    case 'G':if(S.focus==='chat')S.msgSel=msgList(cur()).length-1;else{S.sel=n-1;S.open=S.sel}break;
+    case 'Enter':case 'l':
+      if(p.id==='wa'||p.id==='chat'){S.open=S.sel;S.focus='chat';const c=cur();if(c){c.unread=0;c.mention=0;S.msgSel=msgList(c).length-1}}
+      else if(S.narrow)S.focus='pane';break;
+    case 'h':case 'Escape':S.focus='list';S.msgSel=-1;S.reply=null;break;
+    case 'i':if(p.id==='wa'||p.id==='chat'){if(!cur())break;S.mode='INSERT';S.focus='chat'}else toast('r replies · c writes a new mail','warn');break;
+    case 'r':startReply();break;
+    case 'A':aiStart();break;
+    case 'u':undo();break;
+    case 'R':retry();break;
+    case '1':case '2':case '3':case '4':setPlace(+k-1);break;
+    case 'H':setPlace(S.place-1);break;
+    case 'L':setPlace(S.place+1);break;
+    case 'Tab':setSec(S.sec+(e.shiftKey?-1:1));break;
+    case ' ':S.ov='wk';S.wkSub=null;break;
+    case ':':S.ov='cmd';S.cmd='';S.cmdSel=0;break;
+    case '/':S.ov='find';S.find='';S.findSel=0;break;
+    case '?':S.ov='help';break;
+    case 'y':case 'n':case 'e':
+      if(p.id==='ai'){const c=cur();if(c&&c.state==='wait'){if(k==='y'){c.state='done';toast('<span class="grn">✓ approved and sent</span>')}if(k==='n'){c.state='no';toast('<span class="red">✕ declined</span> · the agent is told','warn')}if(k==='e'){toast('Opens it in the composer, editable','warn')}}}
+      break;
+  }
+  render();
+});
+function startReply(){
+  const c=cur();if(!c||!(P().id==='wa'||P().id==='chat'))return;
+  const ml=msgList(c);const m=ml[S.msgSel>=0?S.msgSel:ml.length-1];if(!m)return;
+  S.reply={who:m.who==='me'?'You':m.who,text:m.text||(m.img?'📷 Photo':m.doc?'📎 '+m.doc:m.voice?'🎤 Voice note':'…')};
+  S.mode='INSERT';S.focus='chat';
+}
+
+// mouse
+T.addEventListener('click',e=>{
+  T.focus();
+  const pl=e.target.closest('[data-place]');if(pl){setPlace(+pl.dataset.place);return render()}
+  const sc=e.target.closest('[data-sec]');if(sc){setSec(+sc.dataset.sec);return render()}
+  const it=e.target.closest('[data-i]');if(it){const i=+it.dataset.i;if(i===S.sel&&S.focus==='list'&&(P().id==='wa'||P().id==='chat')){S.focus='chat';const c=cur();if(c){c.unread=0;c.mention=0}}S.sel=S.open=i;return render()}
+  const ab=e.target.closest('[data-ai]');if(ab&&S.ai){const m={y:'y',e:'e',c:'c',n:'n',v:'ArrowLeft'}[ab.dataset.ai];aiKey(m,{});return render()}
+  const sg=e.target.closest('[data-sug]');if(sg&&S.ai&&S.ai.stage==='ask'){S.ai.instr=aiSugg(cur())[+sg.dataset.sug];aiRun();return}
+  const bm=e.target.closest('[data-m]');if(bm){S.focus='chat';S.msgSel=+bm.dataset.m;return render()}
+  const cp=e.target.closest('.compose');if(cp&&(P().id==='wa'||P().id==='chat')){S.mode='INSERT';S.focus='chat';return render()}
+});
+
+// ------------------------------------------------------------------ corners
+const CORNERS=[
+ ['reset','Start over','Diwali night, made-up chats'],
+ ['aichat','✦ AI writes a reply','WhatsApp, in your voice'],
+ ['aimail','✦ AI replies to a mail','reads the thread'],
+ ['aichange','✦ Change a draft','shorter, in Marathi…'],
+ ['aipolish','✦ Polish my text','Ctrl+g while typing'],
+ ['offline','Offline','reading works, sends queue'],
+ ['unlinked','Not linked','WhatsApp QR'],
+ ['firstsync','First sync','skeleton and progress'],
+ ['emptychat','Empty chat','no messages yet'],
+ ['emptysec','Empty section','Scheduled, nothing in it'],
+ ['failed','Failed send','red, R sends again'],
+ ['approval','Agent waiting','approve inside the chat'],
+ ['undo','Undo window','yellow bar counts down'],
+ ['nores','No results','search found nothing'],
+ ['error','Error line','red, esc hides'],
+ ['narrow','80 columns','one pane at a time'],
+ ['long','Long names','Devanagari, emoji, cut-offs'],
+ ['confirm','Delete confirm','dd asks first'],
+ ['whichkey','The Space menu','everything under one key'],
+ ['about','About','logo and shloka'],
+];
+const cornersEl=document.getElementById('corners');
+cornersEl.innerHTML=CORNERS.map(c=>`<button data-c="${c[0]}">${c[1]}<small>${c[2]}</small></button>`).join('');
+cornersEl.addEventListener('click',e=>{const b=e.target.closest('button');if(b){setCorner(b.dataset.c);render();T.focus()}});
+function markCorner(){cornersEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.c===(S.lastCorner||'reset')))}
+let longAdded=false;
+function setCorner(c){
+  S.lastCorner=c;S.ov=null;S.err='';S.mode='NORMAL';S.reply=null;S.corner=null;S.ai=null;
+  if(c!=='narrow'){S.narrow=false;segOn('segWidth','wide')}
+  const goWA=(sec=0,sel=0,open)=>{S.place=2;S.sec=sec;S.sel=S.open=sel;S.focus=open?'chat':'list';S.msgSel=-1};
+  switch(c){
+    case 'reset':goWA();break;
+    case 'aichat':goWA(0,0,1);aiStart();S.ai.instr='tell her I ate, and good night';render();setTimeout(()=>{if(S.ai&&S.ai.stage==='ask'){aiRun()}},900);break;
+    case 'aimail':S.place=0;S.sec=0;S.sel=S.open=0;S.focus='list';aiStart();break;
+    case 'aichange':goWA(0,0,1);S.ai={stage:'draft',instr:'',versions:[T_CHAT['wa:Amma'].base],v:0};S.mode='AI';render();setTimeout(()=>{if(S.ai){S.ai.stage='ask';S.ai.change=true;S.ai.instr='in Marathi';render();setTimeout(()=>{if(S.ai&&S.ai.stage==='ask')aiRun()},900)}},700);break;
+    case 'aipolish':goWA(0,WA.indexOf(WA.find(x=>x.name==='Neha')),1);WA.find(x=>x.name==='Neha').draft=0;S.draft='ya ill get them on the way home dont worry';S.mode='INSERT';render();setTimeout(()=>{if(S.mode==='INSERT'){S.ai={stage:'think',polish:true,src:S.draft,versions:[],v:0,instr:''};S.mode='AI';S.draft='';aiRun()}},1100);break;
+    case 'offline':goWA(0,0,1);S.corner='offline';toast('<span class="red">● offline</span> · you can still read; sends wait in yellow','warn');break;
+    case 'unlinked':goWA();S.corner='unlinked';break;
+    case 'firstsync':S.place=0;S.sec=0;S.corner='firstsync';break;
+    case 'emptychat':goWA(0,0,1);S.corner='emptychat';break;
+    case 'emptysec':goWA(5);break;
+    case 'failed':goWA(0,WA.indexOf(WA.find(x=>x.name==='Meera Iyer')),1);break;
+    case 'approval':{goWA(0,0,1);const c=WA[0];if(!c.msgs.some(m=>m.st==='approval'))c.msgs.push({who:'me',t:'21:16',text:'Haan amma, kha liya 🙂 Aap bhi jaldi so jana',st:'approval'});break}
+    case 'undo':{goWA(0,WA.indexOf(WA.find(x=>x.name==='Ravi Kulkarni')),1);S.draft='See you at 7, bringing the bat 🏏';S.mode='INSERT';render();send();break}
+    case 'nores':goWA();S.ov='find';S.find='xyzzy';break;
+    case 'error':goWA();S.err='Gmail said 429: too many requests. Trying again in 30s.';break;
+    case 'narrow':S.narrow=true;segOn('segWidth','narrow');goWA(0,0,1);break;
+    case 'long':{if(!longAdded){longAdded=true;
+      WA.splice(2,0,{name:'आजी (Aaji) 🙏',kind:'dm',time:'21:12',last:'दिवाळीच्या खूप खूप शुभेच्छा बाळा! देव तुला सुखी ठेवो 🪔',unread:1,grp:'TODAY',num:'+91 98xxx 10009',msgs:[{sep:'Today'},{who:'आजी (Aaji) 🙏',t:'21:12',text:'दिवाळीच्या खूप खूप शुभेच्छा बाळा! देव तुला सुखी ठेवो 🪔 फराळ खाल्लास ना?'}]},
+        {name:'Sharma–Iyer–Kulkarni Combined Diwali Party Planning Committee 2026 🎆🎇🪔',kind:'group',time:'21:11',last:'Someone with a very long name: this preview goes on and on so the row has to cut it off cleanly with an ellipsis',unread:128,grp:'TODAY',members:'213 people',msgs:[{sep:'Today'},{who:'Someone With A Very Long Name Indeed',t:'21:11',text:'This preview goes on and on so the row has to cut it off cleanly with an ellipsis, and the bubble has to wrap it without breaking the rounded corners or pushing the time out of the frame. https://example.com/a/very/long/link/that/does/not/break/nicely/at/all'}]})}
+      goWA(0,2,1);break}
+    case 'confirm':goWA(0,0,1);S.msgSel=0;S.ov='confirm';break;
+    case 'whichkey':goWA();S.ov='wk';S.wkSub=null;break;
+    case 'about':S.ov='about';break;
+  }
+  markCorner();
+}
+
+// ------------------------------------------------------------------ notes
+const NOTES=[
+ ['places','Places are pills','The open place is filled with the accent; counts sit inside. H / L walk them. Nothing else on the top row competes.'],
+ ['sync','Sync state, top right','Green synced, accent while syncing, red offline with its retry countdown. Never a modal.'],
+ ['sections','Sections are a quiet strip','Grey pills; the current one is lifted, not coloured, so the accent stays "where you are".'],
+ ['list','The list fills to the bottom','Rows are drawn until the pane is full; the last may be cut. Labels PINNED / TODAY / EARLIER sit in the flow, not in reserved rows.'],
+ ['list','Row anatomy','Avatar (green dot when online), name, time on the right; the preview below, with badges at its end: accent unread count, peach @ for a mention, grey count when muted.'],
+ ['list','Rows say their state','typing… in green, ✕ not sent in red, ⏲ scheduled in yellow, Draft: in peach, so you can see what needs you without opening anything.'],
+ ['rule','A rule between list and pane','One thin vertical line. The list dims its selection when the focus moves to the pane, so you always know which side the keys move.'],
+ ['header','The header is one line','Avatar, name, presence right after it (online, last seen, typing), then the number or the members on the right.'],
+ ['run','Runs, not single messages','A run is one sender within 5 minutes: the name and time once, bubbles flush under each other, a corner squared on the side they hang from. One blank row between runs.'],
+ ['newline','The "N new" line','Peach, once, where you stopped reading. Opening a chat puts you just above it.'],
+ ['conv','Every kind of message','Quote (teal bar), photo, voice note with its waveform, document (peach 📎, gf opens), link card (blue), edited, deleted, reactions under the bubble, a system line centred.'],
+ ['conv','Pending lives in the chat','Undo window: a yellow bar counting down, u undoes. Scheduled: ⏲ with t to move. Failed: red frame, R sends again. Agent waiting: y / e / n right on the bubble.'],
+ ['ask','✦ A asks the agent, right where you are','In a chat, a WhatsApp chat or a mail. The box shows what it will read (✓ this chat, how you two talk; Tab adds older history) and four quick asks. An empty ⏎ just writes a fitting reply.'],
+ ['aidraft','The draft is pink and dashed','Pink is the agent\'s colour: a draft is never mistaken for a sent message. It sits where your reply would go, in the chat, or under the mail with To and Re: filled in.'],
+ ['aiact','Use it, edit it, change it, or throw it away','y sends it through the undo window, like anything you write. e puts it in the composer to finish yourself. c asks for changes ("shorter", "in Marathi", your own words) and keeps every version (← →). n drops it.'],
+ ['compose','The composer is read-only until i','Stray keys never type. In INSERT it lights up in the accent with a caret, and the footer swaps to the writing keys. A reply shows as a chip on top.'],
+ ['footer','The footer follows the mode','The mode pill (green NORMAL, blue INSERT, yellow COMMAND, red CONFIRM), then the keys that work right now; find, menu, command and help always on the right.'],
+ ['which-key','Space shows what is under it','Press Space and wait: every action is one more letter (m Mail, d write with Claude, f find…), so you never have to remember them.'],
+ ['command','The command bar floats','In the upper third, centred, with completion and a hint for each command. Tab completes, Enter runs.'],
+ ['find','One search for everything','Results grouped by place, with the match in peach. "Nothing matches" says what to try.'],
+ ['confirm','Destructive things ask once','dd opens a red-framed question; y deletes, anything else keeps it.'],
+];
+const notesEl=document.getElementById('notes');
+notesEl.innerHTML=NOTES.map((n,i)=>`<li data-t="${n[0]}"><i>${n[0]}</i><b>${n[1]}</b><span>${n[2]}</span></li>`).join('');
+notesEl.addEventListener('click',e=>{
+  const li=e.target.closest('li');if(!li)return;const t=li.dataset.t;
+  if(t==='which-key'){S.ov='wk';S.wkSub=null}if(t==='command'){S.ov='cmd';S.cmd=''}if(t==='find'){S.ov='find';S.find='diwali'}if(t==='confirm'){S.place=2;S.sec=0;S.sel=S.open=0;S.focus='chat';S.msgSel=0;S.ov='confirm'}
+  if(t==='ask'&&!(S.ai&&S.ai.stage==='ask')){setCorner('reset');S.place=2;S.sec=0;S.sel=S.open=0;aiStart()}
+  if((t==='aidraft'||t==='aiact')&&!(S.ai&&S.ai.stage==='draft')){setCorner('reset');S.place=2;S.sec=0;S.sel=S.open=0;S.focus='chat';S.ai={stage:'draft',instr:'',versions:[T_CHAT['wa:Amma'].base],v:0};S.mode='AI'}
+  if(['run','newline','conv','header','compose'].includes(t)&&!(P().id==='wa'&&S.focus==='chat')){S.place=2;S.sec=0;S.sel=S.open=0;S.focus='chat';S.msgSel=-1;S.ov=null}
+  render();
+  const els=T.querySelectorAll(`[data-n="${t}"]`);
+  els.forEach(el=>{el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1600)});
+  const first=els[0];if(first&&t!=='run')first.scrollIntoView({block:'nearest'});
+});
+
+// ------------------------------------------------------------------ page controls
+function segOn(id,v){document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.dataset.v===v))}
+function setTheme(v){document.documentElement.dataset.theme=v;segOn('segTheme',v)}
+try{const sv=localStorage.getItem('narada-try-theme');if(sv)setTheme(sv)}catch(e){}
+if(!document.documentElement.dataset.theme)setTheme(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+document.getElementById('segTheme').onclick=e=>{const b=e.target.closest('button');if(b){setTheme(b.dataset.v);try{localStorage.setItem('narada-try-theme',b.dataset.v)}catch(e){}}};
+document.getElementById('segWidth').onclick=e=>{const b=e.target.closest('button');if(b){S.narrow=b.dataset.v==='narrow';segOn('segWidth',b.dataset.v);render()}};
+document.getElementById('segDens').onclick=e=>{const b=e.target.closest('button');if(b){S.compact=b.dataset.v==='compact';segOn('segDens',b.dataset.v);render()}};
+
+markCorner();render();T.focus();
+// a link can open one of these: try.html#corner=aichat
+{const m=/corner=([a-z]+)/.exec(location.hash);if(m&&CORNERS.some(c=>c[0]===m[1])){setCorner(m[1]);render()}}
+</script>
+</body>
+</html>

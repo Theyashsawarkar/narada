@@ -25,6 +25,20 @@ behaviour only through the `@narada-*` options and config.toml.
   a path that calls the Gmail or Chat send API directly. An agent's send
   must stay behind `needsApproval`; mail and chat text returned to agents
   stays inside `<untrusted>` blocks.
+- **Every corner is rounded.** Boxes use `╭╮╰╯`. Anything drawn on a filled
+  background (key caps, the mode pill, places, badges, chips, avatars) goes
+  through `styles.round`, which gives it round ends; never `.Render` a style
+  with a background straight to the screen. Only what can't be rounded
+  (tmux's own pane borders, a full-screen window) is exempt.
+- **A message you send shows once, at once, and never flickers.** From
+  Enter it is in the chat as its pending copy (`showPending`, ◷); nothing
+  else draws a second copy of it (the outbox lines skip sends already in the
+  chat). When it goes out, `Store.ReplacePending` swaps the copy for the
+  real message in one transaction, at the copy's time, so it never
+  disappears, doubles or moves; after that only its ticks change (◷ → ✓ →
+  ✓✓ → blue, or red ✗ when it fails). Never delete and re-insert a row the
+  screen shows in separate steps. `TestSentMessageShowsOnceAndStaysPut`
+  guards it.
 - Keys live in `internal/tui/keys.go`. After adding, changing or removing
   one: `go test ./internal/tui -update` (rewrites `scripts/keybindings`,
   which Vayu's keybinding search reads), and update the README's key

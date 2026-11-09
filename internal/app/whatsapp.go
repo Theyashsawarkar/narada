@@ -724,8 +724,9 @@ func (a *App) deliverWhatsApp(ctx context.Context, it store.OutboxItem) (string,
 		name = waName(out.Space, id)
 		_ = a.Store.PutSpace(store.Space{Account: store.WhatsAppAccount, Name: out.Space, DisplayName: a.waChatName(out.Space, out.SpaceName),
 			Type: waType(out.Space), LastActive: now})
-		_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: store.WhatsAppAccount, Name: name, Space: out.Space, Sender: wa.ChatUser,
-			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files, Ticks: whatsapp.TickSent}})
+		// the copy shown since you pressed Enter becomes this one, in place
+		_ = a.Store.ReplacePending(it.ID, store.ChatMessage{Account: store.WhatsAppAccount, Name: name, Space: out.Space, Sender: wa.ChatUser,
+			SenderName: "You", Text: text, Created: now, Quoted: out.Quote, Files: files, Ticks: whatsapp.TickSent})
 		_ = a.queueWhatsAppReads(out.Space) // answering a chat reads it, as on the phone
 		_ = a.Store.SetSpaceRead(store.WhatsAppAccount, out.Space, time.Now().UnixMilli())
 	}

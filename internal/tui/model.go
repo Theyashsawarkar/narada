@@ -47,6 +47,7 @@ const (
 	modeForward // typing who to forward a WhatsApp message to
 	modeVote    // typing the options to vote for in a WhatsApp poll
 	modeCommand // typing a : command
+	modeAIWrite // the agent writes a message or reply (A)
 )
 
 const (
@@ -204,6 +205,8 @@ type Model struct {
 	ai            string
 	aiTitle       string
 	aiBusy        bool
+	aw            *aiWrite // writing with the agent (A), nil when not
+	awGen         int      // counts its runs, so a cancelled one is ignored
 	toast         string
 	toastAt       time.Time
 	undo          *undo
@@ -1317,6 +1320,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadPreview(true)
 		m.say(fmt.Sprintf("%d found · W saves it as a section · [ ] leave", len(msg.threads)))
 		return m, nil
+	case aiWriteMsg:
+		return m.afterAIWrite(msg), nil
+	case awTickMsg:
+		if m.aw != nil && m.aw.stage == awThink {
+			return m, awTick()
+		}
+		return m, nil
 	case aiMsg:
 		m.aiBusy = false
 		if msg.err != nil {
@@ -1450,6 +1460,12 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeConvo && m.convo != nil {
 		return m.convoKey(k)
+	}
+	if m.mode == modeAIWrite {
+		return m.aiWriteKey(k)
+	}
+	if m.mode == modeChatMsg && s == "ctrl+g" && m.editingMsg == "" {
+		return m.polishInput()
 	}
 	if m.mode == modeChatMsg && s == "ctrl+o" {
 		return m, m.pickFiles("chatbox")
@@ -2261,11 +2277,6 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 			}
 			m.fixView()
 		}
-	case "ctrl+k":
-		m.tab, m.wa = tabChat, false
-		m.openFinder()
-		m.find.scope = scopeAllChat
-		m.find.placeholder()
 
 	case "t":
 		if it, ok := m.curOutbox(); ok && it.Status == store.StatusQueued {
@@ -2318,12 +2329,6 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.pickFiles("chat")
-	case "A":
-		if len(m.waiting) > 0 {
-			m.goToAI(m.waiting[0].Kind)
-		} else {
-			m.say("no AI requests waiting")
-		}
 	case "b":
 		if u := m.link(); u != "" {
 			_ = exec.Command("xdg-open", u).Start()
@@ -2342,12 +2347,14 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		m.mode, m.input = modeAsk, nil
 	case "S":
 		return m, m.summarise()
-	case "D":
-		if _, ok := m.curThread(); ok {
-			m.mode, m.input = modeDraftHint, nil
-		} else {
-			m.say("Claude drafts replies to mail: pick a thread in Mail")
+	case "A", "D": // D: its old name, from when it only drafted mail
+		_, chat := m.curSpace()
+		_, mail := m.curThread()
+		if !chat && !mail && len(m.waiting) > 0 {
+			m.goToAI(m.waiting[0].Kind) // nothing open: to what agents are waiting on
+			return m, nil
 		}
+		return m.startAIWrite()
 	case "T":
 		return m, m.digest()
 	default:

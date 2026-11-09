@@ -71,12 +71,12 @@ func (m Model) mouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	case ev.Action != tea.MouseActionPress || ev.Button != tea.MouseButtonLeft:
 		return m, nil
 	}
-	if m.mode == modeChatMsg && ev.Y > 1 && !inList {
+	if m.mode == modeChatMsg && ev.Y > sectionsRow && !inList {
 		return m, nil // a click in the chat while writing: keep writing
 	}
 	m.leader, m.prefix = false, ""
 	switch ev.Y {
-	case 0: // the places
+	case placesRow:
 		for _, p := range h.places {
 			if ev.X >= p.x0 && ev.X < p.x1 {
 				m.mode = modeNormal
@@ -84,7 +84,7 @@ func (m Model) mouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case 1: // the sections
+	case sectionsRow:
 		for _, sec := range h.sections {
 			if ev.X >= sec.x0 && ev.X < sec.x1 && sec.n != m.sec {
 				m.mode, m.sec, m.sel, m.offset, m.filter, m.search = modeNormal, sec.n, 0, 0, "", nil
@@ -98,7 +98,7 @@ func (m Model) mouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	if inList {
 		// the list's rows start under the places, the sections and its title
-		if i, ok := h.listRows[ev.Y-3]; ok {
+		if i, ok := h.listRows[ev.Y-topRows-1]; ok {
 			m.mode, m.visual = modeNormal, false
 			if i == m.sel && m.focus == 0 {
 				return m.actKey("enter") // a second click opens it

@@ -430,8 +430,8 @@ func (a *App) deliver(ctx context.Context, it store.OutboxItem) (string, error) 
 				text += "📎 " + f.Name
 				files = append(files, store.ChatFile{Name: f.Name, Type: f.Type})
 			}
-			_ = a.Store.PutChatMessages([]store.ChatMessage{{Account: it.Account, Name: name, Space: out.Space, Thread: out.Thread,
-				Sender: acc.ChatUser, SenderName: "You", Text: text, Formatted: chatfmt.ForSend(out.Body), Created: time.Now().UnixMilli(), Files: files, Quoted: out.Quote}})
+			_ = a.Store.ReplacePending(it.ID, store.ChatMessage{Account: it.Account, Name: name, Space: out.Space, Thread: out.Thread,
+				Sender: acc.ChatUser, SenderName: "You", Text: text, Formatted: chatfmt.ForSend(out.Body), Created: time.Now().UnixMilli(), Files: files, Quoted: out.Quote, Ticks: 1})
 			_ = a.Store.SetSpaceRead(it.Account, out.Space, time.Now().UnixMilli())
 		}
 		return name, nil

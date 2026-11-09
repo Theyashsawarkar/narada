@@ -228,3 +228,16 @@ func TestStatusReplyAndReact(t *testing.T) {
 		}
 	}
 }
+
+// Only / opens the search: Ctrl+k is left for scrolling.
+func TestOnlySlashSearches(t *testing.T) {
+	m := model(t)
+	m = press(m, "ctrl+k")
+	if m.mode == modeFind {
+		t.Fatal("ctrl+k opened the search")
+	}
+	m = press(m, "/")
+	if m.mode != modeFind {
+		t.Fatal("/ didn't open the search")
+	}
+}

@@ -110,3 +110,31 @@ func TestRecoverSendingLeavesBigUploadsAlone(t *testing.T) {
 		}
 	}
 }
+
+func TestReplacePendingSwapsInPlace(t *testing.T) {
+	s := openTest(t)
+	const acc, sp = "demo", "spaces/AAA"
+	if err := s.AddAccount(Account{Name: acc, Chat: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutChatMessages([]ChatMessage{{Account: acc, Name: PendingName(7), Space: sp, Text: "hi", Created: 1000, Ticks: TickPending}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReplacePending(7, ChatMessage{Account: acc, Name: sp + "/ABC", Space: sp, Text: "hi", Created: 5000, Ticks: 1}); err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := s.ChatMessages(acc, sp, 10)
+	if len(msgs) != 1 || msgs[0].Name != sp+"/ABC" || msgs[0].Ticks != 1 {
+		t.Fatalf("want only the sent one: %+v", msgs)
+	}
+	if msgs[0].Created != 1000 {
+		t.Fatalf("it moved: created %d, want the pending copy's 1000", msgs[0].Created)
+	}
+	// no copy (already swapped): it is just stored
+	if err := s.ReplacePending(8, ChatMessage{Account: acc, Name: sp + "/DEF", Space: sp, Text: "two", Created: 6000, Ticks: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if msgs, _ := s.ChatMessages(acc, sp, 10); len(msgs) != 2 {
+		t.Fatalf("want 2: %+v", msgs)
+	}
+}

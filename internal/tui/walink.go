@@ -183,7 +183,7 @@ func (m Model) linkPanel(w, h int) string {
 	keys := func(kv ...[2]string) string {
 		var k []string
 		for _, p := range kv {
-			k = append(k, s.keycap.Render(p[0])+" "+s.sub.Render(p[1]))
+			k = append(k, s.round(s.keycap, p[0])+" "+s.sub.Render(p[1]))
 		}
 		return strings.Join(k, "   ")
 	}
@@ -216,7 +216,7 @@ func (m Model) linkPanel(w, h int) string {
 			center("", s.muted.Render(spin[l.frame%len(spin)]+" asking WhatsApp for a code…"))
 			break
 		}
-		big := s.pill.Background(lipgloss.Color(s.c.Green)).Padding(0, 3).Render(strings.Join(strings.Split(l.code, ""), " "))
+		big := s.round(s.pill.Background(lipgloss.Color(s.c.Green)).Padding(0, 3), strings.Join(strings.Split(l.code, ""), " "))
 		center("", s.bold.Render("On your phone"), s.sub.Render("WhatsApp → Settings → Linked devices → Link a device → Link with phone number instead"), "",
 			s.text.Render("type this code:"), "", big, "", s.muted.Render(spin[l.frame%len(spin)]+" waiting for the phone"), "", keys([2]string{"esc", "cancel"}))
 	case l != nil && l.state == "qr":

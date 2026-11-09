@@ -7,6 +7,9 @@ out of date.
     python3 scripts/build-site.py           # write docs/
     python3 scripts/build-site.py --check   # exit 1 if docs/ would change
 
+site.toml may name an interactive demo (demo = "site/try.html"): it is
+copied to docs/try.html, and the nav and the hero link to it.
+
 Standard library only. The same file lives in every repository of the
 family (Vayu's tools): change it in one, copy it to all.
 """
@@ -288,6 +291,8 @@ def page(meta, title, body, depth=0, active="", toc=None, hero=""):
     accent = COLORS.get(meta.get("color", "mauve"), "#cba6f7")
     nav = [("Overview", f"{up}index.html", "home"), ("Changelog", f"{up}changelog.html", "changelog"),
            ("Decisions", f"{up}adr/index.html", "adr")]
+    if meta.get("demo"):  # an interactive demo: try it in the browser
+        nav.insert(1, ("Try it", f"{up}try.html", "try"))
     navhtml = "".join(f'<a href="{h}" class="{"on" if k == active else ""}{" hide" if k == "adr" else ""}">{t}</a>' for t, h, k in nav)
     navhtml += f'<a class="gh" href="{GH}/{name}">GitHub ↗</a>'
     tochtml = ""
@@ -412,7 +417,7 @@ def build():
 <h1>{name}</h1>
 <div class="sa">{meta.get("sanskrit", "")} <span>· “{html.escape(meta.get("meaning", ""))}”</span></div>
 <p class="lead">{html.escape(meta["tagline"])}</p>
-{shloka}<div class="cta"><a class="btn primary" href="#install">Install</a><a class="btn" href="{GH}/{name}">GitHub ↗</a>
+{shloka}<div class="cta">{'<a class="btn primary" href="try.html">Try it in your browser</a>' if meta.get("demo") else ""}<a class="btn{"" if meta.get("demo") else " primary"}" href="#install">Install</a><a class="btn" href="{GH}/{name}">GitHub ↗</a>
 <a class="btn" href="changelog.html">What's new{(' in ' + latest) if latest else ''}</a></div>
 <div class="meta"><span><b>{latest or 'unreleased'}</b> latest</span><span><b>{len([v for v in vers if v[0] != 'Unreleased'])}</b> releases</span><span><b>{len(adrs)}</b> decisions recorded</span><span><b>MIT</b> license</span></div>
 </div><img class="logo" src="assets/logo.svg" alt="{name} logo"></div></section>"""
@@ -460,6 +465,9 @@ def build():
                  "A decision is never edited away: a later one supersedes it. Sources: "
                  f"<a href=\"{GH}/{name}/tree/main/docs/adr\">docs/adr</a>.</p>")
     files[os.path.join("adr", "index.html")] = page(meta, f"Decisions · {name}", adr_intro + f'<div class="cards">{"".join(cards)}</div>', 1, "adr").encode()
+    # ---- the demo: a page of its own (site.toml demo = "path"), copied as is
+    if meta.get("demo"):
+        files["try.html"] = open(os.path.join(ROOT, meta["demo"]), "rb").read()
     files[".nojekyll"] = b""
     return files
 

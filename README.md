@@ -17,6 +17,10 @@
 </p>
 
 <p align="center">
+  <a href="https://theyashsawarkar.github.io/narada/try.html"><b>Try it in your browser</b></a>: the screen on made-up mail and chats, no install, nothing sent.
+</p>
+
+<p align="center">
   <img alt="narada's Mail place: the places and sections on top, the inbox as rows with coloured avatars on the left, the open thread on the right under a bar in the sender's colour, with its formatting, a table and numbered links" src="assets/screenshots/mail.png" width="100%">
 </p>
 
@@ -68,8 +72,9 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
   waits 10 seconds first, so `u` cancels that too.
 - **Claude can use it**: list, search, read, archive and draft mail, read
   and post in chat, through an MCP server and a `--json` CLI. In the screen,
-  `@` asks Claude, `S` summarises, `D` drafts a reply, `T` gives today's
-  digest.
+  `A` has Claude write your reply in any chat, WhatsApp chat or mail (you
+  use, edit, change or drop its draft), `Ctrl+g` polishes what you typed,
+  `@` asks Claude, `S` summarises, `T` gives today's digest.
 - **Nothing goes out without you**: an agent's send waits for your `y` in a
   popup (the same idea as [dvarapala](https://github.com/Theyashsawarkar/dvarapala)
   for root commands).
@@ -338,8 +343,20 @@ message or a mail) and shows the key for each, and `?` lists every key.
 |---|---|
 | `Space k` / `@` | Start a question to Claude, with this thread or chat as context |
 | `Space s` | Show Claude's summary of the thread or the chat's recent messages |
-| `Space d` | Create a reply draft with Claude, then edit it in your editor |
+| `A` / `Space d` | Create a reply or message with Claude (it reads this chat or mail; you use, edit, change or drop its draft) |
 | `Space t` | Show today's digest: what came in and what needs you |
+
+**AI draft** (after `A`; see [Writing with Claude](#writing-with-claude))
+
+| Key | Does |
+|---|---|
+| `1` - `4` | Pick one of the four suggested asks for Claude (reply, say yes, say no, …) |
+| `Tab` | Toggle more context for Claude (older messages, or your sent mail for tone) |
+| `y` | Send Claude's draft as yours (through the undo window) |
+| `e` | Edit Claude's draft yourself before sending |
+| `c` | Request changes to Claude's draft (shorter, warmer, in Hindi, or your own words) |
+| `←` / `→` | Show the previous / next version of the draft |
+| `n` / `Esc` | Cancel Claude's draft (nothing is sent) |
 
 **Other**
 
@@ -358,6 +375,7 @@ message or a mail) and shows the key for each, and `?` lists every key.
 | `Ctrl+o` | Add a file to the message |
 | `Ctrl+v` | Paste a copied image (a screenshot) into the message |
 | `Ctrl+t` | Send the message later (tomorrow 9am, fri 6pm, in 2h) |
+| `Ctrl+g` | Edit what you typed with Claude: polish it (your words, fixed up) |
 | `Ctrl+r` (WhatsApp) | Record a voice note (again stops and adds it; Enter sends it, Esc drops it) |
 | `Ctrl+p` (WhatsApp) | Send what you wrote as a poll: the question, then one option per line |
 | `@` (WhatsApp) | Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none) |
@@ -374,16 +392,20 @@ right side previews the highlighted file: text with line numbers, an
 image's size (the picture itself with `chafa` installed), a PDF's first
 page (with `pdftotext`). `Tab` picks several, `Enter` adds them.
 
-**The conversation**: their messages under their name and time, each beside
-a bar in their colour; yours indented, beside a mauve bar, with your ticks
-(blue once read). The time follows a message's last line, or gets a line of
-its own when the line holds text a terminal measures differently. A reply's
-quote sits above it, files (`gf` opens one) and numbered links (`gx`) with
-it, reactions as chips underneath and "(edited)" where a message changed.
-The picked message has a heavy bar and a `▶`.
+**The conversation** is bubbles: their messages under their name and time,
+each in a rounded bubble on the left; yours on the right in the accent
+colour, with your ticks (blue once read), with a blank line between one
+bubble and the next. The time (and ticks) sit at the bottom right inside the
+bubble. A reply's quote sits at the top of it, files (`gf` opens one) and
+numbered links (`gx`) in it, reactions as chips underneath and "(edited)"
+where a message changed. The picked message has a heavy frame and a `▶`. On
+WhatsApp the header says, right after the person's name, whether they're
+`● online`, when they were last seen, or `○ offline` (and when they're typing).
 
-**The lists** (mail, chat, WhatsApp) are rows on one panel, divided by
-hairlines, the picked one marked by a bar in the place's colour;
+**The lists** (mail, chat, WhatsApp) are rows on one panel, each with a
+blank row above and below, divided by hairlines, the picked one marked by a
+bar in the place's colour; the places and the section strip have a blank row
+under each;
 `list_style = "cards"` draws a box around each instead. **In a mail thread** read messages fold to
 one line each, and a run of four or more to a single "⋯ N earlier messages"
 line (`Enter` opens them all). **The message box** holds what you're
@@ -604,9 +626,9 @@ your chat with whoever posted it, quoting the status, so only they see it.
 `narada whatsapp status post` posts yours, which only you can: agents
 can't, and nothing else sends there. What happens to each status narada
 hears (kept, dropped and why) goes in `~/.local/state/narada/whatsapp.log`,
-beside WhatsApp's own warnings. While a chat is open, its top line
-says when they're typing (or recording a voice note), online, or when they
-were last seen (if they share it), and they see you typing, as with
+beside WhatsApp's own warnings. While a chat is open, its header
+says, after their name, when they're typing (or recording a voice note), online, or when they
+were last seen (if they share it), else offline, and they see you typing, as with
 WhatsApp Web. The status
 line shows `󰖣 N` for WhatsApp chats with unread messages, and new messages
 notify like chat DMs. The background service keeps WhatsApp online; without
@@ -708,10 +730,41 @@ claude  → contacts_find → mail_send
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
 
-The `@`, `S`, `D` and `T` keys in the screen run `claude -p` (your
+The `A`, `@`, `S` and `T` keys in the screen run `claude -p` (your
 `ai_command`) with the same server, so they use your Claude login. No API
 key. Any other MCP client works the same way: the server is `narada mcp`
 on stdio.
+
+### Writing with Claude
+
+In any chat, WhatsApp chat or mail, press `A` (or `Space d`). A pink box
+asks what to write; it shows what Claude will read: the last 30 messages
+of the chat (`Tab`: the last 200) or the whole thread (`Tab`: a few mails
+you sent, so it matches how you write). Type what you want to say, pick
+one of four quick asks with `1`-`4`, or just press Enter for a fitting
+reply.
+
+Claude writes in your voice: it looks at your own messages in that chat
+and answers in the same language, script and tone, so a chat you keep in
+Hinglish or Romanized Marathi gets a reply in Hinglish or Romanized
+Marathi. The draft shows in pink where your message would go:
+
+- `y` uses it: it goes out exactly as if you had typed it, through the undo
+  window (a mail reply quotes the original, as `r` does);
+- `e` gives it to you to finish: in the chat box, or the compose screen;
+- `c` asks for changes ("shorter", "warmer", "in Hindi", or your own
+  words), keeping every version (`←` / `→`);
+- `n` or `Esc` throws it away.
+
+While typing a chat message, `Ctrl+g` polishes it: spelling, grammar and
+punctuation fixed, your words and language kept; `n` gives you back what
+you typed.
+
+What Claude reads goes to it inside `<untrusted>` blocks, as data and never
+as instructions, and it isn't given narada's tools, so it can't read or
+send anything else. Nothing is sent until you press `y`. `ai_command` can be any program
+that takes a prompt as its last argument, the context on stdin, and prints
+the text.
 
 ## Sending safely
 
@@ -850,7 +903,7 @@ notify        = true        # desktop notifications for new mail and DMs
 list_style    = "panel"  # the lists: panel (rows, the picked one a card) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
-ai_command    = ["claude", "-p"]   # what @, S, D and T run
+ai_command    = ["claude", "-p"]   # what A, Ctrl+g, @, S and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed
 # compose     = "editor"           # write mail in the editor instead of the compose screen
 # include     = "~/.local/state/varna/narada.toml"   # a theme file; its [colors] win

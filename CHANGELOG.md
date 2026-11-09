@@ -2,6 +2,51 @@
 
 Newest first.
 
+## Unreleased
+
+- **A message you send shows once and stays put.** It appears the moment
+  you press Enter with ◷, then the same bubble gets ✓ (✓✓, blue) as it goes
+  out. Before, it showed twice while sending (in the chat and again as a
+  "sending…" block below), then both vanished and one came back, sometimes
+  in a new place. The swap is now one step that keeps its time. Google Chat
+  messages you send get a ✓ too.
+- **Rounded key caps everywhere**: the keys in the bar, the `Tab` hint, the
+  approval and search keys, and the WhatsApp linking code had square ends.
+- **Claude writes your reply: `A`** in any chat, WhatsApp chat or mail (or
+  `Space d`). A pink box shows what Claude will read (the last 30 messages,
+  `Tab` for 200; or the thread, `Tab` adds your sent mail for tone) and four
+  quick asks (`1`-`4`); type what you want to say or just press Enter. It
+  writes in your voice, in the language and script you use with that
+  person. Then `y` uses the draft (it goes out like anything you type,
+  through the undo window), `e` lets you finish it, `c` asks for changes and
+  keeps every version (`←` / `→`), `n` throws it away. It replaces `D`
+  (which still works) and works in chat, not only mail. The context goes to
+  it as untrusted data, and it gets no tools.
+- **`Ctrl+g` polishes what you typed** in a chat message: spelling, grammar
+  and punctuation, your words and language kept; `n` gives yours back.
+- **Try it in your browser**: the website has the screen running on made-up
+  data (`try.html`), with every key, Claude's drafts, and the corners
+  (offline, not linked, failed sends, 80 columns…).
+- **The list fills the pane**: rows are drawn to the bottom (the last may be
+  cut off) instead of leaving up to seven empty rows.
+- **A rule between the list and what's open**, so the two never run together.
+- **A run of messages sits together**: no blank line between bubbles from the
+  same sender; a run now breaks after five minutes (was ten). The "new" line
+  is peach (look here) instead of red.
+- **The list says what needs you**: `typing…` in green, an unsent draft in
+  peach, and a green dot after the name of whoever is online.
+- **`A` with nothing open** still goes to what agents are waiting on.
+- **Bubbles are back** in Chat and WhatsApp: each message in a rounded bubble,
+  theirs on the left, yours on the right in the accent colour, the time and
+  ticks inside at the bottom right; the picked one has a heavy frame. A blank
+  line separates one bubble from the next.
+- **More room**: a blank row under the places and under the section strip, and a
+  blank row above and below every row of the mail, chat and WhatsApp lists.
+- **Only `/` opens the search.** `Ctrl+k` no longer does (it's kept for scrolling).
+- **Online, right after the name**: a WhatsApp chat's header says `● online`,
+  `○ last seen …` or `○ offline` (or who's typing) after the person's name. The
+  demo shows Amma online and Ravi last seen three hours ago.
+
 ## v0.11.1 -- 2026-11-07
 
 A careful pass over every place, mode and key of the new screen, and fixes for

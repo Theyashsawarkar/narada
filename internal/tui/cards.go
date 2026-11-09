@@ -34,9 +34,9 @@ func (m Model) cardRows() int {
 	}
 	if m.panelList() {
 		if m.tab == tabMail {
-			return 4 // three lines and a hairline
+			return 6 // three lines, a blank row above and below, a hairline
 		}
-		return 3
+		return 5 // two lines, a blank row above and below, a hairline
 	}
 	return chatCardRows
 }
@@ -60,7 +60,7 @@ func (m Model) hairline(w int) string {
 }
 
 // listItem draws one entry of the list: a card (and the gap after it), or
-// on the panel, its rows and a hairline; the picked one is filled in the
+// on the panel, its rows with a blank row above and below, and a hairline; the picked one is filled in the
 // tab's colour (dimmer while the focus is on the preview).
 func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []string {
 	if !m.panelList() {
@@ -68,14 +68,17 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 	}
 	edge := fg(m.selEdge()).Bold(true)
 	var out []string
-	for i, l := range lines {
+	// a blank row above and below the text: room to breathe, and the
+	// picked row's bar runs down all of it
+	padded := append(append([]string{""}, lines...), "")
+	for i, l := range padded {
 		// the picked row has a bar in the place's colour down its left;
 		// an unread one a dot. Nothing is drawn after the text.
 		gutter := "  "
 		switch {
 		case sel:
 			gutter = edge.Render("▌") + " "
-		case dot && i == 0:
+		case dot && i == 1:
 			gutter = fg(m.partColor()).Bold(true).Render("●") + " "
 		}
 		out = append(out, gutter+l)
@@ -284,8 +287,9 @@ func (m Model) tickText(level int) string {
 }
 
 // chatBubble draws a message in a rounded outline: a soft border for
-// theirs, the accent for yours; the picked one is a heavy frame in the bright accent. The time (and your
-// ticks, blue once read) sit at the bottom right inside it.
+// theirs, the accent for yours; the picked one is a heavy frame in the
+// bright accent. The time (and your ticks, blue once read, red when it
+// failed) sit at the bottom right inside it.
 func (m Model) chatBubble(lines []string, maxW int, mine, sel bool, stamp string, read bool) []string {
 	s := m.styles
 	color := s.c.Border
@@ -304,8 +308,14 @@ func (m Model) chatBubble(lines []string, maxW int, mine, sel bool, stamp string
 	if read {
 		ticks = s.blue.Render(strings.TrimPrefix(stamp, t))
 	}
+	if stamp == "" {
+		return bubble(lines, maxW, color, sel)
+	}
 	sw := ansi.StringWidth(stamp)
 	stampText := s.muted.Render(t) + ticks
+	if strings.HasSuffix(stamp, "not sent") {
+		stampText = s.red.Render(stamp)
+	}
 	// the time beside the last line if it fits, else on its own line
 	last := len(lines) - 1
 	lw := ansi.StringWidth(lines[last])
@@ -324,47 +334,18 @@ func (m Model) chatBubble(lines []string, maxW int, mine, sel bool, stamp string
 	return bubble(body, iw+4, color, sel)
 }
 
-// chatMessage draws one message: its lines after a bar in the sender's
-// colour (heavy and bright when picked). Its time and ticks follow its last
-// line when that line is plain enough to measure, else get a line of their
-// own; nothing else is ever drawn after text (see fitTerm).
-func (m Model) chatMessage(lines []string, g store.ChatMessage, later, picked bool, color string, maxW int) []string {
-	s := m.styles
-	bar := fg(color).Render("▎") + " "
-	if picked {
-		bar = s.accent.Bold(true).Render("┃") + " "
-	}
+// bubbleStamp is what sits at the bottom right inside a bubble: its time
+// (the run's first message has it in the name line already) and, for
+// yours, the ticks.
+func (m Model) bubbleStamp(g store.ChatMessage, later bool) string {
 	stamp := ""
-	if later { // the run's first message has its time in the name line
-		stamp = s.muted.Render(time.UnixMilli(g.Created).Format("15:04"))
+	if later {
+		stamp = time.UnixMilli(g.Created).Format("15:04")
 	}
 	if g.Mine {
-		t := strings.TrimSpace(m.tickText(g.Ticks))
-		switch {
-		case g.Ticks == 3:
-			t = s.blue.Render(t)
-		case g.Ticks == store.TickFailed:
-			t = s.red.Render(t)
-		default:
-			t = s.muted.Render(t)
-		}
-		stamp = strings.TrimSpace(stamp + " " + t)
+		stamp += m.tickText(g.Ticks)
 	}
-	out := make([]string, 0, len(lines)+1)
-	for _, l := range lines {
-		out = append(out, bar+l)
-	}
-	if stamp != "" {
-		last := lines[len(lines)-1]
-		plain := ansi.Strip(last)
-		if ansi.StringWidth(plain) == ansi.StringWidthWc(plain) && ansi.StringWidth(last)+2+ansi.StringWidth(stamp) <= maxW &&
-			!strings.ContainsAny(last, "\U0010EEEE▀") {
-			out[len(out)-1] += "  " + stamp
-		} else {
-			out = append(out, bar+stamp)
-		}
-	}
-	return out
+	return strings.TrimSpace(stamp)
 }
 
 // ticks is WhatsApp's mark for how far your message got: ✓ sent,
@@ -467,7 +448,10 @@ func (m *Model) listView(w, h int) string {
 		}
 		return "earlier"
 	}
-	for i := m.offset; i < min(m.count(), m.offset+visible); i++ {
+	// draw rows until the pane is full: the last one may be cut off at the
+	// bottom (as in any list), never a gap under it while more are waiting.
+	// visible (the rows that fit whole) is what the keys scroll by.
+	for i := m.offset; i < m.count() && len(out) < h; i++ {
 		if g := group(i); g != "" && (i == m.offset || g != group(i-1)) {
 			label := " " + s.muted.Bold(true).Render(strings.ToUpper(g))
 			if n := len(out); n > 0 && (out[n-1] == "" || out[n-1] == " "+m.hairline(cw)) {
@@ -593,7 +577,23 @@ func (m *Model) listView(w, h int) string {
 			if sp.LastSender != "" {
 				last = strings.SplitN(sp.LastSender, " ", 2)[0] + ": " + last
 			}
-			lines = []string{row(m.avatar(name)+" "+mark+title, s.muted.Render(cli.When(sp.LastActive)), cw), m.indent() + s.muted.Render(last)}
+			// the row says what needs you without opening it: someone typing
+			// (green), what you left unsent (peach), who is online (a green dot)
+			preview := s.muted.Render(last)
+			if d, ok := m.chatDrafts[m.keyAt(i)]; ok && strings.TrimSpace(d.text) != "" {
+				preview = s.peach.Render("Draft: ") + s.muted.Render(oneLine(d.text))
+			}
+			if sp.Account == store.WhatsAppAccount {
+				if len(m.a.Store.TypingIn(sp.Name)) > 0 {
+					preview = s.green.Render("typing…")
+				}
+				if sp.Type == "DIRECT_MESSAGE" {
+					if pr := m.a.Store.PresenceOf(sp.Name); pr.Online && time.Since(time.UnixMilli(pr.At)) <= 10*time.Minute {
+						title += s.green.Render(" ●")
+					}
+				}
+			}
+			lines = []string{row(m.avatar(name)+" "+mark+title, s.muted.Render(cli.When(sp.LastActive)), cw), m.indent() + ansi.Truncate(preview, cw-lipgloss.Width(m.indent()), "…")}
 		}
 		out = m.addRow(out, i, lines, cw, border, sel, dot)
 	}
@@ -896,20 +896,11 @@ func (m *Model) chatLines(w int) []string {
 			people = append(people, c.SenderName)
 		}
 	}
+	// one to one: the header names them, whether they're online, their
+	// number; a group: who's here (who's typing is in the header too)
 	var head []string
-	if sp, ok := m.curSpace(); ok && sp.Type == "DIRECT_MESSAGE" {
-		// one to one: the header names them (and their number); here only
-		// whether they're online or typing
-		if t := m.presenceLine(sp); t != "" {
-			head = []string{t}
-		}
-	} else if !m.isStatus() {
+	if sp, ok := m.curSpace(); ok && sp.Type != "DIRECT_MESSAGE" && !m.isStatus() {
 		head = []string{s.muted.Render(ansi.Truncate(strings.Join(people, ", "), w-14, "…") + fmt.Sprintf(" · %d people", len(people)))}
-		if sp, ok := m.curSpace(); ok && sp.Account == store.WhatsAppAccount {
-			if t := m.presenceLine(sp); t != "" {
-				head = append(head, t)
-			}
-		}
 	}
 	newSince := int64(0)
 	if sp, ok := m.curSpace(); ok {
@@ -934,12 +925,12 @@ func (m *Model) chatLines(w int) []string {
 		if !newShown && newSince > 0 && !c.Mine && c.Created > newSince {
 			newShown = true
 			m.newLine = len(out)
-			out = append(out, divider("new", w, s.red))
+			out = append(out, divider("new", w, s.peach))
 		}
-		// a run: same sender, same day, each within 10 minutes of the last
+		// a run: same sender, same day, each within 5 minutes of the last
 		j := i + 1
 		status := m.isStatus() // one person's statuses stay together
-		for j < len(m.chatMsgs) && m.chatMsgs[j].Sender == c.Sender && (status || m.chatMsgs[j].Created-m.chatMsgs[j-1].Created < 10*60*1000) &&
+		for j < len(m.chatMsgs) && m.chatMsgs[j].Sender == c.Sender && (status || m.chatMsgs[j].Created-m.chatMsgs[j-1].Created <= 5*60*1000) &&
 			(status || dayName(time.UnixMilli(m.chatMsgs[j].Created)) == lastDay) &&
 			!(newSince > 0 && !newShown && !m.chatMsgs[j].Mine && m.chatMsgs[j].Created > newSince) {
 			j++
@@ -1007,7 +998,7 @@ func (m *Model) chatLines(w int) []string {
 			if g.Formatted != "" {
 				lines = append(lines, m.chatFormatted(g.Formatted, bw-4, mention)...)
 			} else if strings.TrimSpace(strings.Join(body, "\n")) != "" {
-				for _, l := range wrap(strings.Join(body, "\n"), bw-4) {
+				for _, l := range wrap(strings.Join(body, "\n"), bw-8) { // room for a link's [n]
 					lines = append(lines, m.chatLinks(styleMentions(l, s.text, mention)))
 				}
 			}
@@ -1027,10 +1018,10 @@ func (m *Model) chatLines(w int) []string {
 				lines = []string{s.muted.Render("…")}
 			}
 			lit := sel || g.Name == m.flashMsg
-			for n, l := range m.chatMessage(lines, g, k > 0, lit, color, bw) {
-				// ▶ beside its first line, left of the bar
+			for n, l := range m.chatBubble(lines, bw, g.Mine, lit, m.bubbleStamp(g, k > 0), g.Ticks == 3) {
+				// ▶ beside its middle line, left of the bubble
 				mark := "  "
-				if lit && n == 0 {
+				if lit && n == 1 {
 					mark = s.accent.Bold(true).Render("▶") + " "
 				}
 				if g.Mine {
@@ -1093,8 +1084,19 @@ func (m *Model) pendingLines(w int) []string {
 	s := m.styles
 	items := m.pendingHere()
 	m.pending = len(items) > 0
+	// a send already in the chat as its own bubble (◷, then ✓) isn't drawn
+	// again here: one message, one bubble, from Enter to delivered
+	shown := map[string]bool{}
+	for _, c := range m.chatMsgs {
+		if store.IsPending(c.Name) {
+			shown[c.Name] = true
+		}
+	}
 	var out []string
 	for _, it := range items {
+		if shown[store.PendingName(it.ID)] {
+			continue
+		}
 		var body []string
 		for _, f := range it.Out.Files {
 			body = append(body, "📎 "+firstNonEmpty(f.Name, filepath.Base(f.Source)))
@@ -1277,7 +1279,12 @@ func (m Model) previewPane(w, h int) []string {
 		}
 	} else if sp, ok := m.curSpace(); ok {
 		name := cli.SpaceTitle(sp)
-		head = m.avatar(name) + " " + s.bold.Render(name) + " " + s.muted.Render(m.spaceMeta(sp))
+		head = m.avatar(name) + " " + s.bold.Render(name)
+		if sp.Account == store.WhatsAppAccount && sp.Type != store.TypeStatus {
+			// right after the name: online, last seen, typing (as WhatsApp does)
+			head += m.presenceLine(sp)
+		}
+		head += " " + s.muted.Render(m.spaceMeta(sp))
 	}
 	aiLines := m.aiLines(inner)
 	var bottom []string
@@ -1319,6 +1326,10 @@ func (m Model) previewPane(w, h int) []string {
 	if m.tagStart >= 0 && m.mode == modeChatMsg {
 		bottom = append(m.tagBox(min(inner, max(30, inner*2/3))), bottom...)
 	}
+	if m.mode == modeAIWrite && m.aw != nil {
+		// writing with the agent: its box or its draft where your message goes
+		bottom = m.aiWriteLines(inner, h)
+	}
 	avail := h - 2 - len(aiLines) - len(bottom) // the header and its rule
 	if avail < 3 {
 		aiLines = aiLines[:max(0, len(aiLines)-(3-avail))]
@@ -1326,6 +1337,9 @@ func (m Model) previewPane(w, h int) []string {
 	}
 	lines := m.preview
 	scroll := max(0, min(m.scroll, len(lines)-avail))
+	if m.mode == modeAIWrite && m.aw != nil && m.aw.kind == "chat" {
+		scroll = max(0, len(lines)-avail) // the latest messages, just above what it writes
+	}
 	end := min(len(lines), scroll+avail)
 	view := append([]string{}, lines[scroll:end]...)
 	for len(view) < avail {
@@ -1352,7 +1366,7 @@ func (m Model) previewPane(w, h int) []string {
 			}
 			for line := st.line; line < end; line++ {
 				if line >= scroll && line < scroll+avail {
-					m.hits.msgRows[4+line-scroll] = st.name // under the places, sections, header and rule
+					m.hits.msgRows[topRows+2+line-scroll] = st.name // under the top rows, the header and its rule
 				}
 			}
 		}

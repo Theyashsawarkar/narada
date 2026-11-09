@@ -283,7 +283,7 @@ func (m Model) sectionStrip() string {
 			add(label, n, ncol, i == m.sec)
 		}
 	}
-	hint := s.keycap.Render("Tab") + s.muted.Render(" sections")
+	hint := s.round(s.keycap, "Tab") + s.muted.Render(" sections")
 	if m.w < 110 || m.inAISection() {
 		hint = ""
 	}
@@ -342,6 +342,8 @@ func (m Model) modeLook() (string, string) {
 		return "PICTURE", m.partColor()
 	case modeReact:
 		return "REACT", s.c.Yellow
+	case modeAIWrite:
+		return "AI", s.c.Pink
 	}
 	names := map[mode]string{modeAsk: "ASK", modeSaveName: "SAVE", modeDraftHint: "DRAFT", modePhone: "LINK", modeLink: "LINK",
 		modeRename: "RENAME", modePick: "FILES", modeWhen: "LATER", modeConvo: "NEW CHAT", modeForward: "FORWARD", modeVote: "VOTE"}
@@ -359,14 +361,14 @@ func (m Model) footerView() string {
 		left += " " + s.yellow.Bold(true).Render(m.prefix+"…")
 	}
 	for _, k := range m.barKeys() {
-		left += "  " + s.keycap.Render(k[0]) + s.sub.Render(" "+k[1])
+		left += "  " + s.round(s.keycap, k[0]) + s.sub.Render(" "+k[1])
 	}
 	right := ""
 	switch {
 	case m.toast != "":
 		right = s.green.Render(m.toast)
 	case m.mode == modeNormal && !m.leader && !m.visual:
-		right = s.keycap.Render("/") + s.muted.Render(" find  ") + s.keycap.Render("␣") + s.muted.Render(" menu  ") + s.keycap.Render("?") + s.muted.Render(" keys")
+		right = s.round(s.keycap, "/") + s.muted.Render(" find  ") + s.round(s.keycap, "␣") + s.muted.Render(" menu  ") + s.round(s.keycap, "?") + s.muted.Render(" keys")
 	}
 	if rw := lipgloss.Width(right); rw > m.w/2 {
 		right = ansi.Truncate(right, m.w/2, "…")
@@ -434,6 +436,20 @@ func (m Model) barKeys() [][2]string {
 		return [][2]string{{"enter", "send"}, {"esc", "normal mode"}, {"alt+enter", "new line"}, {"ctrl+o", "file"}, {"ctrl+t", "later"}}
 	case modeHelp:
 		return [][2]string{{"↑↓", "scroll"}, {"type", "to filter"}, {"esc", "close"}}
+	case modeAIWrite:
+		switch {
+		case m.aw == nil:
+		case m.aw.stage == awThink:
+			return [][2]string{{"esc", "stop"}}
+		case m.aw.stage == awAsk && m.aw.change:
+			return [][2]string{{"enter", "rewrite"}, {"1-4", "pick one"}, {"esc", "back to the draft"}}
+		case m.aw.stage == awAsk:
+			return [][2]string{{"enter", "write"}, {"1-4", "pick one"}, {"tab", "more context"}, {"esc", "cancel"}}
+		}
+		if len(m.aw.versions) > 1 {
+			return [][2]string{{"y", "use it"}, {"e", "edit it"}, {"c", "change it"}, {"←→", "versions"}, {"n", "throw away"}}
+		}
+		return [][2]string{{"y", "use it"}, {"e", "edit it"}, {"c", "change it"}, {"n", "throw away"}}
 	}
 	switch {
 	case m.isStatus() && !m.pickingMsg():

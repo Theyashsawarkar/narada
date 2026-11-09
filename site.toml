@@ -2,10 +2,11 @@
 name = "narada"
 sanskrit = "नारद"
 meaning = "the divine messenger"
-tagline = "Gmail and Google Chat without leaving the terminal, with an agent that can read, draft and send for you."
+tagline = "Gmail, Google Chat and WhatsApp without leaving the terminal, with an agent that can read, draft and send for you."
 color = "sapphire"
 kind = "mail & chat"
 logo = "assets/logo.svg"
 shloka = "अश्वत्थः सर्ववृक्षाणां देवर्षीणां च नारदः ।\nगन्धर्वाणां चित्ररथः सिद्धानां कपिलो मुनिः ॥"
 shloka_meaning = "Among trees I am the sacred fig; among divine sages, Nārada."
 shloka_source = "Bhagavad Gītā 10.26"
+demo = "site/try.html"  # docs/try.html: the screen in the browser, on made-up data
