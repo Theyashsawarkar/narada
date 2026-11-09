@@ -2,7 +2,7 @@
 
 Newest first.
 
-## Unreleased
+## v0.12.0 -- 2026-11-09
 
 - **Your messages follow WhatsApp's layout:** each bubble ends at the right edge, no "You" line above them, the time in every bubble.
 
@@ -42,7 +42,7 @@ Newest first.
   person. Then `y` uses the draft (it goes out like anything you type,
   through the undo window), `e` lets you finish it, `c` asks for changes and
   keeps every version (`←` / `→`), `n` throws it away. It replaces `D`
-  (which still works) and works in chat, not only mail. The context goes to
+  (which now says it moved to `Space k d`) and works in chat, not only mail. The context goes to
   it as untrusted data, and it gets no tools.
 - **`Ctrl+g` polishes what you typed** in a chat message: spelling, grammar
   and punctuation, your words and language kept; `n` gives yours back.

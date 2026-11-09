@@ -816,7 +816,7 @@ device in and sent your recent chats (up to two minutes), then hands over
 to the background service. WhatsApp is the third place (`Space t w`), with
 sections All, Unread, People, Groups, Scheduled, Archived and Status (a row
 for each person with a status up); `i` types a message, `r` on a picked message replies quoting it,
-`e` reacts to it (one reaction each, as on the phone: another replaces yours,
+`Space i e` reacts to it (one reaction each, as on the phone: another replaces yours,
 picking yours again takes it back, and other people's show under their messages),
 `@` while typing lists who you can tag (a group's members and whoever has written
 there; type to narrow it) and tags show as names: the name you saved, else the name
