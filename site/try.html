@@ -907,8 +907,8 @@ function overlayHTML(){
     const sec=(t,rows)=>`<div><h5>${t}</h5>${rows.map(r=>`<div class="k2"><kbd>${r[0]}</kbd><span>${r[1]}</span></div>`).join('')}</div>`;
     return `<div class="ov help" data-n="help"><div style="display:flex"><b>All keys</b><span class="muted" style="margin-left:auto">esc closes · / filters</span></div><div class="cols">
      ${sec('Move',[['j k','down, up (5j: five)'],['gg G','top, bottom'],['Ctrl+d u','half a page'],['Ctrl+j k','scroll what\'s open'],['⏎ l','open'],['h','back to the list'],['H L','places'],['Tab ]]','next section']])}
-     ${sec('Write',[['i','write here'],['r','reply to it'],['R','reply to all (mail)'],['o','a new mail or message'],['Space i f','forward'],['Ctrl+t','send later'],['Ctrl+o','attach'],['esc','stop writing']])}
-     ${sec('Change',[['e','archive (u undoes it)'],['dd','delete (asks: y only)'],['u','undo'],['R','send a failed one again'],['Space m s','star'],['Space m p','pin']])}
+     ${sec('Write',[['i','write here'],['r','reply to it'],['R','reply to all (mail)'],['o','a new mail or message'],['Space i f','forward'],['Ctrl+t','send later'],['Ctrl+o','attach'],['esc','the box\'s NORMAL (h l w b, x dw cw, u); esc again leaves']])}
+     ${sec('Change',[['e','archive (u undoes it)'],['dd','delete (asks: y only)'],['d3j','three more too'],['.','repeat it'],['u','undo'],['Ctrl+r','redo'],['ma / \'a','mark / come back'],['R','send a failed one again'],['Space m s','star'],['Space m p','pin']])}
      ${sec('Find',[['/','search everywhere'],['n N','next, previous unread'],[':','command bar']])}
      ${sec('Leader Space',[['Space t m c w a','Mail, Chat, WhatsApp, AI'],['Space k d','write with Claude'],['Space f f','find anything'],['⌫','up a level'],['Space ?','all keys']])}
      ${sec('View',[['zq','show quoted'],['gf','open the file'],['?','this help']])}

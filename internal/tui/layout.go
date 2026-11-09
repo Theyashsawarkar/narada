@@ -325,6 +325,9 @@ func (m Model) modeLook() (string, string) {
 		}
 		return "NORMAL", m.partColor()
 	case modeChatMsg, modeCompose:
+		if m.boxNormal || (m.comp != nil && m.comp.vim) {
+			return "NORMAL", m.partColor() // the box's own
+		}
 		return "INSERT", s.c.Mauve
 	case modeFind:
 		return "FIND", s.c.Mauve
@@ -439,6 +442,9 @@ func (m Model) barKeys() [][2]string {
 	case modeReact:
 		return [][2]string{{"h/l", "pick"}, {"1-0", "that one"}, {"enter", "react"}, {"esc", "cancel"}}
 	case modeChatMsg:
+		if m.boxNormal {
+			return [][2]string{{"i/a", "type"}, {"h/l w/b", "move"}, {"x dw cw", "edit"}, {"u", "undo"}, {"enter", "send"}, {"Space e e", "$EDITOR"}, {"esc", "leave the box"}}
+		}
 		if m.tagStart >= 0 {
 			return [][2]string{{"↑↓", "pick"}, {"enter/tab", "tag them"}, {"esc", "no tag"}}
 		}

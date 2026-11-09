@@ -59,6 +59,11 @@ func (r recip) label() string {
 }
 
 type composer struct {
+	vim           bool     // the body's own NORMAL (Esc in the body)
+	vimPend       string   // a sequence under way there
+	vimUndo       []string // its u
+	vimRedo       []string // and Ctrl+r
+	vimLeft       bool     // Esc from the body's NORMAL: the compose screen's own Esc
 	account, from string
 	title         string
 	base          store.Outgoing // thread, references, draft id...
@@ -518,6 +523,38 @@ func (m *Model) dropDraft() {
 func (m Model) composerKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	c := m.comp
 	key := k.String()
+	if c.focus == fBody && c.vim && key != "ctrl+s" && key != "ctrl+c" {
+		if k.Type == tea.KeyRunes && len(k.Runes) > 1 && !k.Paste {
+			var mm tea.Model = m
+			var cmds []tea.Cmd
+			for i, r := range k.Runes {
+				x := mm.(Model)
+				var cmd tea.Cmd
+				if x.comp == nil || !x.comp.vim {
+					if x.comp != nil {
+						mm, cmd = x.composerKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: k.Runes[i:]})
+						cmds = append(cmds, cmd)
+					}
+					break
+				}
+				mm, cmd = x.composeVimKey(string(r))
+				cmds = append(cmds, cmd)
+			}
+			return mm, tea.Batch(cmds...)
+		}
+		return m.composeVimKey(key)
+	}
+	left := c.vimLeft
+	c.vimLeft = false
+	if key == "esc" && !left && !c.armed && c.focus == fBody && !c.vim && len(c.sugg) == 0 && m.a.Config.BoxVim() && strings.TrimSpace(c.body.Value()) != "" {
+		// the body's own NORMAL: the text and the cursor stay
+		c.vim, c.vimPend = true, ""
+		b := c.bodyText()
+		b.cur--
+		b.clampNormal()
+		c.setBodyText(b)
+		return m, nil
+	}
 	if key != "esc" && key != "ctrl+s" {
 		c.armed = false
 	}
@@ -1054,4 +1091,87 @@ func ago(ms int64) string {
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
 	return time.UnixMilli(ms).Format("Jan 2006")
+}
+
+// bodyText is the body and its cursor, as the box's Vim keys see them.
+func (c *composer) bodyText() boxText {
+	lines := strings.Split(c.body.Value(), "\n")
+	row := min(c.body.Line(), len(lines)-1)
+	li := c.body.LineInfo()
+	i := 0
+	for r := 0; r < row; r++ {
+		i += len([]rune(lines[r])) + 1
+	}
+	return boxText{t: []rune(c.body.Value()), cur: i + min(li.StartColumn+li.ColumnOffset, len([]rune(lines[row])))}
+}
+
+// setBodyText puts text in the body with the cursor at b.cur.
+func (c *composer) setBodyText(b boxText) {
+	c.body.SetValue(string(b.t))
+	row, col := 0, 0
+	for _, r := range b.t[:max(0, min(b.cur, len(b.t)))] {
+		if r == '\n' {
+			row, col = row+1, 0
+		} else {
+			col++
+		}
+	}
+	for guard := 0; c.body.Line() > row && guard < 10000; guard++ {
+		c.body.CursorUp()
+	}
+	c.body.SetCursor(col)
+}
+
+// composeVimKey is a key in the compose body's NORMAL.
+func (m Model) composeVimKey(key string) (tea.Model, tea.Cmd) {
+	c := m.comp
+	switch key {
+	case "u":
+		if n := len(c.vimUndo); n > 0 {
+			c.vimRedo = append(c.vimRedo, c.body.Value())
+			b := c.bodyText()
+			c.setBodyText(boxText{t: []rune(c.vimUndo[n-1]), cur: b.cur})
+			c.vimUndo = c.vimUndo[:n-1]
+		}
+		return m, nil
+	case "ctrl+r":
+		if n := len(c.vimRedo); n > 0 {
+			c.vimUndo = append(c.vimUndo, c.body.Value())
+			b := c.bodyText()
+			c.setBodyText(boxText{t: []rune(c.vimRedo[n-1]), cur: b.cur})
+			c.vimRedo = c.vimRedo[:n-1]
+		}
+		return m, nil
+	case "tab", "shift+tab":
+		c.vim = false
+		return m.composerKey(tea.KeyMsg{Type: map[bool]tea.KeyType{true: tea.KeyTab, false: tea.KeyShiftTab}[key == "tab"]})
+	}
+	b := c.bodyText()
+	before := c.body.Value()
+	clip := ""
+	if key == "p" {
+		clip = clipboardText()
+	}
+	r := boxApply(&b, &c.vimPend, key, clip)
+	if r.changed {
+		c.vimUndo, c.vimRedo = append(c.vimUndo, before), nil
+		c.dirty = true
+	}
+	c.setBodyText(b)
+	switch {
+	case r.leave:
+		c.vim, c.vimLeft = false, true
+		return m.composerKey(tea.KeyMsg{Type: tea.KeyEsc}) // the compose screen's own Esc
+	case r.insert:
+		c.vim = false
+	case r.send:
+		// Enter in the body is a new line, not a send: Ctrl+s sends mail
+		m.say("Ctrl+s sends the mail · i types")
+	case r.editor:
+		c.vim = false
+		return m.composerKey(tea.KeyMsg{Type: tea.KeyCtrlE})
+	case r.unknown && len(key) == 1:
+		m.say(key + " does nothing in the body's NORMAL · i types · Esc leaves")
+	}
+	return m, nil
 }

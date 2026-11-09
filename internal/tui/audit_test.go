@@ -75,14 +75,18 @@ func TestEscKeepsTheDraft(t *testing.T) {
 	m = press(m, " ", "t", "c", "i")
 	m = typeText(m, "half written")
 	m = press(m, "esc")
+	if m.mode != modeChatMsg || !m.boxNormal {
+		t.Fatal("the first esc goes to the box's own NORMAL")
+	}
+	m = press(m, "esc")
 	if m.mode != modeNormal {
-		t.Fatal("esc leaves INSERT")
+		t.Fatal("a second esc leaves the box")
 	}
 	m = press(m, "i")
 	if string(m.input) != "half written" {
 		t.Fatalf("the draft: %q", string(m.input))
 	}
-	m = press(m, "esc", "h", "j") // another chat: its own (empty) box
+	m = press(m, "esc", "esc", "h", "j") // another chat: its own (empty) box
 	m = press(m, "i")
 	if string(m.input) != "" {
 		t.Fatalf("another chat's box: %q", string(m.input))

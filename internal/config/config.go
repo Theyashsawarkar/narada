@@ -148,6 +148,9 @@ type Config struct {
 	Compose  string    `toml:"compose"`
 	Sections []Section `toml:"section"`
 	Colors   Colors    `toml:"colors"`
+	// MessageBoxVim: Esc while writing goes to the box's own NORMAL (h l w
+	// b, x dw cw, u…); a second Esc leaves the box. Default on.
+	MessageBoxVim *bool `toml:"message_box_vim"`
 	// Keys binds your own keys: [keys.normal] "gh" = "go.inbox" (Vim's
 	// notation: <C-j>, <Space>, <CR>; the action names are :map's)
 	Keys Keys `toml:"keys"`
@@ -155,6 +158,9 @@ type Config struct {
 	// ~/.local/state/varna/narada.toml); its [colors] win.
 	Include string `toml:"include"`
 }
+
+// BoxVim says whether the message box has its own NORMAL (default yes).
+func (c Config) BoxVim() bool { return c.MessageBoxVim == nil || *c.MessageBoxVim }
 
 // Keys is config.toml's [keys]: keys → action, per mode (NORMAL only).
 type Keys struct {

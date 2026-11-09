@@ -186,6 +186,11 @@ type Model struct {
 	convQ         string // Space f h: what's looked for in what's open (n / N)
 	convHit       int
 	convLine      int
+	boxNormal     bool             // the message box's own NORMAL (Esc while writing)
+	boxPend       string           // a sequence under way there (d, c, ci, g, Space e)
+	boxUndo       [][]rune         // the box's u
+	boxRedo       [][]rune         // and Ctrl+r
+	ctrlX         bool             // Ctrl+x pressed while writing: Ctrl+e opens $EDITOR
 	statusN       int              // people with a status update you haven't seen
 	picking       bool             // in an open chat, j/k pick messages (else it's read)
 	hits          *hits            // where things were drawn, for the mouse (shared by copies)
@@ -1376,6 +1381,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.ai, m.aiTitle = strings.TrimSpace(msg.text), msg.title
 		return m, nil
+	case boxEditedMsg:
+		return m.afterBoxEdit(msg)
 	case editedMsg:
 		return m.afterEdit(msg)
 	case convoDirTick:
@@ -1497,6 +1504,39 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeAIWrite {
 		return m.aiWriteKey(k)
+	}
+	if m.mode == modeChatMsg && m.boxNormal {
+		if k.Type == tea.KeyRunes && len(k.Runes) > 1 && !k.Paste {
+			// typed fast: one key at a time; once one starts typing, the rest is text
+			var mm tea.Model = m
+			var cmds []tea.Cmd
+			for i, r := range k.Runes {
+				x := mm.(Model)
+				var cmd tea.Cmd
+				if x.mode != modeChatMsg || !x.boxNormal {
+					if x.mode == modeChatMsg {
+						mm, cmd = x.inputKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: k.Runes[i:]})
+						cmds = append(cmds, cmd)
+					}
+					break
+				}
+				mm, cmd = x.boxKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				cmds = append(cmds, cmd)
+			}
+			return mm, tea.Batch(cmds...)
+		}
+		return m.boxKey(k)
+	}
+	if m.mode == modeChatMsg && (s == "ctrl+x" || m.ctrlX) {
+		// Ctrl+x Ctrl+e: the message in $EDITOR
+		was := m.ctrlX
+		m.ctrlX = s == "ctrl+x" && !was
+		if was && s == "ctrl+e" {
+			return m, m.boxEditor()
+		}
+		if m.ctrlX {
+			return m, nil
+		}
 	}
 	if m.mode == modeNews {
 		return m.newsKey(s)
@@ -1626,6 +1666,15 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.Type {
 	case tea.KeyEsc:
 		m.back = 0
+		if m.mode == modeChatMsg && m.editingMsg == "" && m.a.Config.BoxVim() && len(m.input) > 0 && !m.boxNormal {
+			// the box's own NORMAL: the text and the cursor stay in it
+			m.boxNormal, m.boxPend = true, ""
+			b := boxText{t: m.input, cur: m.cursor()}
+			b.cur--
+			b.clampNormal()
+			m.setCursor(b.cur)
+			return m, nil
+		}
 		if m.mode == modeChatMsg && m.editingMsg == "" {
 			// back to NORMAL: what you wrote, the reply and the files stay
 			// for this chat until you send them or clear them (Ctrl+u)

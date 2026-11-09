@@ -183,6 +183,10 @@ func TestComposer(t *testing.T) {
 	// Esc: once warns when something is written, twice discards
 	m = press(m, "o", "tab", "tab", "tab")
 	m = typeText(m, "unsent")
+	m = press(m, "esc") // the body's own NORMAL first
+	if m.mode != modeCompose || !m.comp.vim {
+		t.Fatal("esc in the body: its NORMAL")
+	}
 	m = press(m, "esc")
 	if m.mode != modeCompose {
 		t.Fatal("one Esc discarded a written message")

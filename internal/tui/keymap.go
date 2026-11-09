@@ -266,7 +266,8 @@ var otherKeys = []keymap.Binding{
 	{Seq: "y", Desc: "Copy the subjects or chat names picked", Where: "visual", Modes: []vmode.Mode{vmode.Visual}},
 	{Seq: "Esc / v", Desc: "Leave VISUAL (nothing stays picked)", Where: "visual", Modes: []vmode.Mode{vmode.Visual}},
 	// INSERT: the message box
-	{Seq: "Esc", Desc: "Go back to NORMAL mode (what you wrote stays)", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
+	{Seq: "Esc", Desc: "Switch to the box's own NORMAL (the text and the cursor stay; Esc again leaves the box)", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
+	{Seq: "Ctrl+x Ctrl+e", Desc: "Edit the message in your editor ($EDITOR), then come back", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
 	{Seq: "Enter", Desc: "Send the message and keep writing the next one", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
 	{Seq: "Alt+Enter / Ctrl+j", Desc: "Start a new line in the message", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
 	{Seq: "Ctrl+o", Desc: "Add a file to the message", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
@@ -278,6 +279,17 @@ var otherKeys = []keymap.Binding{
 	{Seq: "@", Desc: "Pick someone to tag on WhatsApp from the list (Up/Down, Enter or Tab; Esc for none)", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
 	{Seq: "Left / Right / Alt+b / Alt+f / Ctrl+a / Ctrl+e", Desc: "Move the cursor by letter, word, line start / end", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
 	{Seq: "Ctrl+w / Ctrl+k / Ctrl+u", Desc: "Delete the word before the cursor / to the end / the whole message", Where: "writing", Modes: []vmode.Mode{vmode.Insert}},
+	// the message box's NORMAL (Esc while writing; the compose body too)
+	{Seq: "h / l / w / b / e / 0 / ^ / $", Desc: "Move the cursor in the message by a letter, a word, to the line's start / end", Where: "boxnormal"},
+	{Seq: "j / k / gg / G", Desc: "Move the cursor a line down / up, to the first / last line", Where: "boxnormal"},
+	{Seq: "x / dw / dd / D", Desc: "Delete a letter / a word / the line / to the end of the line", Where: "boxnormal"},
+	{Seq: "cw / ciw / C", Desc: "Delete a word / the word under the cursor / the rest of the line and type in its place (cw, ciw, C)", Where: "boxnormal"},
+	{Seq: "u / Ctrl+r", Desc: "Undo / redo a change to the message", Where: "boxnormal"},
+	{Seq: "i / a / I / A / o", Desc: "Start typing again: here, after, at the line's start / end, on a new line", Where: "boxnormal"},
+	{Seq: "p", Desc: "Paste the copied text after the cursor", Where: "boxnormal"},
+	{Seq: "Enter", Desc: "Send the message from the box's NORMAL (the compose screen: Ctrl+s)", Where: "boxnormal"},
+	{Seq: "Space e e", Desc: "Edit the message in your editor ($EDITOR) from the box's NORMAL", Where: "boxnormal"},
+	{Seq: "Esc / q", Desc: "Leave the box (what you wrote stays for this chat)", Where: "boxnormal"},
 	// Claude writing a reply
 	{Seq: "1 - 4", Desc: "Pick one of the four suggested asks for Claude (reply, say yes, say no, …)", Where: "aidraft"},
 	{Seq: "Tab", Desc: "Toggle more context for Claude (older messages, or your sent mail for tone)", Where: "aidraft"},
@@ -349,6 +361,7 @@ var narKeys = keymap.New("narada", normalKeys, otherKeys).
 	Where(inWA, "On WhatsApp").
 	Where("visual", "Picking several (VISUAL)").
 	Where("writing", "Writing a message (INSERT)").
+	Where("boxnormal", "The message box's NORMAL (Esc while writing)").
 	Where("aidraft", "Claude writing your reply").
 	Where("compose", "Writing a mail").
 	Where("search", "Searching (/)").

@@ -255,7 +255,34 @@ chat, `i` this message, `w` window, `x` the AI requests). Press Space and
 wait, and a menu shows what can follow (typed straight on, it never shows);
 `Backspace` goes up a level, `Esc` cancels. `Space Space` searches every
 action, `/` finds anything (an action, a chat, a person, a message or a
-mail), and `?` lists every key. A key that moved says where it went.
+mail), and `?` lists every key. A key that moved says where it went (`:news`
+lists them all, as the screen does once after an update).
+
+**The command bar** (`:`) floats in the middle: type a few letters and the
+rest of the best match shows in grey (`→` takes it), with up to eight
+suggestions and their keys; `Tab` picks, `Enter` runs. Arguments complete
+too (`:label`, `:account`, `:go`, `:chat`, `:later`, `:react`, `:mute`,
+`:set`, `:map`, `:help`); every action is a command by its name
+(`:go.inbox`), a count goes in front (`:3archive`) and from VISUAL the range
+(`:'<,'>read`). `↑` walks the history (kept across runs), `Ctrl+r` searches
+it. `:set scroll_lines=5`, `:set compact` and `:map gh go.inbox` last the
+session; `[keys.normal]` in config.toml keeps your own keys.
+
+**Vim's verbs** work on threads and chats: `dj`, `d3j`, `dG` trash what they
+span after one question; `.` repeats the last change; `u` / `Ctrl+r` undo and
+redo (a send is only ever taken back inside its undo window); `gv` picks the
+last range again; `ma` sets a mark and `'a` comes back to it, even after a
+restart; `Ctrl+o` / `]j` walk the jump list; `Space f h` with something open
+searches inside it, then `n` / `N`; `*` / `#` step through one sender's
+messages; `Space u` toggles the layout (`u f` what's open full width, `u p`
+no preview, `u c` a compact list, `u i` pictures).
+
+**The message box speaks Vim too.** `Esc` while writing goes to the box's
+own NORMAL, keeping your text and cursor: `h l w b e 0 $`, `j k gg G`, `x dw dd
+D cw ciw C`, `u` / `Ctrl+r`, `p`, then `i a I A o` to type again; `Enter`
+still sends, and a second `Esc` leaves the box with your text kept. `Space e e`
+there (or `Ctrl+x Ctrl+e` while typing) edits the message in `$EDITOR`. The
+compose screen's body works the same way (`Ctrl+s` sends the mail).
 
 <p align="center">
   <img alt="Space pressed in the WhatsApp place: a menu along the bottom lists what each next key does, grouped in four columns, with the mode LEADER in the bar" src="assets/screenshots/leader.png" width="80%">
@@ -440,7 +467,8 @@ mail), and `?` lists every key. A key that moved says where it went.
 | Keys | What it does |
 |---|---|
 | | *While typing* |
-| <kbd>Esc</kbd> | Go back to NORMAL mode (what you wrote stays) |
+| <kbd>Esc</kbd> | Switch to the box's own NORMAL (the text and the cursor stay; Esc again leaves the box) |
+| <kbd>Ctrl+x</kbd> <kbd>Ctrl+e</kbd> | Edit the message in your editor ($EDITOR), then come back |
 | <kbd>Enter</kbd> | Send the message and keep writing the next one |
 | <kbd>Alt+Enter</kbd> or <kbd>Ctrl+j</kbd> | Start a new line in the message |
 | <kbd>Ctrl+o</kbd> | Add a file to the message |
@@ -452,6 +480,22 @@ mail), and `?` lists every key. A key that moved says where it went.
 | <kbd>@</kbd> | Pick someone to tag on WhatsApp from the list (Up/Down, Enter or Tab; Esc for none) |
 | <kbd>Left</kbd> or <kbd>Right</kbd> or <kbd>Alt+b</kbd> or <kbd>Alt+f</kbd> or <kbd>Ctrl+a</kbd> or <kbd>Ctrl+e</kbd> | Move the cursor by letter, word, line start / end |
 | <kbd>Ctrl+w</kbd> or <kbd>Ctrl+k</kbd> or <kbd>Ctrl+u</kbd> | Delete the word before the cursor / to the end / the whole message |
+
+**The message box's NORMAL (Esc while writing)**
+
+| Keys | What it does |
+|---|---|
+| <kbd>h</kbd> or <kbd>l</kbd> or <kbd>w</kbd> or <kbd>b</kbd> or <kbd>e</kbd> or <kbd>0</kbd> or <kbd>^</kbd> or <kbd>$</kbd> | Move the cursor in the message by a letter, a word, to the line's start / end |
+| <kbd>j</kbd> or <kbd>k</kbd> or <kbd>gg</kbd> or <kbd>G</kbd> | Move the cursor a line down / up, to the first / last line |
+| <kbd>x</kbd> or <kbd>dw</kbd> or <kbd>dd</kbd> or <kbd>D</kbd> | Delete a letter / a word / the line / to the end of the line |
+| <kbd>cw</kbd> or <kbd>ciw</kbd> or <kbd>C</kbd> | Delete a word / the word under the cursor / the rest of the line and type in its place (cw, ciw, C) |
+| <kbd>u</kbd> or <kbd>Ctrl+r</kbd> | Undo / redo a change to the message |
+| <kbd>i</kbd> or <kbd>a</kbd> or <kbd>I</kbd> or <kbd>A</kbd> or <kbd>o</kbd> | Start typing again: here, after, at the line's start / end, on a new line |
+| <kbd>p</kbd> | Paste the copied text after the cursor |
+| <kbd>Enter</kbd> | Send the message from the box's NORMAL (the compose screen: Ctrl+s) |
+| <kbd>Esc</kbd> or <kbd>q</kbd> | Leave the box (what you wrote stays for this chat) |
+| <kbd>Space</kbd> <kbd>e</kbd> | *Edit…* |
+| <kbd>Space</kbd> <kbd>e</kbd> <kbd>e</kbd> | Edit the message in your editor ($EDITOR) from the box's NORMAL |
 
 **Claude writing your reply**
 
@@ -1085,6 +1129,7 @@ list_style    = "panel"  # the lists: panel (rows, the picked one a card) or car
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
 scroll_lines  = 3           # how far Ctrl+j / Ctrl+k scroll what's open
+message_box_vim = true      # Esc while writing: the box's own NORMAL (h l w b, x dw cw, u); Esc again leaves
 ai_command    = ["claude", "-p"]   # what A, Ctrl+g, @, S and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed
 # compose     = "editor"           # write mail in the editor instead of the compose screen
@@ -1100,6 +1145,10 @@ label = "INBOX"
 [[section]]
 name  = "GitHub"
 query = "from:notifications@github.com newer_than:14d"
+
+[keys.normal]      # your own keys, Vim's notation; the names are :map's (Tab after :map gh)
+"gh"    = "go.inbox"
+"<C-j>" = "scroll.down"
 
 [colors]           # Catppuccin Mocha by default
 accent  = "#74c7ec"

@@ -168,7 +168,8 @@
 # keybind: Tmux/narada visual:visual | ~ | Toggle everything picked read / unread
 # keybind: Tmux/narada visual:visual | y | Copy the subjects or chat names picked
 # keybind: Tmux/narada visual:visual | Esc / v | Leave VISUAL (nothing stays picked)
-# keybind: Tmux/narada writing:insert | Esc | Go back to NORMAL mode (what you wrote stays)
+# keybind: Tmux/narada writing:insert | Esc | Switch to the box's own NORMAL (the text and the cursor stay; Esc again leaves the box)
+# keybind: Tmux/narada writing:insert | Ctrl+x Ctrl+e | Edit the message in your editor ($EDITOR), then come back
 # keybind: Tmux/narada writing:insert | Enter | Send the message and keep writing the next one
 # keybind: Tmux/narada writing:insert | Alt+Enter / Ctrl+j | Start a new line in the message
 # keybind: Tmux/narada writing:insert | Ctrl+o | Add a file to the message
@@ -180,6 +181,16 @@
 # keybind: Tmux/narada writing:insert | @ | Pick someone to tag on WhatsApp from the list (Up/Down, Enter or Tab; Esc for none)
 # keybind: Tmux/narada writing:insert | Left / Right / Alt+b / Alt+f / Ctrl+a / Ctrl+e | Move the cursor by letter, word, line start / end
 # keybind: Tmux/narada writing:insert | Ctrl+w / Ctrl+k / Ctrl+u | Delete the word before the cursor / to the end / the whole message
+# keybind: Tmux/narada boxnormal:normal | h / l / w / b / e / 0 / ^ / $ | Move the cursor in the message by a letter, a word, to the line's start / end
+# keybind: Tmux/narada boxnormal:normal | j / k / gg / G | Move the cursor a line down / up, to the first / last line
+# keybind: Tmux/narada boxnormal:normal | x / dw / dd / D | Delete a letter / a word / the line / to the end of the line
+# keybind: Tmux/narada boxnormal:normal | cw / ciw / C | Delete a word / the word under the cursor / the rest of the line and type in its place (cw, ciw, C)
+# keybind: Tmux/narada boxnormal:normal | u / Ctrl+r | Undo / redo a change to the message
+# keybind: Tmux/narada boxnormal:normal | i / a / I / A / o | Start typing again: here, after, at the line's start / end, on a new line
+# keybind: Tmux/narada boxnormal:normal | p | Paste the copied text after the cursor
+# keybind: Tmux/narada boxnormal:normal | Enter | Send the message from the box's NORMAL (the compose screen: Ctrl+s)
+# keybind: Tmux/narada boxnormal:normal | Space e e | Edit the message in your editor ($EDITOR) from the box's NORMAL
+# keybind: Tmux/narada boxnormal:normal | Esc / q | Leave the box (what you wrote stays for this chat)
 # keybind: Tmux/narada aidraft:normal | 1 - 4 | Pick one of the four suggested asks for Claude (reply, say yes, say no, …)
 # keybind: Tmux/narada aidraft:normal | Tab | Toggle more context for Claude (older messages, or your sent mail for tone)
 # keybind: Tmux/narada aidraft:normal | y | Send Claude's draft as yours (through the undo window)

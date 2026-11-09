@@ -1053,15 +1053,10 @@ func (m *Model) chatLines(w int) []string {
 			}
 		}
 		if c.Mine {
-			// your run ends at the right edge, as in any chat app; its bar
-			// stays on the left of the text, so nothing follows the text
-			widest := 0
-			for _, l := range out[runStart:] {
-				widest = max(widest, lipgloss.Width(l))
-			}
-			pad := strings.Repeat(" ", max(w/4, w-widest-1))
+			// your run sits on the right, as in any chat app: each line (a
+			// bubble's lines are all one width) ends at the right edge
 			for k := runStart; k < len(out); k++ {
-				out[k] = pad + out[k]
+				out[k] = strings.Repeat(" ", max(0, w-1-lipgloss.Width(out[k]))) + out[k]
 			}
 		}
 		i = j
