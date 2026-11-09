@@ -106,7 +106,7 @@ func (m Model) previewHeight() int { return m.bodyHeight() - 2 }
 
 func (m Model) inputMode() bool {
 	switch m.mode {
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward, modeVote, modeCommand:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeLink, modeRename, modePhone, modeForward, modeVote, modeConvSearch:
 		return true
 	}
 	return false
@@ -177,6 +177,12 @@ func (m Model) View() string {
 	case m.mode == modePick && m.pick != nil:
 		box := m.pickerPopup()
 		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/2)), "\n")
+	case m.mode == modeCommand:
+		box := m.commandPopup()
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/3)), "\n")
+	case m.mode == modeNews:
+		box := m.newsPopup()
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/2)), "\n")
 	case m.pal != nil:
 		box := m.palettePopup()
 		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/3)), "\n")
@@ -209,7 +215,9 @@ func (m Model) previewWidth() int {
 }
 
 // narrow: too small for the list and what's open side by side.
-func (m Model) narrow() bool { return m.w < 100 }
+// narrow: one pane at a time, the list or what's open (a small screen,
+// or Space u f / Space u p asked for it).
+func (m Model) narrow() bool { return m.w < 100 || m.zoom || m.noPreview }
 
 // rightPane is what's open: a thread, a chat, an AI request or a review.
 func (m Model) rightPane(under mode, w, h int) []string {
@@ -410,10 +418,7 @@ func firstNonEmpty(xs ...string) string {
 
 func (m Model) inputView() string {
 	s := m.styles
-	if m.mode == modeCommand {
-		return m.commandView()
-	}
-	prompt := map[mode]string{modeFilter: "/", modeAsk: "@claude ", modeSearch: "search gmail: ", modeSaveName: "section name (Enter: the search itself): ",
+	prompt := map[mode]string{modeFilter: "/", modeConvSearch: "search what's open: ", modeAsk: "@claude ", modeSearch: "search gmail: ", modeSaveName: "section name (Enter: the search itself): ",
 		modeDraftHint: "draft a reply that says (Enter for Claude's pick): ", modeLink: fmt.Sprintf("open link (1-%d): ", len(m.links)), modeRename: m.renamePrompt(),
 		modePhone: "your WhatsApp number, with its country code: ", modeForward: "forward to (a contact, a group or a number): ",
 		modeVote: "vote for (option numbers: 2, or 1,3 when it takes several; empty takes your vote back): "}[m.mode]

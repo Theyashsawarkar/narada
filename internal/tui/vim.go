@@ -8,7 +8,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Theyashsawarkar/narada/internal/cli"
 	"github.com/Theyashsawarkar/narada/internal/config"
@@ -45,16 +44,35 @@ func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
 			return mm, cmd
 		}
 	}
+	// d3j: a count after d multiplies the motion's
+	if p := strings.Fields(m.eng.Pending()); len(p) > 0 && p[len(p)-1] == "d" && len(s) == 1 && s[0] >= '0' && s[0] <= '9' && (s != "0" || m.opCount > 0) {
+		m.opCount = min(99999, m.opCount*10+int(s[0]-'0'))
+		m.prefix = m.eng.Pending() + " " + itoa(m.opCount)
+		return m, nil
+	}
+	op := m.opCount
 	r := m.eng.Feed(s, m.where())
 	m.syncPending()
+	if !m.eng.Waiting() {
+		m.opCount = 0
+	} else if op > 0 {
+		m.prefix += " " + itoa(op)
+	}
 	switch {
 	case r.Pending:
 		return m, popup.WhichAfter(r.Gen)
 	case r.Cancel:
 		return m, nil
 	case r.Act != "":
-		m.lastCounted = r.Counted
-		return m.run(r.Act, r.Count)
+		count := r.Count
+		if op > 0 {
+			count *= op
+		}
+		m.lastCounted = r.Counted || op > 0
+		if repeatable[r.Act] {
+			m.lastChange = change{r.Act, count}
+		}
+		return m.run(r.Act, count)
 	case r.Message() != "":
 		m.say(r.Message())
 	case r.Unknown != "":
@@ -114,9 +132,6 @@ func (m Model) whichMenu() []string {
 			}
 			h := hints[i]
 			key := h.Key
-			if key == "Space" {
-				key = "␣"
-			}
 			cell := fg(s.c.Mauve).Bold(true).Render(key) + "  "
 			if h.Group {
 				cell += s.sky.Render("+" + h.Desc)
@@ -215,6 +230,7 @@ func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
 	}
 	switch s {
 	case "esc", "v", "q":
+		m.rememberVisual()
 		m.visual = false
 		m.selected = map[string]bool{}
 		return m, nil, true
@@ -233,6 +249,7 @@ func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
 		m.visualRange()
 		return m, nil, true
 	case "d", "e", "~", "y":
+		m.rememberVisual()
 		m.visual = false
 		switch s {
 		case "y":
@@ -475,107 +492,4 @@ func keyMsgOf(k string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
-}
-
-// ------------------------------------------------------- : commands
-
-// command is one : command: what you type, what it does, the keys it runs.
-type command struct{ name, args, desc, keys string }
-
-var commands = []command{
-	{"archive", "", "Archive the thread or chat (e)", "e"},
-	{"trash", "", "Move the thread to the trash (dd, asks first)", "dd"},
-	{"read", "", "Mark it read (Space m r)", "Space m r"},
-	{"unread", "", "Mark it unread (Space m u)", "Space m u"},
-	{"star", "", "Star or unstar it (Space m s)", "Space m s"},
-	{"label", "", "Add or remove a label (Space m l)", "Space m l"},
-	{"later", "", "Move a scheduled send to another time (Space e t)", "Space e t"},
-	{"mute", "", "Mute the WhatsApp chat: 8 hours, then longer (Space m z)", "Space m z"},
-	{"rename", "", "Rename the chat (Space e r)", "Space e r"},
-	{"account", "", "Switch account (Space g a)", "Space g a"},
-	{"sync", "", "Sync now (Space r r)", "Space r r"},
-	{"mail", "", "Go to Mail (Space t m)", "Space t m"},
-	{"chat", "", "Go to Google Chat (Space t c)", "Space t c"},
-	{"whatsapp", "", "Go to WhatsApp (Space t w)", "Space t w"},
-	{"ai", "", "Go to the AI requests (Space t a)", "Space t a"},
-	{"new", "", "Write a new mail or message (o)", "o"},
-	{"digest", "", "Today's digest by Claude (Space k t)", "Space k t"},
-	{"keys", "", "Show every key (?)", "?"},
-	{"quit", "", "Quit narada (Space q)", "Space q"},
-	{"q", "", "Quit narada", "Space q"},
-}
-
-// commandKey edits the : line; Enter runs it.
-func (m Model) commandKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
-	case "esc", "ctrl+c":
-		m.mode, m.input = modeNormal, nil
-		return m, nil
-	case "tab":
-		if c := matchCommands(string(m.input)); len(c) > 0 {
-			m.input = []rune(c[0].name)
-		}
-		return m, nil
-	case "up", "down":
-		// further back with ↑, forward again with ↓
-		if n := len(m.cmdHist); n > 0 {
-			if k.String() == "up" {
-				m.cmdAt = max(0, min(n, m.cmdAt)-1)
-			} else {
-				m.cmdAt = min(n, m.cmdAt+1)
-			}
-			m.input = nil
-			if m.cmdAt < n {
-				m.input = []rune(m.cmdHist[m.cmdAt])
-			}
-		}
-		return m, nil
-	case "enter":
-		line := strings.TrimSpace(string(m.input))
-		m.mode, m.input = modeNormal, nil
-		if line == "" {
-			return m, nil
-		}
-		m.cmdHist = append(m.cmdHist, line)
-		m.cmdAt = len(m.cmdHist)
-		name := strings.Fields(line)[0]
-		for _, c := range commands {
-			if c.name == name {
-				return m.runKeys(c.keys)
-			}
-		}
-		if c := matchCommands(name); len(c) == 1 {
-			return m.runKeys(c[0].keys)
-		}
-		m.say(":" + name + " isn't a command · Tab completes")
-		return m, nil
-	}
-	return m.inputKey(k)
-}
-
-func matchCommands(prefix string) []command {
-	var out []command
-	for _, c := range commands {
-		if strings.HasPrefix(c.name, strings.TrimSpace(prefix)) {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// commandView is the : line, with what Tab would complete to.
-func (m Model) commandView() string {
-	s := m.styles
-	line := s.sky.Bold(true).Render(":") + s.text.Render(string(m.input)) + lipgloss.NewStyle().Reverse(true).Render(" ")
-	if c := matchCommands(string(m.input)); len(c) > 0 && len(m.input) > 0 {
-		var names []string
-		for _, x := range c[:min(5, len(c))] {
-			names = append(names, x.name)
-		}
-		line += s.muted.Render("   " + strings.Join(names, " · "))
-		if len(c) == 1 {
-			line += s.muted.Render("  — " + c[0].desc)
-		}
-	}
-	return " " + ansi.Truncate(line, m.w-2, "…")
 }

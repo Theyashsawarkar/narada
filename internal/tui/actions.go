@@ -36,6 +36,9 @@ func (m Model) confirmKey(s string) (tea.Model, tea.Cmd) {
 	c := m.confirm
 	m.confirm = nil
 	if s != "y" {
+		if !m.visual {
+			m.selected = map[string]bool{} // what d with a motion picked
+		}
 		m.say("kept")
 		return m, nil
 	}
@@ -70,6 +73,12 @@ func (m Model) run(act string, count int) (tea.Model, tea.Cmd) {
 		}
 		return mm, tea.Batch(cmds...)
 	}
+	switch {
+	case strings.HasPrefix(act, "mark.set."):
+		return m.setMark(strings.TrimPrefix(act, "mark.set."))
+	case strings.HasPrefix(act, "mark.go."):
+		return m.goMark(strings.TrimPrefix(act, "mark.go."))
+	}
 	switch act {
 	// ---- moving
 	case "down":
@@ -91,6 +100,7 @@ func (m Model) run(act string, count int) (tea.Model, tea.Cmd) {
 		m.focus = 0
 		return m, nil
 	case "top", "bottom":
+		m.recordJump()
 		return m.jumpTo(act == "bottom", count, m.lastCounted)
 	case "place.next", "place.prev":
 		step := map[bool]int{true: 1, false: 3}[act == "place.next"]
@@ -119,6 +129,15 @@ func (m Model) run(act string, count int) (tea.Model, tea.Cmd) {
 	case "msg.next", "msg.prev":
 		return m.stepMessage(map[bool]int{true: 1, false: -1}[act == "msg.next"] * count)
 	case "unread.next", "unread.prev":
+		if m.convQ != "" {
+			// a search inside what's open is on: n / N step through it
+			var mm tea.Model = m
+			var cmd tea.Cmd
+			for range count {
+				mm, cmd = mm.(Model).convFind(map[bool]int{true: 1, false: -1}[act == "unread.next"])
+			}
+			return mm, cmd
+		}
 		var mm tea.Model = m
 		var cmd tea.Cmd
 		for range count {
@@ -142,19 +161,28 @@ func (m Model) run(act string, count int) (tea.Model, tea.Cmd) {
 	case "msg.back":
 		return old("backspace")
 	case "open":
+		m.recordJump()
 		return old("enter")
 	case "back":
 		return old("q")
 	case "back.esc":
+		if m.convQ != "" {
+			m.convQ = ""
+			m.say("search stopped")
+			return m, nil
+		}
 		return old("esc")
 	case "find":
 		return m.findAnything(true)
 	case "find.here":
+		if m.focus == 1 || m.pickingMsg() {
+			return m.startConvSearch()
+		}
 		return m.findAnything(false)
 	case "help":
 		return old("?")
 	case "command":
-		m.mode, m.input, m.cmdAt = modeCommand, nil, len(m.cmdHist)
+		m.openCommand()
 		return m, nil
 	case "palette":
 		m.openPalette()
@@ -242,6 +270,43 @@ func (m Model) run(act string, count int) (tea.Model, tea.Cmd) {
 		return old("p")
 	case "undo":
 		return old("z")
+	case "redo":
+		return m, m.redoCmd()
+	case "repeat":
+		return m.repeatChange()
+	case "delete.down", "delete.up", "delete.bottom", "delete.top":
+		return m.deleteMotion(act, count)
+	case "visual.again":
+		return m.visualAgain()
+	case "jump.back":
+		return m.jumpBy(-count)
+	case "jump.forward":
+		return m.jumpBy(count)
+	case "sender.next":
+		return m.senderStep(1)
+	case "sender.prev":
+		return m.senderStep(-1)
+	case "ui.zoom":
+		m.zoom = !m.zoom
+		m.say(map[bool]string{true: "what's open takes the whole width (Space u f again: the list comes back)", false: "the list is back"}[m.zoom])
+		return m, nil
+	case "ui.preview":
+		m.noPreview = !m.noPreview
+		m.say(map[bool]string{true: "the list takes the whole width (Space u p again: the preview)", false: "the preview is back"}[m.noPreview])
+		return m, nil
+	case "ui.compact":
+		m.compact = !m.compact
+		m.say(map[bool]string{true: "compact list", false: "roomy list"}[m.compact])
+		return m, nil
+	case "ui.images":
+		if m.a.Config.Images == "off" {
+			m.a.Config.Images = "auto"
+		} else {
+			m.a.Config.Images = "off"
+		}
+		m.loadPreview(false)
+		m.say(map[bool]string{true: "pictures off", false: "pictures inline"}[m.a.Config.Images == "off"])
+		return m, nil
 	case "visual":
 		if m.pickingMsg() {
 			m.say("v picks threads or chats in the list: h goes back to it")

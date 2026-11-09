@@ -74,11 +74,25 @@
 # keybind: Tmux/narada wa:normal | p | Paste the clipboard into the message box (text, or a picture as a file)
 # keybind: Tmux/narada:normal | ~ | Toggle read / unread (or everything picked)
 # keybind: Tmux/narada:normal | u | Undo the last change, or cancel a send in its undo window
+# keybind: Tmux/narada:normal | Ctrl+r | Run what u undid again (redo; a send is never redone)
+# keybind: Tmux/narada:normal | . | Run the last change again on the item you're on (repeat: j. does it to the next)
+# keybind: Tmux/narada:normal | x | Trash the thread, or delete the picked message (asks first, like dd)
+# keybind: Tmux/narada mail:normal | d j | Trash this thread and the next ones (3dj or d3j: three more; asks first)
+# keybind: Tmux/narada mail:normal | d k | Trash this thread and the ones above (asks first)
+# keybind: Tmux/narada mail:normal | d G | Trash every thread from here to the end of the list (asks first)
+# keybind: Tmux/narada mail:normal | d g g | Trash every thread from the top of the list to here (asks first)
+# keybind: Tmux/narada:normal | g v | Pick the last range again (VISUAL)
+# keybind: Tmux/narada:normal | Ctrl+o / [ j | Jump back to where you were before (the jump list: opens, gg, G, marks)
+# keybind: Tmux/narada:normal | ] j | Jump forward again in the jump list
+# keybind: Tmux/narada:normal | * | Jump to the next message from the picked message's sender (in a chat)
+# keybind: Tmux/narada:normal | # | Jump to the previous message from the picked message's sender (in a chat)
 # keybind: Tmux/narada:normal | v | Pick several (VISUAL): j/k, gg, G grow it, then d, e, ~ or y act on all
 # keybind: Tmux/narada:normal | V | Pick the whole list (again clears)
 # keybind: Tmux/narada mail:normal | z a / Space u z | Toggle every message in the thread open / folded
 # keybind: Tmux/narada mail:normal | z M | Toggle every message in the thread folded
 # keybind: Tmux/narada mail:normal | z R | Toggle every message in the thread open
+# keybind: Tmux/narada mail:normal | z o | Open the folded messages of the thread (mail has no picked message: all of them)
+# keybind: Tmux/narada mail:normal | z c | Close the messages of the thread to one line each (all of them)
 # keybind: Tmux/narada mail:normal | z q / Space u q | Toggle the quoted text in the thread
 # keybind: Tmux/narada:normal | g f / Space o f | Open the attachments (kept in ~/Downloads/narada)
 # keybind: Tmux/narada:normal | g F / Space y f | Save the attachments (in ~/Downloads/narada)
@@ -91,7 +105,7 @@
 # keybind: Tmux/narada:normal | Space t w | Go to WhatsApp
 # keybind: Tmux/narada:normal | Space t a | Go to the AI requests
 # keybind: Tmux/narada:normal | Space y l | Copy the link to the thread or chat
-# keybind: Tmux/narada:normal | Space f h | Search only here: this section or this chat
+# keybind: Tmux/narada:normal | Space f h | Search inside what's open (then n / N step through the matches); in the list: only this section
 # keybind: Tmux/narada:normal | Space f u / Space g u | Show only the unread (the Unread section)
 # keybind: Tmux/narada:normal | Space r r | Reload mail and chat from Google now (sync)
 # keybind: Tmux/narada mail:normal | Space r o | Update the list with older mail
@@ -128,6 +142,10 @@
 # keybind: Tmux/narada:normal | Space m R | Set everything in this list as read
 # keybind: Tmux/narada wa:normal | Space m z | Set the chat muted for 8 hours (again: a week, then always, then unmuted)
 # keybind: Tmux/narada wa:normal | Space m b | Set the person in this chat as blocked (asks first; again unblocks)
+# keybind: Tmux/narada:normal | Space u f | Toggle what's open across the whole width (zoom)
+# keybind: Tmux/narada:normal | Space u p | Toggle the preview pane beside the list
+# keybind: Tmux/narada:normal | Space u c | Toggle a compact list (no blank rows around each row)
+# keybind: Tmux/narada:normal | Space u i | Toggle pictures inline in what's open
 # keybind: Tmux/narada:normal | Space k k | Open a question to Claude, with this thread or chat as context
 # keybind: Tmux/narada:normal | Space k s | Show Claude's summary of the thread or the chat's recent messages
 # keybind: Tmux/narada:normal | Space k t | Show today's digest: what came in and what needs you
@@ -142,6 +160,8 @@
 # keybind: Tmux/narada:normal | Space w l | Move to what's open
 # keybind: Tmux/narada:normal | Space w w | Move to the other pane
 # keybind: Tmux/narada:normal | Space x x | Go to the AI requests (y sends, e edits, n n declines)
+# keybind: Tmux/narada:normal | m a-z | Set a mark (a to z) on this thread or chat; it lasts across runs
+# keybind: Tmux/narada:normal | ' a-z | Jump to the mark (a to z), wherever it is
 # keybind: Tmux/narada visual:visual | j / k / gg / G | Grow the range down / up / to the top / to the end
 # keybind: Tmux/narada visual:visual | d | Move everything picked to the trash (asks first)
 # keybind: Tmux/narada visual:visual | e | Move everything picked out of the inbox (archive; u undoes it)

@@ -319,7 +319,7 @@ mark{background:none;color:var(--peach);font-weight:700}
     <div class="term" id="term" tabindex="0" aria-label="narada demo: click it and use the keys"></div>
     <p class="below">
       <span class="k">j</span>/<span class="k">k</span> move · <span class="k">⏎</span>/<span class="k">l</span> open · <span class="k">h</span> back · <span class="k">i</span> write · <span class="k">r</span> reply · <span class="k">dd</span> delete · <span class="k">e</span> archive · <span class="k">u</span> undo · <span class="k">R</span> send again ·
-      <span class="k">H</span>/<span class="k">L</span> places · <span class="k">Tab</span> sections · <span class="k">␣</span> menu · <span class="k">:</span> commands · <span class="k">/</span> find · <span class="k">?</span> all keys. Mouse works too.
+      <span class="k">H</span>/<span class="k">L</span> places · <span class="k">Tab</span> sections · <span class="k">Space</span> menu · <span class="k">:</span> commands · <span class="k">/</span> find · <span class="k">?</span> all keys. Mouse works too.
     </p>
   </section>
 
@@ -359,7 +359,7 @@ mark{background:none;color:var(--peach);font-weight:700}
       <li><span class="k">i</span> writes, <span class="k">⏎</span> sends, <span class="k">u</span> takes it back while it waits</li>
       <li><span class="k" style="color:var(--accent2)">A</span> Claude writes it: <span class="k">y</span> use · <span class="k">e</span> edit · <span class="k">c</span> change · <span class="k">n</span> drop</li>
       <li><span class="k">Ctrl+g</span> while writing: Claude polishes what you typed</li>
-      <li><span class="k">␣</span> the menu, <span class="k">/</span> search everything, <span class="k">?</span> every key</li>
+      <li><span class="k">Space</span> the menu, <span class="k">/</span> search everything, <span class="k">?</span> every key</li>
     </ul>
   </div>
 </div>
@@ -714,7 +714,7 @@ function footHTML(){
   else if(P().id==='ai')keys=[['j/k','move'],['y','send'],['e','edit'],['n','decline']];
   else keys=[['j/k','move'],['⏎','open'],['i','write'],['r','reply'],['A','✦ ask AI']];
   if(S.pend)keys.unshift([S.pend,'…']);
-  const right=S.narrow?[['?','keys']]:[['/','find'],['␣','menu'],[':','command'],['?','keys']];
+  const right=S.narrow?[['?','keys']]:[['/','find'],['Space','menu'],[':','command'],['?','keys']];
   return `<div class="foot" data-n="footer"><span class="mode ${m}">${m}</span>${keys.map(k=>`<span class="kk"><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}<span class="right">${right.map(k=>`<span class="kk"><kbd>${k[0]}</kbd>${k[1]}</span>`).join('')}</span></div>`;
 }
 
@@ -885,7 +885,7 @@ const CMDS=[
 function overlayHTML(){
   if(S.ov==='wk'){
     const list=WK[S.wkSub||'root'];
-    return `<div class="ov wk" data-n="which-key"><h5>␣ then…</h5><div class="g">${list.map(e=>`<div><kbd>${e[0]}</kbd><span>${e[1]}</span></div>`).join('')}</div><div class="muted" style="font-size:11.5px;margin-top:6px">esc closes · ⌫ goes up</div></div>`;
+    return `<div class="ov wk" data-n="which-key"><h5>Space then…</h5><div class="g">${list.map(e=>`<div><kbd>${e[0]}</kbd><span>${e[1]}</span></div>`).join('')}</div><div class="muted" style="font-size:11.5px;margin-top:6px">esc closes · ⌫ goes up</div></div>`;
   }
   if(S.ov==='cmd'){
     const f=CMDS.filter(c=>c[0].startsWith(S.cmd.trim())||c[0].includes(S.cmd.trim()));
@@ -907,12 +907,12 @@ function overlayHTML(){
     const sec=(t,rows)=>`<div><h5>${t}</h5>${rows.map(r=>`<div class="k2"><kbd>${r[0]}</kbd><span>${r[1]}</span></div>`).join('')}</div>`;
     return `<div class="ov help" data-n="help"><div style="display:flex"><b>All keys</b><span class="muted" style="margin-left:auto">esc closes · / filters</span></div><div class="cols">
      ${sec('Move',[['j k','down, up (5j: five)'],['gg G','top, bottom'],['Ctrl+d u','half a page'],['Ctrl+j k','scroll what\'s open'],['⏎ l','open'],['h','back to the list'],['H L','places'],['Tab ]]','next section']])}
-     ${sec('Write',[['i','write here'],['r','reply to it'],['R','reply to all (mail)'],['o','a new mail or message'],['␣ i f','forward'],['Ctrl+t','send later'],['Ctrl+o','attach'],['esc','stop writing']])}
-     ${sec('Change',[['e','archive (u undoes it)'],['dd','delete (asks: y only)'],['u','undo'],['R','send a failed one again'],['␣ m s','star'],['␣ m p','pin']])}
+     ${sec('Write',[['i','write here'],['r','reply to it'],['R','reply to all (mail)'],['o','a new mail or message'],['Space i f','forward'],['Ctrl+t','send later'],['Ctrl+o','attach'],['esc','stop writing']])}
+     ${sec('Change',[['e','archive (u undoes it)'],['dd','delete (asks: y only)'],['u','undo'],['R','send a failed one again'],['Space m s','star'],['Space m p','pin']])}
      ${sec('Find',[['/','search everywhere'],['n N','next, previous unread'],[':','command bar']])}
-     ${sec('Leader ␣',[['␣ t m c w a','Mail, Chat, WhatsApp, AI'],['␣ k d','write with Claude'],['␣ f f','find anything'],['⌫','up a level'],['␣ ?','all keys']])}
+     ${sec('Leader Space',[['Space t m c w a','Mail, Chat, WhatsApp, AI'],['Space k d','write with Claude'],['Space f f','find anything'],['⌫','up a level'],['Space ?','all keys']])}
      ${sec('View',[['zq','show quoted'],['gf','open the file'],['?','this help']])}
-     ${sec('Agent ✦',[['A','ask it to write'],['␣ k d','the same, from the menu'],['Ctrl+g','polish what you typed'],['y','use the draft'],['e','edit it yourself'],['c','change it'],['← →','earlier versions'],['n','throw it away']])}
+     ${sec('Agent ✦',[['A','ask it to write'],['Space k d','the same, from the menu'],['Ctrl+g','polish what you typed'],['y','use the draft'],['e','edit it yourself'],['c','change it'],['← →','earlier versions'],['n','throw it away']])}
     </div></div>`;
   }
   if(S.ov==='confirm')return `<div class="ov confirm" data-n="confirm"><h5>Delete this message?</h5><div class="sub" style="margin-bottom:10px">It goes for everyone in this chat. This can't be undone.</div><div class="btns"><span class="btn n">y delete</span><span class="btn">n keep it</span></div></div>`;

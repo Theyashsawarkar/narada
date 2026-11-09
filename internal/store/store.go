@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS outbox (
   status TEXT NOT NULL, send_at INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, origin TEXT NOT NULL DEFAULT 'you',
   reason TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS notified (account TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY (account, key));
+CREATE TABLE IF NOT EXISTS marks (letter TEXT PRIMARY KEY, place INTEGER NOT NULL, section INTEGER NOT NULL DEFAULT 0, item TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS whatsapp_reactions (space TEXT NOT NULL, msg TEXT NOT NULL, reactor TEXT NOT NULL, emoji TEXT NOT NULL,
   sender TEXT NOT NULL DEFAULT '', pending INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (space, msg, reactor));
@@ -2067,4 +2068,23 @@ func (s *Store) MediaFetched(account, msg string, idx int, err string) error {
 		_, e = s.db.Exec(`UPDATE media_fetch SET error=? WHERE account=? AND msg=? AND idx=?`, err, account, msg, idx)
 	}
 	return e
+}
+
+// SetMark keeps Vim's mark letter (m{a-z} in the screen): the place
+// (0 Mail, 1 Chat, 2 WhatsApp), its section and the item's key. Marks
+// last across runs.
+func (s *Store) SetMark(letter string, place, section int, item string) error {
+	_, err := s.db.Exec(`INSERT INTO marks (letter, place, section, item, at) VALUES (?,?,?,?,?)
+		ON CONFLICT(letter) DO UPDATE SET place=excluded.place, section=excluded.section, item=excluded.item, at=excluded.at`,
+		letter, place, section, item, time.Now().Unix())
+	return err
+}
+
+// Mark is where the letter was set; ok is false for an unset mark.
+func (s *Store) Mark(letter string) (place, section int, item string, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT place, section, item FROM marks WHERE letter=?`, letter).Scan(&place, &section, &item)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, "", false, nil
+	}
+	return place, section, item, err == nil, err
 }

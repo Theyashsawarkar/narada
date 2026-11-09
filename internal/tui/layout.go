@@ -371,7 +371,7 @@ func (m Model) footerView() string {
 	case m.toast != "":
 		right = s.green.Render(m.toast)
 	case m.mode == modeNormal && !m.leader && !m.visual:
-		right = s.round(s.keycap, "/") + s.muted.Render(" find  ") + s.round(s.keycap, "␣") + s.muted.Render(" menu  ") + s.round(s.keycap, "?") + s.muted.Render(" keys")
+		right = s.round(s.keycap, "/") + s.muted.Render(" find  ") + s.round(s.keycap, "Space") + s.muted.Render(" menu  ") + s.round(s.keycap, "?") + s.muted.Render(" keys")
 	}
 	if rw := lipgloss.Width(right); rw > m.w/2 {
 		right = ansi.Truncate(right, m.w/2, "…")
@@ -465,11 +465,11 @@ func (m Model) barKeys() [][2]string {
 	}
 	switch {
 	case m.isStatus() && !m.pickingMsg():
-		return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"r", "reply"}, {"␣ie", "react"}}
+		return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"r", "reply"}, {"Space i e", "react"}}
 	case m.pickingMsg() && m.isStatus():
-		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"␣ie", "react"}, {"gf", "open"}, {"esc", "back"}}
+		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"Space i e", "react"}, {"gf", "open"}, {"esc", "back"}}
 	case m.pickingMsg():
-		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"␣ie", "react"}, {"␣ee", "edit"}, {"yy", "copy"}, {"dd", "delete"}, {"esc", "back"}}
+		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"Space i e", "react"}, {"Space e e", "edit"}, {"yy", "copy"}, {"dd", "delete"}, {"esc", "back"}}
 	case m.inAISection():
 		return [][2]string{{"j/k", "pick"}, {"y", "send"}, {"e", "edit first"}, {"n n", "decline"}}
 	case m.focus == 1 && m.tab == tabMail:

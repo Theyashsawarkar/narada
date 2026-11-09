@@ -33,10 +33,14 @@ func (m Model) cardRows() int {
 		return mailCardRows
 	}
 	if m.panelList() {
-		if m.tab == tabMail {
-			return 6 // three lines, a blank row above and below, a hairline
+		pad := 2 // a blank row above and below
+		if m.compact {
+			pad = 0 // Space u c: no blank rows
 		}
-		return 5 // two lines, a blank row above and below, a hairline
+		if m.tab == tabMail {
+			return 4 + pad // three lines, the blank rows, a hairline
+		}
+		return 3 + pad // two lines, the blank rows, a hairline
 	}
 	return chatCardRows
 }
@@ -71,6 +75,10 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 	// a blank row above and below the text: room to breathe, and the
 	// picked row's bar runs down all of it
 	padded := append(append([]string{""}, lines...), "")
+	first := 1
+	if m.compact {
+		padded, first = lines, 0
+	}
 	for i, l := range padded {
 		// the picked row has a bar in the place's colour down its left;
 		// an unread one a dot. Nothing is drawn after the text.
@@ -78,7 +86,7 @@ func (m Model) listItem(lines []string, w int, border string, sel, dot bool) []s
 		switch {
 		case sel:
 			gutter = edge.Render("▌") + " "
-		case dot && i == 1:
+		case dot && i == first:
 			gutter = fg(m.partColor()).Bold(true).Render("●") + " "
 		}
 		out = append(out, gutter+l)
@@ -1289,7 +1297,7 @@ func (m Model) previewPane(w, h int) []string {
 	aiLines := m.aiLines(inner)
 	var bottom []string
 	if sp, ok := m.curSpace(); ok && sp.Type == store.TypeStatus && m.mode != modeChatMsg {
-		bottom = []string{"", s.muted.Render("r replies to a status, e reacts: they get it in your chat with them, quoting it")}
+		bottom = []string{"", s.muted.Render("r replies to a status, Space i e reacts: they get it in your chat with them, quoting it · they won't see that you viewed it")}
 	} else if ok {
 		rows := max(1, min(8, (h-2)/3))
 		if m.mode == modeChatMsg {

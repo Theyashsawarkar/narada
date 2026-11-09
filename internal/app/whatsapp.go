@@ -544,7 +544,16 @@ func (a *App) markWhatsAppRead(ctx context.Context, space string) error {
 	return nil
 }
 
+// isStatusSpace: WhatsApp's statuses (status@broadcast, or one person's
+// statuses as the screen lists them). Viewing them never sends a receipt.
+func isStatusSpace(space string) bool {
+	return space == whatsapp.StatusChat || strings.HasPrefix(space, whatsapp.StatusChat+"|") || strings.HasPrefix(space, whatsapp.StatusChat+"/")
+}
+
 func (a *App) queueWhatsAppReads(space string) error {
+	if isStatusSpace(space) {
+		return nil // statuses are looked at quietly: no "seen" on the wire
+	}
 	unread, err := a.Store.UnreadChatMessages(store.WhatsAppAccount, space)
 	if err != nil || len(unread) == 0 {
 		return err
@@ -677,6 +686,11 @@ func (a *App) flushWhatsAppReads(ctx context.Context) {
 		bySpace[r.Space] = append(bySpace[r.Space], r)
 	}
 	for space, rs := range bySpace {
+		if isStatusSpace(space) {
+			// an older version may have queued these: drop them unsent
+			_ = a.Store.DoneWhatsAppReads(rs)
+			continue
+		}
 		msgs := make([]whatsapp.Message, 0, len(rs))
 		for _, r := range rs {
 			msgs = append(msgs, whatsapp.Message{ID: r.Msg, Sender: r.Sender})

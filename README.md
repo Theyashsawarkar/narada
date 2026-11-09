@@ -310,12 +310,22 @@ mail), and `?` lists every key. A key that moved says where it went.
 | <kbd>y</kbd> <kbd>y</kbd> or <kbd>Space</kbd> <kbd>y</kbd> <kbd>y</kbd> | Copy the picked message (else the link to what's open) |
 | <kbd>~</kbd> | Toggle read / unread (or everything picked) |
 | <kbd>u</kbd> | Undo the last change, or cancel a send in its undo window |
+| <kbd>Ctrl+r</kbd> | Run what u undid again (redo; a send is never redone) |
+| <kbd>.</kbd> | Run the last change again on the item you're on (repeat: j. does it to the next) |
+| <kbd>x</kbd> | Trash the thread, or delete the picked message (asks first, like dd) |
+| <kbd>g</kbd> <kbd>v</kbd> | Pick the last range again (VISUAL) |
+| <kbd>Ctrl+o</kbd> or <kbd>[</kbd> <kbd>j</kbd> | Jump back to where you were before (the jump list: opens, gg, G, marks) |
+| <kbd>]</kbd> <kbd>j</kbd> | Jump forward again in the jump list |
+| <kbd>*</kbd> | Jump to the next message from the picked message's sender (in a chat) |
+| <kbd>#</kbd> | Jump to the previous message from the picked message's sender (in a chat) |
 | <kbd>v</kbd> | Pick several (VISUAL): j/k, gg, G grow it, then d, e, ~ or y act on all |
 | <kbd>V</kbd> | Pick the whole list (again clears) |
 | <kbd>g</kbd> <kbd>f</kbd> or <kbd>Space</kbd> <kbd>o</kbd> <kbd>f</kbd> | Open the attachments (kept in ~/Downloads/narada) |
 | <kbd>g</kbd> <kbd>F</kbd> or <kbd>Space</kbd> <kbd>y</kbd> <kbd>f</kbd> | Save the attachments (in ~/Downloads/narada) |
 | <kbd>g</kbd> <kbd>x</kbd> or <kbd>Space</kbd> <kbd>o</kbd> <kbd>l</kbd> | Open a link from what's open, by its number |
 | <kbd>A</kbd> or <kbd>Space</kbd> <kbd>k</kbd> <kbd>d</kbd> | Send this chat or mail to Claude to write your reply (you use, edit, change or drop its draft) |
+| <kbd>m</kbd> <kbd>a-z</kbd> | Set a mark (a to z) on this thread or chat; it lasts across runs |
+| <kbd>'</kbd> <kbd>a-z</kbd> | Jump to the mark (a to z), wherever it is |
 | <kbd>Space</kbd> <kbd>Space</kbd> | Search every action and run one (the palette) |
 | <kbd>Space</kbd> <kbd>a</kbd> | *Add…* |
 | <kbd>Space</kbd> <kbd>a</kbd> <kbd>n</kbd> | Create a new mail, or a message in this chat |
@@ -323,7 +333,7 @@ mail), and `?` lists every key. A key that moved says where it went.
 | <kbd>Space</kbd> <kbd>e</kbd> | *Edit…* |
 | <kbd>Space</kbd> <kbd>e</kbd> <kbd>t</kbd> | Set another time for a scheduled send (in Scheduled) |
 | <kbd>Space</kbd> <kbd>f</kbd> | *Find…* |
-| <kbd>Space</kbd> <kbd>f</kbd> <kbd>h</kbd> | Search only here: this section or this chat |
+| <kbd>Space</kbd> <kbd>f</kbd> <kbd>h</kbd> | Search inside what's open (then n / N step through the matches); in the list: only this section |
 | <kbd>Space</kbd> <kbd>f</kbd> <kbd>u</kbd> or <kbd>Space</kbd> <kbd>g</kbd> <kbd>u</kbd> | Show only the unread (the Unread section) |
 | <kbd>Space</kbd> <kbd>g</kbd> | *Go to…* |
 | <kbd>Space</kbd> <kbd>g</kbd> <kbd>i</kbd> | Go to the Inbox section |
@@ -352,6 +362,11 @@ mail), and `?` lists every key. A key that moved says where it went.
 | <kbd>Space</kbd> <kbd>t</kbd> <kbd>c</kbd> | Go to Google Chat |
 | <kbd>Space</kbd> <kbd>t</kbd> <kbd>w</kbd> | Go to WhatsApp |
 | <kbd>Space</kbd> <kbd>t</kbd> <kbd>a</kbd> | Go to the AI requests |
+| <kbd>Space</kbd> <kbd>u</kbd> | *Toggles…* |
+| <kbd>Space</kbd> <kbd>u</kbd> <kbd>f</kbd> | Toggle what's open across the whole width (zoom) |
+| <kbd>Space</kbd> <kbd>u</kbd> <kbd>p</kbd> | Toggle the preview pane beside the list |
+| <kbd>Space</kbd> <kbd>u</kbd> <kbd>c</kbd> | Toggle a compact list (no blank rows around each row) |
+| <kbd>Space</kbd> <kbd>u</kbd> <kbd>i</kbd> | Toggle pictures inline in what's open |
 | <kbd>Space</kbd> <kbd>w</kbd> | *Window…* |
 | <kbd>Space</kbd> <kbd>w</kbd> <kbd>h</kbd> | Move to the list |
 | <kbd>Space</kbd> <kbd>w</kbd> <kbd>l</kbd> | Move to what's open |
@@ -365,9 +380,15 @@ mail), and `?` lists every key. A key that moved says where it went.
 
 | Keys | What it does |
 |---|---|
+| <kbd>d</kbd> <kbd>j</kbd> | Trash this thread and the next ones (3dj or d3j: three more; asks first) |
+| <kbd>d</kbd> <kbd>k</kbd> | Trash this thread and the ones above (asks first) |
+| <kbd>d</kbd> <kbd>G</kbd> | Trash every thread from here to the end of the list (asks first) |
+| <kbd>d</kbd> <kbd>g</kbd> <kbd>g</kbd> | Trash every thread from the top of the list to here (asks first) |
 | <kbd>z</kbd> <kbd>a</kbd> or <kbd>Space</kbd> <kbd>u</kbd> <kbd>z</kbd> | Toggle every message in the thread open / folded |
 | <kbd>z</kbd> <kbd>M</kbd> | Toggle every message in the thread folded |
 | <kbd>z</kbd> <kbd>R</kbd> | Toggle every message in the thread open |
+| <kbd>z</kbd> <kbd>o</kbd> | Open the folded messages of the thread (mail has no picked message: all of them) |
+| <kbd>z</kbd> <kbd>c</kbd> | Close the messages of the thread to one line each (all of them) |
 | <kbd>z</kbd> <kbd>q</kbd> or <kbd>Space</kbd> <kbd>u</kbd> <kbd>q</kbd> | Toggle the quoted text in the thread |
 | <kbd>Space</kbd> <kbd>a</kbd> | *Add…* |
 | <kbd>Space</kbd> <kbd>a</kbd> <kbd>g</kbd> | Save the current search as a section |
@@ -776,7 +797,11 @@ as a poll. `Space e d` sets a chat's messages to disappear (24 hours, again 7 da
 disappears too. A place or a contact card goes from the shell: `narada
 whatsapp send --location` and `--contact`. The Status section shows people's
 status updates from the last day, by person, including ones posted before
-narada came online (narada doesn't tell them you looked); `narada whatsapp
+narada came online. **Viewing a status never tells its poster**: listing,
+opening, picking or playing one (`v`), even `Space m r`, sends no "seen" to
+WhatsApp, so they won't see that you viewed it (narada only keeps its own
+note of what you've looked at). `r` answers the picked one and `Space i e`
+reacts; `narada whatsapp
 status reply` and `status react` answer one, as WhatsApp does: a message in
 your chat with whoever posted it, quoting the status, so only they see it.
 `narada whatsapp status post` posts yours, which only you can: agents

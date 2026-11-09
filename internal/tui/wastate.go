@@ -127,7 +127,7 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		switch s {
 		case "r", "e":
 			if !m.pickingMsg() {
-				m.say("pick a status first (Enter, then j/k), then r answers it, e reacts")
+				m.say("pick a status first (Enter, then j/k), then r answers it, Space i e reacts")
 				return m, nil, true
 			}
 			if c := m.chatMsgs[m.chatSel]; c.Mine {
@@ -140,8 +140,9 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 			m.replyTo = &m.chatMsgs[m.chatSel]
 			m.mode, m.input = modeChatMsg, nil
 			return m, nil, true
-		case "i", "U", "c", "p", "M", "Z", "B", "X", "I", "n", "f", "R", "P":
-			m.say("statuses are to look at and answer (r, e): narada whatsapp status post posts yours")
+		case "i", "U", "c", "p", "m", "M", "Z", "B", "X", "I", "n", "f", "R", "P":
+			// m (mark read) too: a status is never marked read on WhatsApp
+			m.say("statuses are to look at and answer (r, Space i e), never marked seen: narada whatsapp status post posts yours")
 			return m, nil, true
 		}
 		return m, nil, false

@@ -36,21 +36,23 @@ const (
 	modeReview
 	modeApprove
 	modeHelp
-	modeChatMsg // typing a chat message in the preview
-	modeLink    // typing a link number after o
-	modeRename  // typing a chat's new name
-	modePick    // the file picker
-	modeWhen    // picking when to send
-	modeConvo   // picking people for a new conversation
-	modeReact   // picking an emoji for a reaction
-	modePhone   // typing your number to link WhatsApp with a code
-	modeCompose // the compose screen
-	modeFind    // the search window
-	modeView    // a picture full size
-	modeForward // typing who to forward a WhatsApp message to
-	modeVote    // typing the options to vote for in a WhatsApp poll
-	modeCommand // typing a : command
-	modeAIWrite // the agent writes a message or reply (A)
+	modeChatMsg    // typing a chat message in the preview
+	modeLink       // typing a link number after o
+	modeRename     // typing a chat's new name
+	modePick       // the file picker
+	modeWhen       // picking when to send
+	modeConvo      // picking people for a new conversation
+	modeReact      // picking an emoji for a reaction
+	modePhone      // typing your number to link WhatsApp with a code
+	modeCompose    // the compose screen
+	modeFind       // the search window
+	modeView       // a picture full size
+	modeForward    // typing who to forward a WhatsApp message to
+	modeVote       // typing the options to vote for in a WhatsApp poll
+	modeCommand    // typing a : command
+	modeAIWrite    // the agent writes a message or reply (A)
+	modeNews       // what moved in this version (:news, once after an update)
+	modeConvSearch // typing what to look for in what's open (Space f h)
 )
 
 const (
@@ -153,24 +155,42 @@ type Model struct {
 	// Vim's ways: Space starts a leader key (its menu shows after a
 	// moment), v picks a range, : takes a command, and keys can come in
 	// twos (gg, dd, yy, za, gf)
-	eng         keymap.Engine // turns keys into keymap.go's actions (counts, gg, Space m s)
-	leader      bool          // a Space sequence is under way (its menu shows after a moment)
-	leaderShown bool
-	prefix      string // the keys of another sequence under way (gg, dd, 3…), for the bar
-	lastCounted bool   // the action running now was given a count
-	confirm     *confirmAsk
-	confirmed   bool           // the action runs because its question was answered y
-	pal         *popup.Palette // Space Space
-	visual      bool
-	visualFrom  int  // where v started in the list
-	vg          bool // VISUAL: g typed, waiting for the second g
-	cmdHist     []string
-	cmdAt       int              // where ↑/↓ are in cmdHist
-	statusN     int              // people with a status update you haven't seen
-	picking     bool             // in an open chat, j/k pick messages (else it's read)
-	hits        *hits            // where things were drawn, for the mouse (shared by copies)
-	chatDrafts  map[string]draft // what you were writing, per chat, kept on Esc
-	armDecline  int64            // an AI request n was pressed on once
+	eng           keymap.Engine // turns keys into keymap.go's actions (counts, gg, Space m s)
+	leader        bool          // a Space sequence is under way (its menu shows after a moment)
+	leaderShown   bool
+	prefix        string // the keys of another sequence under way (gg, dd, 3…), for the bar
+	lastCounted   bool   // the action running now was given a count
+	confirm       *confirmAsk
+	confirmed     bool           // the action runs because its question was answered y
+	pal           *popup.Palette // Space Space
+	visual        bool
+	visualFrom    int  // where v started in the list
+	vg            bool // VISUAL: g typed, waiting for the second g
+	cmdHist       []string
+	cmdAt         int    // where ↑/↓ are in cmdHist
+	cmdSel        int    // the suggestion picked under the : line (-1: none)
+	cmdQ          string // Ctrl+r: what the history is searched for
+	cmdHistLoaded bool
+	newsTop       int  // :news scrolled
+	compact       bool // Space u c: list rows without the blank rows around them
+	zoom          bool // Space u f: what's open takes the whole width
+	noPreview     bool // Space u p: the list takes the whole width
+	opCount       int  // a count typed after d (d3j)
+	lastChange    change
+	undos         []undo // u takes the newest back
+	redos         []undo // Ctrl+r does it again
+	lastVis       *jumpPos
+	lastVisTo     string
+	jumps         []jumpPos // Ctrl+o / ]j
+	jumpAt        int
+	convQ         string // Space f h: what's looked for in what's open (n / N)
+	convHit       int
+	convLine      int
+	statusN       int              // people with a status update you haven't seen
+	picking       bool             // in an open chat, j/k pick messages (else it's read)
+	hits          *hits            // where things were drawn, for the mouse (shared by copies)
+	chatDrafts    map[string]draft // what you were writing, per chat, kept on Esc
+	armDecline    int64            // an AI request n was pressed on once
 
 	tab      int
 	wa       bool // the chat tab shows WhatsApp instead of Google Chat
@@ -217,7 +237,6 @@ type Model struct {
 	awGen         int      // counts its runs, so a cancelled one is ignored
 	toast         string
 	toastAt       time.Time
-	undo          *undo
 	viewer        *viewer // modeView: the picture shown full size
 	pending       bool    // the open chat has messages counting down to send
 	review        *review
@@ -298,7 +317,14 @@ func New(a *app.App, launch string) Model {
 // Run opens the screen, or, with no account yet, the setup screen that
 // takes the credentials and signs one in first.
 func Run(a *app.App, launch string) error {
-	var first tea.Model = New(a, launch)
+	nm := New(a, launch)
+	if bad := applyConfigKeys(a.Config.Keys.Normal); len(bad) > 0 {
+		nm.say("config.toml [keys.normal]: " + strings.Join(bad, "; "))
+	}
+	if launch != "demo" && newsDue(a.Paths.State) {
+		nm.mode = modeNews // what moved in this version, once after the update
+	}
+	var first tea.Model = nm
 	if len(a.AccountNames()) == 0 {
 		first = newSetup(a, launch)
 	}
@@ -1075,7 +1101,7 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 		return nil
 	}
 	if w := m.a.UndoWindow(it.Kind); w > 0 {
-		m.undo = &undo{what: "send", outboxID: it.ID}
+		m.pushUndo(undo{what: "send", outboxID: it.ID})
 		if m.mode == modeChatMsg {
 			m.say(fmt.Sprintf("sending in %ds · Esc, then u cancels it", int(w.Seconds())))
 		} else {
@@ -1472,6 +1498,9 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeAIWrite {
 		return m.aiWriteKey(k)
 	}
+	if m.mode == modeNews {
+		return m.newsKey(s)
+	}
 	if m.mode == modeChatMsg && s == "ctrl+g" && m.editingMsg == "" {
 		return m.polishInput()
 	}
@@ -1542,7 +1571,7 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeNormal
 		}
 		return m, nil
-	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename, modePhone, modeForward, modeVote:
+	case modeFilter, modeAsk, modeSearch, modeSaveName, modeDraftHint, modeChatMsg, modeLink, modeRename, modePhone, modeForward, modeVote, modeConvSearch:
 		return m.inputKey(k)
 	case modeReview:
 		return m.reviewKey(s)
@@ -1633,6 +1662,11 @@ func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case modeSearch:
 			if text != "" {
 				return m, m.searchCmd(text)
+			}
+		case modeConvSearch:
+			if text != "" {
+				m.convQ, m.convLine = text, m.scroll-1
+				return m.convFind(1)
 			}
 		case modeSaveName:
 			if m.search != nil && text == "" {
@@ -2423,13 +2457,13 @@ func (m *Model) modify(key string) tea.Cmd {
 		}
 	}
 	m.selected = map[string]bool{}
-	m.undo = &undo{what: what, account: account, ids: ids}
+	m.pushUndo(undo{what: what, account: account, ids: ids})
 	msg := done
 	if len(ids) > 1 {
 		msg = fmt.Sprintf("%s %d", done, len(ids))
 	}
 	if key == "e" || key == "d" {
-		msg += " · z undoes"
+		msg += " · u undoes"
 	}
 	m.reload()
 	return m.act(msg, func(ctx context.Context) error {
@@ -2445,7 +2479,12 @@ func (m *Model) modify(key string) tea.Cmd {
 }
 
 func (m *Model) undoCmd() tea.Cmd {
-	u := m.undo
+	var u *undo
+	if n := len(m.undos); n > 0 {
+		x := m.undos[n-1]
+		m.undos = m.undos[:n-1]
+		u = &x
+	}
 	if u == nil {
 		// a send in its undo window?
 		items, _ := m.a.Store.Outbox(store.StatusQueued)
@@ -2463,7 +2502,6 @@ func (m *Model) undoCmd() tea.Cmd {
 		}
 		u = &undo{what: "send", outboxID: items[0].ID}
 	}
-	m.undo = nil
 	if u.what == "send" {
 		if err := m.a.Cancel(u.outboxID); err != nil {
 			m.err = err.Error()
@@ -2472,7 +2510,8 @@ func (m *Model) undoCmd() tea.Cmd {
 		m.say("send cancelled, nothing went out")
 		return nil
 	}
-	return m.act("undone", func(ctx context.Context) error {
+	m.redos = append(m.redos, *u)
+	return m.act("undone · Ctrl+r does it again", func(ctx context.Context) error {
 		for _, id := range u.ids {
 			t, err := m.a.Store.Thread(u.account, id)
 			acc := u.account

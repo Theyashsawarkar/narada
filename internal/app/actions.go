@@ -76,6 +76,11 @@ func (a *App) Untrash(ctx context.Context, account, thread string) error {
 // MarkSpaceRead marks a chat space read up to now, here and in Chat.
 func (a *App) MarkSpaceRead(ctx context.Context, account, space string) error {
 	t := time.Now()
+	if account == store.WhatsAppAccount && isStatusSpace(space) {
+		// seen here only: a status's sender is never told you viewed it
+		_ = a.Store.SetSpaceRead(account, whatsapp.StatusChat, t.UnixMilli())
+		return nil
+	}
 	if account == store.WhatsAppAccount {
 		err := a.markWhatsAppRead(ctx, space)
 		_ = a.Store.SetSpaceRead(account, space, t.UnixMilli())

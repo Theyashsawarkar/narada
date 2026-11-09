@@ -369,6 +369,9 @@ func (cl *Client) React(ctx context.Context, chat, sender, id, emoji string) err
 // MarkRead tells the sender (and your other devices) that these
 // messages of one chat were read.
 func (cl *Client) MarkRead(ctx context.Context, chat string, msgs []Message) error {
+	if chat == StatusChat || strings.HasPrefix(chat, StatusChat) {
+		return nil // never: viewing a status stays unseen by its sender
+	}
 	jid, err := types.ParseJID(chat)
 	if err != nil {
 		return err
