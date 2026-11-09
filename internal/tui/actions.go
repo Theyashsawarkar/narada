@@ -607,8 +607,7 @@ func (m Model) deleteIt(count int) (tea.Model, tea.Cmd) {
 			m.askFirst(q+" (u undoes it)", "delete", count)
 			return m, nil
 		}
-		m.selected = map[string]bool{}
-		return m, m.modify("d")
+		return m, m.modify("d") // modify trashes what's picked, then clears it
 	}
 	m.say("dd deletes a message of yours: pick it in the chat (e archives a WhatsApp chat)")
 	return m, nil

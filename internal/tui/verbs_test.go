@@ -238,3 +238,23 @@ func TestConfirmIsAboutWhatWasAsked(t *testing.T) {
 		}
 	}
 }
+
+// d with a motion trashes every thread its question named, not only the
+// one under the cursor.
+func TestDeleteMotionTrashesAllItAsked(t *testing.T) {
+	m := model(t)
+	var want []store.Thread
+	for i := 0; i < 3; i++ {
+		want = append(want, m.threads[i])
+	}
+	m = press(m, "d", "2", "j")
+	if m.confirm == nil || !strings.Contains(m.confirm.question, "3 threads") {
+		t.Fatalf("d2j asks for three: %+v", m.confirm)
+	}
+	m = press(m, "y")
+	for _, th := range want {
+		if got, _ := m.a.Store.Thread(th.Account, th.ID); !got.Has("TRASH") {
+			t.Errorf("%s was in the question but isn't in the trash", th.Subject)
+		}
+	}
+}
