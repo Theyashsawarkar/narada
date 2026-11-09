@@ -5,6 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
 // : opens a floating bar in the middle: ghost text, suggestions, Tab picks,
@@ -190,5 +194,47 @@ func TestSearchWhatsOpen(t *testing.T) {
 	m = press(m, "n", "N", "esc")
 	if m.convQ != "" {
 		t.Fatal("Esc stops the search")
+	}
+}
+
+// y answers the question about what was asked: if the list or the chat
+// moved under the question (a sync, a new message, a click), y does
+// nothing, rather than trash or delete something else.
+func TestConfirmIsAboutWhatWasAsked(t *testing.T) {
+	m := model(t)
+	first, _ := m.curThread()
+	m = press(m, "d", "d")
+	if m.confirm == nil {
+		t.Fatal("dd should ask")
+	}
+	m.sel = 1 // a sync put another thread under the cursor
+	m.loadPreview(true)
+	other, _ := m.curThread()
+	m = press(m, "y")
+	for _, th := range []store.Thread{first, other} {
+		if got, _ := m.a.Store.Thread(th.Account, th.ID); got.Has("TRASH") {
+			t.Fatalf("y trashed %s after the list moved", th.Subject)
+		}
+	}
+
+	w, wa := waModel(t, "919800000002@s.whatsapp.net")
+	w = pickMsg(t, w, "H4")
+	w = press(w, "d", "d")
+	if w.confirm == nil {
+		t.Fatal("dd should ask")
+	}
+	w.chatSel++ // the chat's window moved: your own H5 sits at that index now
+	nm, cmd := w.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	w = nm.(Model)
+	if cmd != nil {
+		cmd()
+	}
+	if len(wa.Revoked) != 0 {
+		t.Fatal("y deleted another message")
+	}
+	for _, id := range []string{"H4", "H5"} {
+		if _, err := w.a.Store.ChatMessage(store.WhatsAppAccount, "919800000002@s.whatsapp.net/"+id); err != nil {
+			t.Fatalf("%s gone: y acted on what it wasn't asked about", id)
+		}
 	}
 }

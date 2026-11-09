@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -24,11 +25,29 @@ type confirmAsk struct {
 	question string
 	act      string
 	count    int
+	target   string // what the question was about (askTarget)
 }
 
 // ask asks before act runs: y runs it, anything else doesn't.
 func (m *Model) askFirst(question, act string, count int) {
-	m.confirm = &confirmAsk{question: question, act: act, count: count}
+	m.confirm = &confirmAsk{question: question, act: act, count: count, target: m.askTarget()}
+}
+
+// askTarget names what a question is about: the picked message, the
+// threads it acts on, or the chat or section. y only does it while this is
+// unchanged: a sync, a new message shifting the chat, or a click between
+// the question and y must never make y act on something else.
+func (m *Model) askTarget() string {
+	if c, ok := m.picked(); ok {
+		return "msg:" + c.Name
+	}
+	var keys []string
+	if m.tab == tabMail {
+		for _, t := range m.targets() {
+			keys = append(keys, t.Account+"/"+t.ID)
+		}
+	}
+	return fmt.Sprintf("%d/%d/%s/%s", m.place(), m.sec, m.keyAt(m.sel), strings.Join(keys, ","))
 }
 
 // confirmKey answers the question being asked.
@@ -40,6 +59,13 @@ func (m Model) confirmKey(s string) (tea.Model, tea.Cmd) {
 			m.selected = map[string]bool{} // what d with a motion picked
 		}
 		m.say("kept")
+		return m, nil
+	}
+	if c.target != m.askTarget() {
+		if !m.visual {
+			m.selected = map[string]bool{}
+		}
+		m.say("it changed while asking: nothing done (ask again)")
 		return m, nil
 	}
 	m.confirmed = true

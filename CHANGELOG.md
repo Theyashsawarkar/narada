@@ -6,6 +6,7 @@ Newest first.
 
 - **Your messages follow WhatsApp's layout:** each bubble ends at the right edge, no "You" line above them, the time in every bubble.
 
+- **`y` only answers the question it was asked.** `dd`'s (and `d{motion}`'s, `Space m b`'s) question remembered only the action, so if a sync, a new message in a long chat or a click moved what's under the cursor before you pressed `y`, `y` trashed or deleted something else (0.11.1's `dd` checked it was the same message). Now `y` does nothing when the target changed, and says so.
 - **Viewing a status never tells its poster.** Listing, opening, picking or playing a status (`v`), and even `Space m r` on it, sends no "seen" to WhatsApp: a status read receipt is never queued, an old queued one is dropped unsent, and the WhatsApp client refuses one for `status@broadcast`. The status pane says so ("they won't see that you viewed it"). `Space m r` on a status also no longer showed a red "not found".
 - **The leader reads `Space` in every hint** (the bar, the Space menu, the website's demo): `␣`, which many fonts draw like `_`, is gone. The status pane's hint names today's keys (`r` replies, `Space i e` reacts).
 - **The keys every Vayu tool shares** ([ADR 9](docs/adr/0009-the-shared-space-grammar.md)). The keys are data now (`internal/tui/keymap.go`), run by [vyākaraṇa](https://github.com/Theyashsawarkar/vyakarana)'s engine, and the same table makes `?`, the Space menu, the palette, `/`'s actions, the README's key tables and Vayu's keybinding search.
