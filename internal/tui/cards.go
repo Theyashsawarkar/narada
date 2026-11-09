@@ -347,7 +347,7 @@ func (m Model) chatBubble(lines []string, maxW int, mine, sel bool, stamp string
 // yours, the ticks.
 func (m Model) bubbleStamp(g store.ChatMessage, later bool) string {
 	stamp := ""
-	if later {
+	if later || g.Mine { // yours have no header to carry the first time
 		stamp = time.UnixMilli(g.Created).Format("15:04")
 	}
 	if g.Mine {
@@ -953,9 +953,8 @@ func (m *Model) chatLines(w int) []string {
 		}
 		out = append(out, "")
 		runStart := len(out) // yours: moved to the right edge once drawn
-		if c.Mine {
-			out = append(out, fg(color).Bold(true).Render("You")+s.muted.Render("  "+time.UnixMilli(c.Created).Format("15:04")))
-		} else {
+		// yours have no name above them, as in WhatsApp: the time is in the bubble
+		if !c.Mine {
 			out = append(out, m.avatar(name)+" "+fg(color).Bold(true).Render(name)+s.muted.Render("  "+time.UnixMilli(c.Created).Format("15:04")))
 		}
 		for k, g := range m.chatMsgs[i:j] {
