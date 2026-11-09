@@ -123,6 +123,8 @@ type Config struct {
 	Keep string `toml:"keep"`
 	// OlderPage is how many older threads "load older" fetches at a time
 	OlderPage int `toml:"older_page"`
+	// ScrollLines is how far Ctrl+j / Ctrl+k scroll what's open (3)
+	ScrollLines int `toml:"scroll_lines"`
 	// Images: how photos show in the screen: "auto" (kitty's graphics
 	// where the terminal speaks them, else coloured blocks), "kitty",
 	// "blocks" or "off"
@@ -171,6 +173,7 @@ func Default() Config {
 		InitialDays:      30,
 		Keep:             "none",
 		OlderPage:        10,
+		ScrollLines:      3,
 		NerdFont:         true,
 		MaxThreads:       150,
 		Notify:           false,
@@ -231,6 +234,9 @@ func Load(p Paths) (Config, error) {
 	}
 	if c.OlderPage <= 0 {
 		c.OlderPage = 10
+	}
+	if c.ScrollLines <= 0 {
+		c.ScrollLines = 3
 	}
 	if c.ListStyle == "" && c.ChatList == "cards" {
 		c.ListStyle = "cards"

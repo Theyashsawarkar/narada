@@ -63,22 +63,36 @@ func TestLeaderMenu(t *testing.T) {
 	m := model(t)
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
 	m = nm.(Model)
-	if !m.leader || m.leaderShown || strings.Contains(m.View(), "Space  then") {
+	if !m.leader || m.leaderShown || strings.Contains(m.View(), "then…") {
 		t.Fatal("the menu shouldn't flash before the wait")
 	}
 	nm, _ = m.Update(cmd()) // the wait is over
 	m = nm.(Model)
-	if v := m.View(); !strings.Contains(v, "then…") || !strings.Contains(v, "WhatsApp") || !strings.Contains(m.footerView(), "LEADER") {
+	if v := m.View(); !strings.Contains(v, "then…") || !strings.Contains(v, "+Tabs") || !strings.Contains(v, "+Mark") || !strings.Contains(m.footerView(), "LEADER") {
 		t.Fatalf("no menu:\n%s", v)
 	}
-	m = press(m, "c") // Space c: Chat
+	// a group opens its own menu, with its keys; Backspace goes back up
+	m = press(m, "t")
+	if v := m.View(); !strings.Contains(v, "Tabs") || !strings.Contains(v, "Go to WhatsApp") {
+		t.Fatalf("Space t menu:\n%s", v)
+	}
+	m = press(m, "backspace")
+	if m.eng.Pending() != "Space" || !m.leader {
+		t.Fatalf("backspace: %q", m.eng.Pending())
+	}
+	m = press(m, "t", "c") // Space t c: Chat
 	if m.leader || m.tab != tabChat || m.wa {
-		t.Fatalf("Space c: tab %d wa %v leader %v", m.tab, m.wa, m.leader)
+		t.Fatalf("Space t c: tab %d wa %v leader %v", m.tab, m.wa, m.leader)
 	}
 	// typed straight on, the menu never shows
-	m = press(m, " ", "m")
+	m = press(m, " ", "t", "m")
 	if m.tab != tabMail || m.leaderShown {
-		t.Fatal("Space m")
+		t.Fatal("Space t m")
+	}
+	// Esc cancels a sequence half typed
+	m = press(m, " ", "m", "esc")
+	if m.leader || m.eng.Waiting() || m.tab != tabMail {
+		t.Fatal("esc should cancel Space m")
 	}
 }
 
@@ -92,31 +106,110 @@ func TestTwoKeysAndPlaces(t *testing.T) {
 	if m.sel != 0 {
 		t.Fatal("gg")
 	}
+	m = press(m, "2", "j")
+	if m.sel != 2 {
+		t.Fatalf("2j: %d", m.sel)
+	}
+	m = press(m, "1", "G")
+	if m.sel != 0 {
+		t.Fatalf("1G: %d", m.sel)
+	}
 	th, _ := m.curThread()
-	m = press(m, "d", "d") // archive
+	m = press(m, "e") // archive
 	if got, _ := m.a.Store.Thread(th.Account, th.ID); got.Has("INBOX") {
-		t.Fatal("dd didn't archive")
+		t.Fatal("e didn't archive")
 	}
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u")}) // and undo
 	m = runCmds(nm.(Model), cmd)
 	if got, _ := m.a.Store.Thread(th.Account, th.ID); !got.Has("INBOX") {
 		t.Fatal("u didn't undo")
 	}
-	m = press(m, "3")
+	m = press(m, "L", "L")
 	if !m.wa {
-		t.Fatal("3 is WhatsApp")
+		t.Fatal("L L from Mail is WhatsApp")
 	}
-	m = press(m, "1", "g", "t")
+	m = press(m, "H", "H")
+	if m.tab != tabMail {
+		t.Fatal("H H back to Mail")
+	}
+	m = press(m, "g", "t")
 	if m.tab != tabChat || m.wa {
 		t.Fatal("gt from Mail is Chat")
 	}
-	m = press(m, "1", "]")
+	m = press(m, "3", "g", "t")
+	if !m.wa {
+		t.Fatal("3gt is WhatsApp")
+	}
+	m = press(m, " ", "t", "m", "]", "]")
 	if m.sec != 1 {
-		t.Fatal("] is the next section")
+		t.Fatal("]] is the next section")
 	}
 	m = press(m, "q")
 	if m.prefix != "" || m.leader {
 		t.Fatal("state left behind")
+	}
+}
+
+// dd asks first, and only y says yes.
+func TestDeleteAsksFirst(t *testing.T) {
+	m := model(t)
+	th, _ := m.curThread()
+	m = press(m, "d", "d")
+	if m.confirm == nil || !strings.Contains(m.footerView(), "trash") {
+		t.Fatalf("dd should ask: %s", m.footerView())
+	}
+	m = press(m, "enter") // Enter is not yes
+	if got, _ := m.a.Store.Thread(th.Account, th.ID); got.Has("TRASH") || m.confirm != nil {
+		t.Fatal("Enter trashed it")
+	}
+	m = press(m, "d", "d", "y")
+	if got, _ := m.a.Store.Thread(th.Account, th.ID); !got.Has("TRASH") {
+		t.Fatal("dd y didn't trash")
+	}
+}
+
+// An old key says where it went, for one release.
+func TestMovedKeysSaySo(t *testing.T) {
+	m := model(t)
+	m = press(m, "*")
+	if !strings.Contains(m.toast, "moved to Space m s") {
+		t.Fatalf("* should say where it went: %q", m.toast)
+	}
+	m = press(m, "c")
+	if m.mode == modeCompose || !strings.Contains(m.toast, "moved to o") {
+		t.Fatalf("c: %q", m.toast)
+	}
+}
+
+// Ctrl+j / Ctrl+k scroll what's open by scroll_lines, and never move the
+// selection.
+func TestScrollKeys(t *testing.T) {
+	m := model(t)
+	m = press(m, "l")
+	sel := m.sel
+	m.scroll = 0
+	m.a.Config.ScrollLines = 3
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	m = nm.(Model)
+	if m.sel != sel {
+		t.Fatal("Ctrl+j moved the selection")
+	}
+	if m.scroll != 3 && !m.atBottom {
+		t.Fatalf("Ctrl+j scrolled %d", m.scroll)
+	}
+}
+
+// Space Space is the palette: type, Enter runs.
+func TestPalette(t *testing.T) {
+	m := model(t)
+	m = press(m, " ", " ")
+	if m.pal == nil || !strings.Contains(m.View(), "every action here") {
+		t.Fatal("Space Space should open the palette")
+	}
+	m = typeText(m, "go to whatsapp")
+	m = press(m, "enter")
+	if m.pal != nil || !m.wa {
+		t.Fatalf("the palette didn't take me to WhatsApp: pal %v wa %v", m.pal != nil, m.wa)
 	}
 }
 
@@ -209,7 +302,7 @@ func TestStatusReplyAndReact(t *testing.T) {
 	}
 	open("919800000003@s.whatsapp.net") // Sneha's
 	m = pickMsg(t, m, "D3")
-	m = press(m, "e")
+	m = press(m, " ", "i", "e")
 	if m.mode != modeReact {
 		t.Fatal("e should open the reactions")
 	}
@@ -256,5 +349,20 @@ func TestNoHiddenKeys(t *testing.T) {
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	if m = nm.(Model); len(m.selected) != 0 {
 		t.Fatal("Ctrl+x picked everything without being a key")
+	}
+}
+
+// Keys typed fast can arrive as one message ("dd", "ihi"): each is a key,
+// and once a key starts typing, the rest is text.
+func TestFastKeys(t *testing.T) {
+	m := model(t)
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("dd")})
+	if m = nm.(Model); m.confirm == nil {
+		t.Fatal("dd typed fast should ask")
+	}
+	m = press(m, "n", " ", "t", "c")
+	nm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ihi")})
+	if m = nm.(Model); m.mode != modeChatMsg || string(m.input) != "hi" {
+		t.Fatalf("ihi: mode %v input %q", m.mode, string(m.input))
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,105 +13,117 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/cli"
 	"github.com/Theyashsawarkar/narada/internal/config"
 	"github.com/Theyashsawarkar/narada/internal/store"
+	"github.com/Theyashsawarkar/vyakarana/popup"
 )
 
 // narada's keys work like Vim's: NORMAL moves and acts, i writes (INSERT),
 // v picks several (VISUAL), : takes a command, and Space is the leader: a
-// menu of everything else shows if you wait after it. Keys can come in
-// twos (gg, dd, yy, za, gf). vimKey turns these into the screen's own
-// actions, so one action has one implementation whatever key reaches it.
+// menu of everything else shows if you wait after it. The keys are data
+// (keymap.go), the engine (vyakarana) resolves counts and sequences, and
+// run (actions.go) does the action a key names.
 
-// leaderWait is how long after Space the menu waits before showing:
-// typed straight on, a leader key never flashes the menu.
-const leaderWait = 350 * time.Millisecond
-
-type leaderTick struct{ at int }
-
-// leaderKey is one entry of the Space menu.
-type leaderKey struct {
-	key, desc string
-	color     func(styles) string
-	run       func(m *Model) (tea.Model, tea.Cmd)
+// normalKey is a key in NORMAL mode. An open question (y or not) or
+// the palette takes it first; on an AI request only its own keys answer
+// it; VISUAL has a few keys of its own; everything else goes to the
+// engine, which turns it into an action of keymap.go (with a count) or
+// waits for more (gg, Space m s). A key that isn't in the keymap does
+// nothing.
+func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
+	if m.confirm != nil {
+		return m.confirmKey(s)
+	}
+	if m.pal != nil {
+		return m.paletteKey(s)
+	}
+	if m.inAISection() && !m.eng.Waiting() && !m.visual {
+		if mm, cmd, done := m.aiKey(s); done {
+			return mm, cmd
+		}
+	}
+	if m.visual && !m.eng.Waiting() {
+		if mm, cmd, done := m.visualKey(s); done {
+			return mm, cmd
+		}
+	}
+	r := m.eng.Feed(s, m.where())
+	m.syncPending()
+	switch {
+	case r.Pending:
+		return m, popup.WhichAfter(r.Gen)
+	case r.Cancel:
+		return m, nil
+	case r.Act != "":
+		m.lastCounted = r.Counted
+		return m.run(r.Act, r.Count)
+	case r.Message() != "":
+		m.say(r.Message())
+	case r.Unknown != "":
+		if rs := []rune(r.Unknown); len(rs) == 1 && rs[0] > ' ' && rs[0] < 0x7f {
+			m.say(r.Unknown + " does nothing here · ? lists the keys, / finds what you want")
+		}
+	}
+	return m, nil
 }
 
-func (m Model) leaderKeys() []leaderKey {
-	place := func(i int) func(m *Model) (tea.Model, tea.Cmd) {
-		return func(m *Model) (tea.Model, tea.Cmd) { return m.goPlace(i) }
+// syncPending mirrors what the engine is waiting for into the fields the
+// screen draws: leader (a Space sequence: its menu), prefix (gg, dd, zz…:
+// the bar's showcmd).
+func (m *Model) syncPending() {
+	p := m.eng.Pending()
+	m.leader = strings.Contains(" "+p+" ", " Space ")
+	m.prefix = ""
+	if !m.leader {
+		m.prefix = p
 	}
-	keys := func(k string) func(m *Model) (tea.Model, tea.Cmd) {
-		return func(m *Model) (tea.Model, tea.Cmd) { return m.actKey(k) }
-	}
-	c := func(f func(s styles) string) func(styles) string { return f }
-	blue, teal, green, peach := c(func(s styles) string { return s.c.Blue }), c(func(s styles) string { return s.c.Teal }), c(func(s styles) string { return s.c.Green }), c(func(s styles) string { return s.c.Peach })
-	pink := c(func(s styles) string { return s.c.Pink })
-	mauve, yellow, sky, red, sub := c(func(s styles) string { return s.c.Mauve }), c(func(s styles) string { return s.c.Yellow }), c(func(s styles) string { return s.c.Sky }), c(func(s styles) string { return s.c.Red }), c(func(s styles) string { return s.c.Subtle })
-	return []leaderKey{
-		{"m", "Mail", blue, place(0)},
-		{"c", "Chat", teal, place(1)},
-		{"w", "WhatsApp", green, place(2)},
-		{"a", "AI requests", peach, place(3)},
-		{"f", "Find anything (also /)", mauve, func(m *Model) (tea.Model, tea.Cmd) { return m.findAnything(true) }},
-		{"/", "Search here", mauve, func(m *Model) (tea.Model, tea.Cmd) { return m.findAnything(false) }},
-		{"n", "Write a new mail or message", green, keys("c")},
-		{"N", "Start a conversation", green, func(m *Model) (tea.Model, tea.Cmd) {
-			if m.tab != tabChat {
-				mm, _ := m.goPlace(1)
-				*m = mm.(Model)
-			}
-			m.openConvo()
-			return *m, nil
-		}},
-		{"S", "Star / unstar", yellow, keys("*")},
-		{"l", "Label", mauve, keys("L")},
-		{"u", "Unread only", red, func(m *Model) (tea.Model, tea.Cmd) { return m.goSection("Unread") }},
-		{"o", "Open a link", sky, keys("o")},
-		{"v", "Open the files", yellow, keys("v")},
-		{"V", "Save the files", yellow, keys("V")},
-		{"U", "Send a file here", yellow, keys("U")},
-		{"d", "Write a reply or message with Claude (A)", pink, keys("A")},
-		{"s", "Summary by Claude", yellow, keys("S")},
-		{"k", "Ask Claude", yellow, keys("@")},
-		{"t", "Today's digest", yellow, keys("T")},
-		{"R", "Rename this chat", sub, func(m *Model) (tea.Model, tea.Cmd) {
-			if sp, ok := m.curSpace(); ok {
-				m.mode, m.input = modeRename, []rune(cli.SpaceTitle(sp))
-			} else {
-				m.say("Space R renames a chat: pick one in Chat or WhatsApp")
-			}
-			return *m, nil
-		}},
-		{"p", "Pin / unpin this chat", sub, keys("p")},
-		{"x", "Switch account", sub, func(m *Model) (tea.Model, tea.Cmd) { return m.nextAccount() }},
-		{"r", "Sync now", sub, func(m *Model) (tea.Model, tea.Cmd) { m.say("syncing…"); return *m, m.syncCmd() }},
-		{"b", "Open in the browser", sky, keys("b")},
-		{"y", "Copy the link", sky, keys("y")},
-		{"␣", "Open the next unread", red, func(m *Model) (tea.Model, tea.Cmd) { return m.nextUnread(1, true) }},
-		{"?", "All keys", sub, keys("?")},
-		{"q", "Quit", red, func(m *Model) (tea.Model, tea.Cmd) { return *m, tea.Quit }},
+	if !m.eng.Waiting() {
+		m.leaderShown = false
 	}
 }
 
-// leaderMenu draws the Space menu above the bar, in columns.
-func (m Model) leaderMenu() []string {
+// pendingKeys is the sequence under way without its count ("Space m").
+func (m Model) pendingKeys() string {
+	f := strings.Fields(m.eng.Pending())
+	for len(f) > 0 && f[0][0] >= '0' && f[0][0] <= '9' {
+		f = f[1:]
+	}
+	return strings.Join(f, " ")
+}
+
+// whichMenu is the which-key menu: what can follow the keys typed so far,
+// a group as +its name, in columns, over the bottom of the screen.
+func (m Model) whichMenu() []string {
 	s := m.styles
-	ks := m.leaderKeys()
+	hints := m.eng.Hints(m.where())
 	w := m.w - 4
-	cols := max(1, min(4, (w-4)/26))
+	cols := max(1, min(4, (w-4)/30))
 	colW := (w - 4) / cols
-	rows := (len(ks) + cols - 1) / cols
+	rows := (len(hints) + cols - 1) / cols
 	border := fg(s.c.Mauve)
 	var body []string
-	body = append(body, s.accent2.Bold(true).Foreground(lipgloss.Color(s.c.Mauve)).Render("Space")+s.muted.Render("  then…"))
+	title := s.accent2.Bold(true).Foreground(lipgloss.Color(s.c.Mauve)).Render(m.eng.Pending())
+	if name := narKeys.GroupName(m.pendingKeys()); name != "" {
+		title += s.text.Render("  " + name)
+	}
+	body = append(body, title+s.muted.Render("  then…   ⌫ up a level · esc never mind"))
 	for r := range rows {
 		line := ""
 		for c := range cols {
 			i := c*rows + r
-			if i >= len(ks) {
+			if i >= len(hints) {
 				break
 			}
-			k := ks[i]
-			cell := fg(k.color(s)).Bold(true).Render(k.key) + "  " + s.text.Render(k.desc)
-			line += fit(cell, colW)
+			h := hints[i]
+			key := h.Key
+			if key == "Space" {
+				key = "␣"
+			}
+			cell := fg(s.c.Mauve).Bold(true).Render(key) + "  "
+			if h.Group {
+				cell += s.sky.Render("+" + h.Desc)
+			} else {
+				cell += s.text.Render(h.Desc)
+			}
+			line += fit(cell, colW-2) + "  "
 		}
 		body = append(body, line)
 	}
@@ -124,201 +135,91 @@ func (m Model) leaderMenu() []string {
 	return append(out, border.Render("╰"+strings.Repeat("─", inner)+"╯"))
 }
 
-// startLeader: Space was pressed; the menu shows if nothing follows soon.
-func (m *Model) startLeader() tea.Cmd {
-	m.leader, m.leaderShown = true, false
-	m.leaderAt++
-	at := m.leaderAt
-	return tea.Tick(leaderWait, func(time.Time) tea.Msg { return leaderTick{at} })
+// ------------------------------------------------------------ the palette
+
+// openPalette opens Space Space: every action that works here, searched
+// as you type; Enter runs the picked one.
+func (m *Model) openPalette() {
+	p := popup.NewPalette(narKeys, m.where())
+	m.pal = &p
 }
 
-func (m Model) leaderKey(s string) (tea.Model, tea.Cmd) {
-	m.leader, m.leaderShown = false, false
-	if s == "esc" || s == "ctrl+c" {
+// paletteMsg: typed (or pasted) text goes into the palette's query.
+func (m Model) paletteMsg(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if k.Type == tea.KeyRunes && !k.Alt && len(k.Runes) > 1 {
+		p := *m.pal
+		p.Query, p.Sel = p.Query+string(k.Runes), 0
+		m.pal = &p
 		return m, nil
 	}
-	if s == " " || s == "space" {
-		s = "␣"
-	}
-	for _, k := range m.leaderKeys() {
-		if k.key == s {
-			return k.run(&m)
-		}
-	}
-	m.say("Space " + s + " does nothing · Space and wait shows the menu")
-	return m, nil
+	return m.paletteKey(k.String())
 }
 
-// ------------------------------------------------------------ the keys
-
-// vimKey handles narada's Vim keys in NORMAL mode. done is false for a key
-// it leaves to normalKey (under the name normalKey knows it by).
-func (m Model) vimKey(s string) (tea.Model, tea.Cmd, string, bool) {
-	if m.leader {
-		mm, cmd := m.leaderKey(s)
-		return mm, cmd, "", true
+func (m Model) paletteKey(s string) (tea.Model, tea.Cmd) {
+	p := *m.pal
+	act, closed := p.Key(s)
+	m.pal = &p
+	if !closed {
+		return m, nil
 	}
-	if sw := m.swallow; sw != "" {
-		m.swallow = ""
-		if s == sw && sw == "d" {
-			return m, nil, "", true
-		}
+	m.pal = nil
+	if act == "" {
+		return m, nil
 	}
-	if m.prefix != "" {
-		two := m.prefix + s
-		m.prefix = ""
-		if s == "esc" || s == "ctrl+c" {
-			return m, nil, "", true // never mind
-		}
-		return m.twoKeys(two)
-	}
-	if m.visual {
-		mm, cmd, done := m.visualKey(s)
-		if done {
-			return mm, cmd, "", true
-		}
-	}
-	switch s {
-	case " ", "space":
-		return m, m.startLeader(), "", true
-	case "g", "d", "y", "z":
-		m.prefix = s
-		return m, nil, "", true
-	case ":":
-		m.mode, m.input, m.cmdAt = modeCommand, nil, len(m.cmdHist)
-		return m, nil, "", true
-	case "/": // the one key for search
-		mm, cmd := m.findAnything(true)
-		return mm, cmd, "", true
-	case "[", "]", "tab", "shift+tab":
-		// sections, like tabs anywhere (the old h / l)
-		return m, nil, map[string]string{"[": "h", "]": "l", "tab": "l", "shift+tab": "h"}[s], false
-	case "ctrl+p", "ctrl+n":
-		return m, nil, map[string]string{"ctrl+p": "[", "ctrl+n": "]"}[s], false // the old [ / ]: chats
-	case "h":
-		m.focus = 0
-		return m, nil, "", true
-	case "l":
-		if m.focus == 0 {
-			return m, nil, "2", false // the old 2: what's open
-		}
-		return m, nil, "", true
-	case "1", "2", "3", "4":
-		mm, cmd := m.goPlace(int(s[0] - '1'))
-		return mm, cmd, "", true
-	case "n", "N":
-		mm, cmd := m.nextUnread(map[string]int{"n": 1, "N": -1}[s], false)
-		return mm, cmd, "", true
-	case "u":
-		return m, nil, "z", false // the old z: undo, or cancel a send
-	case "#":
-		if m.tab != tabMail || m.pickingMsg() {
-			m.say("# trashes mail · dd deletes a picked message")
-			return m, nil, "", true
-		}
-		return m, nil, "d", false // the old d: to the trash
-	case "Y":
-		return m, nil, "Y", false
-	case "v":
-		if m.pickingMsg() {
-			return m, nil, "", true
-		}
-		m.visual, m.visualFrom = true, m.sel
-		m.selected = map[string]bool{}
-		if k := m.keyAt(m.sel); k != "" {
-			m.selected[k] = true
-		}
-		return m, nil, "", true
-	case "V":
-		return m, nil, "ctrl+x", false // the whole list
-	case "a":
-		if m.tab == tabChat {
-			return m, nil, "i", false
-		}
-		return m, nil, "a", false // mail: reply to everyone
-	case "R":
-		if m.tab == tabMail {
-			if _, ok := m.curOutbox(); !ok {
-				return m, nil, "a", false
-			}
-		}
-		return m, nil, "R", false // private reply, or send a failed one again
-	}
-	// Only the keys on the key sheet act: anything else used to fall
-	// through to the old single-letter actions (x picked, s searched, Q
-	// folded, D/S/T asked Claude, Ctrl+x picked all) without being
-	// documented anywhere.
-	if !sheetKeys[s] {
-		if r := []rune(s); len(r) == 1 && r[0] > ' ' && r[0] < 0x7f {
-			m.say(s + " does nothing here · ? lists the keys, / finds what you want")
-		}
-		return m, nil, "", true
-	}
-	return m, nil, s, false
+	m.lastCounted = false
+	return m.run(act, 1)
 }
 
-// sheetKeys are the single keys the key sheet (keys.go) lists that reach
-// the old actions under their own name.
-var sheetKeys = map[string]bool{
-	"j": true, "k": true, "down": true, "up": true, "G": true, "J": true, "K": true,
-	"ctrl+d": true, "ctrl+u": true, "enter": true, "q": true, "esc": true, "?": true,
-	"+": true, "-": true, "W": true, "X": true, "i": true, "r": true, "f": true, "c": true,
-	"m": true, "M": true, "*": true, "L": true, "b": true, "U": true, "t": true, "p": true,
-	"E": true, "e": true, "Z": true, "I": true, "B": true, "P": true, "alt+r": true,
-	"A": true, "@": true, "backspace": true, "alt+m": true, "alt+c": true, "alt+w": true,
+// palettePopup draws the palette in the middle of the screen.
+func (m Model) palettePopup() []string {
+	s := m.styles
+	w := min(m.w-4, 96)
+	inner := w - 2
+	border := fg(s.c.Mauve)
+	matches := m.pal.Matches()
+	room := max(3, min(12, m.bodyHeight()-8))
+	top := max(0, min(m.pal.Sel-room+1, len(matches)-room))
+	body := []string{s.accent2.Bold(true).Foreground(lipgloss.Color(s.c.Mauve)).Render("❯ ") + s.text.Render(m.pal.Query) +
+		lipgloss.NewStyle().Reverse(true).Render(" ") + s.muted.Render(fmt.Sprintf("   %d of %d", len(matches), len(m.pal.Items)))}
+	for i := top; i < min(len(matches), top+room); i++ {
+		b := matches[i]
+		row := fit(s.round(s.keycap, b.Keys()), 18) + " " + s.text.Render(b.Desc)
+		if i == m.pal.Sel {
+			row = fg(s.c.Mauve).Bold(true).Render("▶ ") + row
+		} else {
+			row = "  " + row
+		}
+		body = append(body, row)
+	}
+	if len(matches) == 0 {
+		body = append(body, s.muted.Render("  nothing matches"))
+	}
+	label := " Space Space · every action here "
+	out := []string{border.Render("╭─" + label + strings.Repeat("─", max(0, inner-1-lipgloss.Width(label))) + "╮")}
+	for _, l := range body {
+		out = append(out, border.Render("│")+" "+fit(l, inner-2)+" "+border.Render("│"))
+	}
+	return append(out, border.Render("╰"+strings.Repeat("─", inner)+"╯"))
 }
 
-// twoKeys runs gg, gt, gT, gf, gF, gx, dd, yy, za and zq.
-func (m Model) twoKeys(two string) (tea.Model, tea.Cmd, string, bool) {
-	switch two {
-	case "gg":
-		if m.visual {
+// visualKey: with a range picked (v), j/k grow it and a key acts on all of
+// it. done is false for keys VISUAL leaves to NORMAL (Space…).
+func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
+	if m.vg {
+		m.vg = false
+		if s == "g" {
 			m.sel = 0
 			m.visualRange()
-			return m, nil, "", true
 		}
-		return m, nil, "g", false
-	case "gt", "gT":
-		step := map[string]int{"gt": 1, "gT": 3}[two]
-		mm, cmd := m.goPlace((m.placeAt() + step) % 4)
-		return mm, cmd, "", true
-	case "gf", "gF":
-		return m, nil, map[string]string{"gf": "v", "gF": "V"}[two], false
-	case "gx":
-		return m, nil, "o", false
-	case "dd":
-		switch {
-		case m.pickingMsg():
-			// the first dd asks, the second deletes: a message deleted for
-			// everyone can't be brought back
-			return m, nil, "d", false
-		case m.tab == tabMail || m.wa:
-			return m, nil, "e", false // archive
-		}
-		m.say("dd archives mail and WhatsApp chats; Google Chat has no archive")
-		return m, nil, "", true
-	case "yy":
-		return m, nil, "y", false
-	case "za":
-		if m.tab == tabMail {
-			return m, nil, "E", false
-		}
-		return m, nil, "", true
-	case "zq":
-		return m, nil, "Q", false
+		return m, nil, true
 	}
-	if p := two[:1]; p == "g" || p == "d" || p == "y" || p == "z" {
-		m.say(two + " does nothing · ? shows every key")
-	}
-	return m, nil, "", true
-}
-
-// visualKey: with a range picked (v), j/k grow it and a key acts on all of it.
-func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
 	switch s {
 	case "esc", "v", "q":
 		m.visual = false
 		m.selected = map[string]bool{}
+		return m, nil, true
+	case "g":
+		m.vg = true
 		return m, nil, true
 	case "j", "k", "down", "up", "G":
 		switch s {
@@ -331,11 +232,10 @@ func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
 		}
 		m.visualRange()
 		return m, nil, true
-	case "d", "m", "M", "*", "y":
+	case "d", "e", "~", "y":
 		m.visual = false
-		m.swallow = s // a second d (dd from habit) does nothing
-		switch {
-		case s == "y":
+		switch s {
+		case "y":
 			// what's picked, as you'd write it: subjects, or chat names
 			var names []string
 			for i := range m.count() {
@@ -351,14 +251,25 @@ func (m Model) visualKey(s string) (tea.Model, tea.Cmd, bool) {
 			m.selected = map[string]bool{}
 			m.say(copyAs(strings.Join(names, "\n"), fmt.Sprintf("%d %s", len(names), map[bool]string{true: "subjects", false: "chat names"}[m.tab == tabMail])))
 			return m, nil, true
-		case s == "d" && m.tab == tabMail:
-			return m, m.modify("e"), true
-		case s == "d":
-			m.say("dd archives one chat at a time on WhatsApp")
+		case "d":
+			if m.tab != tabMail {
+				m.say("d trashes mail; in a chat, dd deletes a picked message of yours")
+				m.selected = map[string]bool{}
+				return m, nil, true
+			}
+			mm, cmd := m.deleteIt(1)
+			return mm, cmd, true
+		case "e":
+			if m.tab != tabMail {
+				m.say("e archives one WhatsApp chat at a time")
+				m.selected = map[string]bool{}
+				return m, nil, true
+			}
+			cmd := m.modify("e")
 			m.selected = map[string]bool{}
-			return m, nil, true
+			return m, cmd, true
 		}
-		mm, cmd := m.actKey(s)
+		mm, cmd := m.toggleRead()
 		return mm, cmd, true
 	}
 	return m, nil, false
@@ -388,7 +299,9 @@ func (m Model) placeAt() int {
 // goPlace goes to Mail, Chat, WhatsApp or the AI requests (always: an
 // empty list says how requests arrive).
 func (m *Model) goPlace(i int) (tea.Model, tea.Cmd) {
-	m.visual, m.leader = false, false
+	m.visual = false
+	m.eng.Reset()
+	m.syncPending()
 	if i == 3 {
 		kind := ""
 		if len(m.waiting) > 0 {
@@ -397,7 +310,6 @@ func (m *Model) goPlace(i int) (tea.Model, tea.Cmd) {
 		m.goToAI(kind)
 		return *m, nil
 	}
-	m.visual, m.leader = false, false
 	if i == m.place() && !m.inAISection() {
 		return *m, nil
 	}
@@ -432,8 +344,9 @@ func (m Model) aiKey(s string) (tea.Model, tea.Cmd, bool) {
 		m.armDecline = 0
 		mm, cmd := m.approveKey(s)
 		return mm, cmd, true
-	case "j", "k", "down", "up", "g", "G", "enter", "1", "2", "3", "4", "tab", "shift+tab", " ", "space", "/", "?", ":",
-		"q", "esc", "ctrl+d", "ctrl+u", "J", "K", "h", "l", "[", "]", "ctrl+c", "alt+m", "alt+c", "alt+w":
+	case "j", "k", "down", "up", "g", "G", "enter", "1", "2", "3", "4", "5", "6", "7", "8", "9", "tab", "shift+tab", " ", "space", "/", "?", ":",
+		"q", "esc", "ctrl+d", "ctrl+u", "ctrl+f", "ctrl+b", "ctrl+j", "ctrl+k", "ctrl+e", "ctrl+y", "pgup", "pgdown", "home", "end",
+		"J", "K", "H", "L", "h", "l", "[", "]", "z", "ctrl+n", "ctrl+p", "ctrl+c", "alt+m", "alt+c", "alt+w":
 		m.armDecline = 0
 		return m, nil, false
 	}
@@ -525,7 +438,8 @@ func (m Model) runKeys(seq string) (tea.Model, tea.Cmd) {
 		switch low := strings.ToLower(tok); {
 		case low == "space":
 			keys = []string{" "}
-		case strings.Contains(low, "+") && len(low) > 1, low == "enter", low == "tab", low == "esc", low == "backspace":
+		case strings.Contains(low, "+") && len(low) > 1, low == "enter", low == "tab", low == "esc", low == "backspace",
+			low == "home", low == "end", low == "up", low == "down":
 			keys = []string{low}
 		default:
 			for _, r := range tok {
@@ -545,7 +459,11 @@ func (m Model) runKeys(seq string) (tea.Model, tea.Cmd) {
 func keyMsgOf(k string) tea.KeyMsg {
 	named := map[string]tea.KeyType{"enter": tea.KeyEnter, "tab": tea.KeyTab, "esc": tea.KeyEsc, "backspace": tea.KeyBackspace,
 		"ctrl+x": tea.KeyCtrlX, "ctrl+k": tea.KeyCtrlK, "ctrl+d": tea.KeyCtrlD, "ctrl+u": tea.KeyCtrlU, "ctrl+n": tea.KeyCtrlN, "ctrl+p": tea.KeyCtrlP,
-		"shift+tab": tea.KeyShiftTab, "up": tea.KeyUp, "down": tea.KeyDown}
+		"ctrl+j": tea.KeyCtrlJ, "ctrl+f": tea.KeyCtrlF, "ctrl+b": tea.KeyCtrlB, "ctrl+e": tea.KeyCtrlE, "ctrl+y": tea.KeyCtrlY,
+		"shift+tab": tea.KeyShiftTab, "up": tea.KeyUp, "down": tea.KeyDown, "home": tea.KeyHome, "end": tea.KeyEnd,
+		"pgup": tea.KeyPgUp, "pgdown": tea.KeyPgDown, "left": tea.KeyLeft, "right": tea.KeyRight, "delete": tea.KeyDelete,
+		"ctrl+s": tea.KeyCtrlS, "ctrl+t": tea.KeyCtrlT, "ctrl+c": tea.KeyCtrlC, "ctrl+o": tea.KeyCtrlO, "ctrl+v": tea.KeyCtrlV,
+		"ctrl+w": tea.KeyCtrlW, "ctrl+a": tea.KeyCtrlA, "ctrl+r": tea.KeyCtrlR, "ctrl+g": tea.KeyCtrlG}
 	if t, ok := named[k]; ok {
 		return tea.KeyMsg{Type: t}
 	}
@@ -565,26 +483,26 @@ func keyMsgOf(k string) tea.KeyMsg {
 type command struct{ name, args, desc, keys string }
 
 var commands = []command{
-	{"archive", "", "Archive the thread or chat (dd)", "dd"},
-	{"trash", "", "Move the thread to the trash (#)", "#"},
-	{"read", "", "Mark it read (m)", "m"},
-	{"unread", "", "Mark it unread (M)", "M"},
-	{"star", "", "Star or unstar it (*)", "*"},
-	{"label", "", "Add or remove a label (L)", "L"},
-	{"later", "", "Move a scheduled send to another time (t)", "t"},
-	{"mute", "", "Mute the WhatsApp chat: 8 hours, then longer (Z)", "Z"},
-	{"rename", "", "Rename the chat (Space R)", "space R"},
-	{"account", "", "Switch account (Space x)", "space x"},
-	{"sync", "", "Sync now (Space r)", "space r"},
-	{"mail", "", "Go to Mail (1)", "1"},
-	{"chat", "", "Go to Google Chat (2)", "2"},
-	{"whatsapp", "", "Go to WhatsApp (3)", "3"},
-	{"ai", "", "Go to the AI requests (4)", "4"},
-	{"new", "", "Write a new mail or message (c)", "c"},
-	{"digest", "", "Today's digest by Claude (T)", "T"},
+	{"archive", "", "Archive the thread or chat (e)", "e"},
+	{"trash", "", "Move the thread to the trash (dd, asks first)", "dd"},
+	{"read", "", "Mark it read (Space m r)", "Space m r"},
+	{"unread", "", "Mark it unread (Space m u)", "Space m u"},
+	{"star", "", "Star or unstar it (Space m s)", "Space m s"},
+	{"label", "", "Add or remove a label (Space m l)", "Space m l"},
+	{"later", "", "Move a scheduled send to another time (Space e t)", "Space e t"},
+	{"mute", "", "Mute the WhatsApp chat: 8 hours, then longer (Space m z)", "Space m z"},
+	{"rename", "", "Rename the chat (Space e r)", "Space e r"},
+	{"account", "", "Switch account (Space g a)", "Space g a"},
+	{"sync", "", "Sync now (Space r r)", "Space r r"},
+	{"mail", "", "Go to Mail (Space t m)", "Space t m"},
+	{"chat", "", "Go to Google Chat (Space t c)", "Space t c"},
+	{"whatsapp", "", "Go to WhatsApp (Space t w)", "Space t w"},
+	{"ai", "", "Go to the AI requests (Space t a)", "Space t a"},
+	{"new", "", "Write a new mail or message (o)", "o"},
+	{"digest", "", "Today's digest by Claude (Space k t)", "Space k t"},
 	{"keys", "", "Show every key (?)", "?"},
-	{"quit", "", "Quit narada (Space q)", "space q"},
-	{"q", "", "Quit narada", "space q"},
+	{"quit", "", "Quit narada (Space q)", "Space q"},
+	{"q", "", "Quit narada", "Space q"},
 }
 
 // commandKey edits the : line; Enter runs it.

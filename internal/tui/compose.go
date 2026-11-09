@@ -177,6 +177,9 @@ func (m Model) reviewKey(s string) (tea.Model, tea.Cmd) {
 		m.mode = modeNormal
 		return m, nil
 	}
+	if s != "n" && s != "q" && s != "esc" {
+		r.armDiscard = false
+	}
 	switch s {
 	case "y":
 		if r.replaceID > 0 {
@@ -222,6 +225,12 @@ func (m Model) reviewKey(s string) (tea.Model, tea.Cmd) {
 			r.out.Files = r.out.Files[:n-1]
 		}
 	case "n", "q", "esc":
+		// what you wrote is gone for good: n twice, so a stray key keeps it
+		if !r.armDiscard {
+			r.armDiscard = true
+			m.say("n again discards what you wrote · y sends it · e edits it")
+			return m, nil
+		}
 		m.review, m.mode = nil, modeNormal
 		m.say("discarded")
 	}

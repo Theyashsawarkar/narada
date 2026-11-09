@@ -93,24 +93,25 @@ func (m Model) helpKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-var groupTitles = map[string]string{"Move": "Moving around", "Act": "Mail and chat", "Space": "Space, then…", "Claude": "Claude",
-	"Other": "Other", "Insert": "Writing a message", "Search": "The search (/)", "Compose": "Writing a mail",
-	"Review": "Reviewing a message", "Approve": "The approval popup"}
-
 func (m Model) helpPopup() []string {
 	s := m.styles
 	w := min(m.w-4, 156)
 	h := min(m.bodyHeight()-2, 46)
 	iw := w - 4
 	q := strings.ToLower(strings.TrimSpace(m.helpQ))
-	// groups, in an order that reads well; the one for where you are first
-	order := []string{"Move", "Act", "Space", "Insert", "Claude", "Other", "Search", "Compose", "Review", "Approve"}
+	// groups in the keymap's order: everywhere, its Space groups, then
+	// each view
+	var order []string
 	type entry struct{ keys, desc string }
 	groups := map[string][]entry{}
 	n := 0
 	for _, k := range Keys {
-		if k.Group == "Setup" {
+		if k.Group == "First start" {
 			continue
+		}
+		if _, seen := groups[k.Group]; !seen {
+			order = append(order, k.Group)
+			groups[k.Group] = nil
 		}
 		if q != "" && !strings.Contains(strings.ToLower(k.Keys+" "+k.Desc+" "+k.Group), q) {
 			continue
@@ -135,7 +136,7 @@ func (m Model) helpPopup() []string {
 			keyW = max(keyW, lipgloss.Width(s.round(s.keycap, e.keys)))
 		}
 		keyW = min(keyW, 18)
-		b := []string{s.accent.Bold(true).Render(groupTitles[g]) + s.muted.Render(fmt.Sprintf("  %d", len(es)))}
+		b := []string{s.accent.Bold(true).Render(g) + s.muted.Render(fmt.Sprintf("  %d", len(es)))}
 		for _, e := range es {
 			kc := s.round(s.keycap, e.keys)
 			if lipgloss.Width(kc) > keyW {

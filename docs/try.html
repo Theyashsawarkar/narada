@@ -318,7 +318,7 @@ mark{background:none;color:var(--peach);font-weight:700}
   <section>
     <div class="term" id="term" tabindex="0" aria-label="narada demo: click it and use the keys"></div>
     <p class="below">
-      <span class="k">j</span>/<span class="k">k</span> move · <span class="k">⏎</span>/<span class="k">l</span> open · <span class="k">h</span> back · <span class="k">i</span> write · <span class="k">r</span> reply · <span class="k">dd</span> delete · <span class="k">u</span> undo send · <span class="k">R</span> send again ·
+      <span class="k">j</span>/<span class="k">k</span> move · <span class="k">⏎</span>/<span class="k">l</span> open · <span class="k">h</span> back · <span class="k">i</span> write · <span class="k">r</span> reply · <span class="k">dd</span> delete · <span class="k">e</span> archive · <span class="k">u</span> undo · <span class="k">R</span> send again ·
       <span class="k">H</span>/<span class="k">L</span> places · <span class="k">Tab</span> sections · <span class="k">␣</span> menu · <span class="k">:</span> commands · <span class="k">/</span> find · <span class="k">?</span> all keys. Mouse works too.
     </p>
   </section>
@@ -557,7 +557,7 @@ function listHTML(){
   const d=items(),p=P();
   let h=`<div class="list${S.focus!=='list'?' dim':''}" data-n="list"><div class="lhead"><span class="b">${d.length} ${p.id==='mail'?'threads':p.id==='ai'?'requests':'chats'}</span>${S.narrow?'':'<span class="muted">j/k · ⏎</span>'}</div><div class="items">`;
   if(!d.length){
-    const msg={Scheduled:'Nothing scheduled. While writing, Ctrl+t sends it later.',Archived:'Nothing archived. Space c a archives a chat.',Sent:'Nothing sent from here yet.',Done:'Nothing done yet.'}[p.secs[S.sec]]||'Nothing here.';
+    const msg={Scheduled:'Nothing scheduled. While writing, Ctrl+t sends it later.',Archived:'Nothing archived. e archives a chat.',Sent:'Nothing sent from here yet.',Done:'Nothing done yet.'}[p.secs[S.sec]]||'Nothing here.';
     h+=`<div style="padding:24px 18px" class="sub">${msg}</div>`;
   }
   if(p.id==='wa'&&p.secs[S.sec]==='Status'){
@@ -865,10 +865,16 @@ function aiKey(k,e){
 
 // ------------------------------------------------------------------ overlays
 const WK={
- root:[['m','Mail'],['c','Chat'],['w','WhatsApp'],['a','AI requests'],['d','✦ write with Claude (A)'],['f','find anything (/)'],['p','pin / unpin'],['u','unread only'],['t','theme (demo)'],['?','all keys']],
- c:[['m','mute 🔕'],['p','pin 📌'],['a','archive'],['r','mark read'],['b','block ⊘'],['i','info']],
- m:[['r','reply'],['f','forward'],['s','star ★'],['e','edit'],['c','copy'],['d','delete']],
- g:[['m','Mail'],['c','Chat'],['w','WhatsApp'],['a','AI requests'],['s','Status']],
+ root:[['t','+tabs'],['f','+find'],['m','+mark'],['k','+ask the AI'],['i','+this message'],['c','+this chat'],['g','+go to'],['d','+delete'],[',','+settings'],['?','all keys']],
+ t:[['m','Mail'],['c','Chat'],['w','WhatsApp'],['a','AI requests']],
+ f:[['f','find anything (/)'],['u','unread only']],
+ m:[['a','archive (e)'],['s','star ★'],['p','pin 📌'],['z','mute 🔕'],['r','mark read'],['b','block ⊘ (asks)']],
+ k:[['d','✦ write with Claude (A)'],['s','summary'],['k','ask Claude']],
+ i:[['f','forward'],['e','react']],
+ c:[['i','group info']],
+ g:[['u','Unread'],['t','Status']],
+ d:[['d','delete the picked message (asks)']],
+ ',':[['t','theme (demo)']],
 };
 const CMDS=[
  ['theme dark','Mocha'],['theme light','Latte'],['width narrow','one pane at a time'],['width wide','list and pane'],
@@ -900,13 +906,13 @@ function overlayHTML(){
   if(S.ov==='help'){
     const sec=(t,rows)=>`<div><h5>${t}</h5>${rows.map(r=>`<div class="k2"><kbd>${r[0]}</kbd><span>${r[1]}</span></div>`).join('')}</div>`;
     return `<div class="ov help" data-n="help"><div style="display:flex"><b>All keys</b><span class="muted" style="margin-left:auto">esc closes · / filters</span></div><div class="cols">
-     ${sec('Move',[['j k','down, up'],['gg G','top, bottom'],['Ctrl+d u','half a page'],['⏎ l','open'],['h','back to the list'],['H L','places'],['Tab','next section']])}
-     ${sec('Write',[['i','write here'],['r','reply to it'],['R','reply to all (mail)'],['f','forward'],['Ctrl+t','send later'],['Ctrl+o','attach'],['esc','stop writing']])}
-     ${sec('Change',[['dd','delete (asks first)'],['u','undo a send'],['R','send a failed one again'],['y n','approve, decline'],['s','star'],['.','repeat']])}
-     ${sec('Find',[['/','search everywhere'],['n N','next, previous hit'],[':','command bar']])}
-     ${sec('Leader ␣',[['␣ m c w a','Mail, Chat, WhatsApp, AI'],['␣ d','write with Claude'],['␣ f','find anything'],['␣ ?','all keys']])}
-     ${sec('View',[['zq','show quoted'],['Space','full-size photo'],['gf','open the file'],['?','this help']])}
-     ${sec('Agent ✦',[['A','ask it to write'],['␣ d','the same, from the menu'],['Ctrl+g','polish what you typed'],['y','use the draft'],['e','edit it yourself'],['c','change it'],['← →','earlier versions'],['n','throw it away']])}
+     ${sec('Move',[['j k','down, up (5j: five)'],['gg G','top, bottom'],['Ctrl+d u','half a page'],['Ctrl+j k','scroll what\'s open'],['⏎ l','open'],['h','back to the list'],['H L','places'],['Tab ]]','next section']])}
+     ${sec('Write',[['i','write here'],['r','reply to it'],['R','reply to all (mail)'],['o','a new mail or message'],['␣ i f','forward'],['Ctrl+t','send later'],['Ctrl+o','attach'],['esc','stop writing']])}
+     ${sec('Change',[['e','archive (u undoes it)'],['dd','delete (asks: y only)'],['u','undo'],['R','send a failed one again'],['␣ m s','star'],['␣ m p','pin']])}
+     ${sec('Find',[['/','search everywhere'],['n N','next, previous unread'],[':','command bar']])}
+     ${sec('Leader ␣',[['␣ t m c w a','Mail, Chat, WhatsApp, AI'],['␣ k d','write with Claude'],['␣ f f','find anything'],['⌫','up a level'],['␣ ?','all keys']])}
+     ${sec('View',[['zq','show quoted'],['gf','open the file'],['?','this help']])}
+     ${sec('Agent ✦',[['A','ask it to write'],['␣ k d','the same, from the menu'],['Ctrl+g','polish what you typed'],['y','use the draft'],['e','edit it yourself'],['c','change it'],['← →','earlier versions'],['n','throw it away']])}
     </div></div>`;
   }
   if(S.ov==='confirm')return `<div class="ov confirm" data-n="confirm"><h5>Delete this message?</h5><div class="sub" style="margin-bottom:10px">It goes for everyone in this chat. This can't be undone.</div><div class="btns"><span class="btn n">y delete</span><span class="btn">n keep it</span></div></div>`;
@@ -1008,19 +1014,19 @@ document.addEventListener('keydown',e=>{
   if(S.ov==='wk'){
     if(k==='Escape'){S.ov=null;S.wkSub=null}
     else if(k==='Backspace')S.wkSub=null;
-    else if(!S.wkSub&&WK[k]&&k!=='m'&&k!=='c'&&k!=='g')S.wkSub=k;
+    else if(!S.wkSub&&WK[k])S.wkSub=k;
     else{
-      const sub=S.wkSub;S.ov=null;S.wkSub=null;
-      if(k==='t')setTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
-      else if(k==='m')setPlace(0);else if(k==='c')setPlace(1);else if(k==='w')setPlace(2);else if(k==='a')setPlace(3);
-      else if(k==='d')aiStart();
-      else if(k==='f'){S.ov='find';S.find=''}
-      else if(k==='?')S.ov='help';
-      else if(k==='u'){setSec(P().secs.indexOf('Unread'));if(S.sec<0)S.sec=0}
-      else if(k==='p'){const c=cur();if(c){c.pinned=!c.pinned;toast(c.pinned?'📌 pinned':'unpinned')}}
-      else if(sub==='g'){const m={m:0,c:1,w:2,a:3}[k];if(m!==undefined)setPlace(m);if(k==='s'){setPlace(2);S.sec=6}}
-      else if(sub==='c'){const c=cur();if(c){if(k==='m'){c.muted=!c.muted;toast(c.muted?'🔕 muted':'🔔 unmuted')}if(k==='p'){c.pinned=!c.pinned;toast(c.pinned?'📌 pinned':'unpinned')}if(k==='r'){c.unread=0;c.mention=0;toast('<span class="grn">✓</span> marked read')}if(k==='a')toast('Archived');if(k==='b')toast('<span class="red">⊘ blocked</span>','warn')}}
-      else if(sub==='m'){if(k==='d'&&S.focus==='chat'&&S.msgSel>=0)S.ov='confirm';else if(k==='r')startReply();else toast('Space m '+k+'')}
+      const sub=S.wkSub;S.ov=null;S.wkSub=null;const c=cur();
+      if(!sub&&k==='?')S.ov='help';
+      else if(sub==='t'){const m={m:0,c:1,w:2,a:3}[k];if(m!==undefined)setPlace(m)}
+      else if(sub==='f'){if(k==='f'){S.ov='find';S.find=''}if(k==='u'){setSec(P().secs.indexOf('Unread'));if(S.sec<0)S.sec=0}}
+      else if(sub==='k'){if(k==='d')aiStart();else toast('Claude '+(k==='s'?'summarises':'answers')+' this in narada (not in the demo)','warn')}
+      else if(sub==='g'){if(k==='u'){setSec(P().secs.indexOf('Unread'));if(S.sec<0)S.sec=0}if(k==='t'){setPlace(2);S.sec=6}}
+      else if(sub===','&&k==='t')setTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
+      else if(sub==='d'&&k==='d'){if(S.focus==='chat'&&S.msgSel>=0)S.ov='confirm';else toast('Pick a message first: ⏎ opens the chat, then j/k','warn')}
+      else if(sub==='i'){if(k==='e')toast('Pick a reaction 😂 ❤️ 👍 (in narada)');if(k==='f')toast('Forward to… (in narada)')}
+      else if(sub==='c'&&k==='i')toast('The group\'s people, admins and description (in narada)');
+      else if(sub==='m'&&c){if(k==='z'){c.muted=!c.muted;toast(c.muted?'🔕 muted':'🔔 unmuted')}if(k==='p'){c.pinned=!c.pinned;toast(c.pinned?'📌 pinned':'unpinned')}if(k==='r'){c.unread=0;c.mention=0;toast('<span class="grn">✓</span> marked read')}if(k==='a')toast('Archived · u brings it back');if(k==='b')toast('Block them? y blocks, any other key keeps them (in narada)','warn');if(k==='s')toast('★ starred')}
     }
     return render();
   }
@@ -1058,12 +1064,13 @@ document.addEventListener('keydown',e=>{
       if(p.id==='wa'||p.id==='chat'){S.open=S.sel;S.focus='chat';const c=cur();if(c){c.unread=0;c.mention=0;S.msgSel=msgList(c).length-1}}
       else if(S.narrow)S.focus='pane';break;
     case 'h':case 'Escape':S.focus='list';S.msgSel=-1;S.reply=null;break;
-    case 'i':if(p.id==='wa'||p.id==='chat'){if(!cur())break;S.mode='INSERT';S.focus='chat'}else toast('r replies · c writes a new mail','warn');break;
+    case 'i':if(p.id==='wa'||p.id==='chat'){if(!cur())break;S.mode='INSERT';S.focus='chat'}else startReply();break;
+    case 'o':if(p.id==='wa'||p.id==='chat'){if(!cur())break;S.mode='INSERT';S.focus='chat'}else toast('A new mail opens in the composer (in narada)','warn');break;
+    case 'e':if(p.id==='ai')break;toast('Archived · u brings it back');break;
     case 'r':startReply();break;
     case 'A':aiStart();break;
     case 'u':undo();break;
     case 'R':retry();break;
-    case '1':case '2':case '3':case '4':setPlace(+k-1);break;
     case 'H':setPlace(S.place-1);break;
     case 'L':setPlace(S.place+1);break;
     case 'Tab':setSec(S.sec+(e.shiftKey?-1:1));break;
@@ -1071,7 +1078,7 @@ document.addEventListener('keydown',e=>{
     case ':':S.ov='cmd';S.cmd='';S.cmdSel=0;break;
     case '/':S.ov='find';S.find='';S.findSel=0;break;
     case '?':S.ov='help';break;
-    case 'y':case 'n':case 'e':
+    case 'y':case 'n':
       if(p.id==='ai'){const c=cur();if(c&&c.state==='wait'){if(k==='y'){c.state='done';toast('<span class="grn">✓ approved and sent</span>')}if(k==='n'){c.state='no';toast('<span class="red">✕ declined</span> · the agent is told','warn')}if(k==='e'){toast('Opens it in the composer, editable','warn')}}}
       break;
   }

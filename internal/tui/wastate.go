@@ -190,7 +190,7 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		case sp.MutedUntil < 0: // always → unmuted
 			return m, m.act("unmuted", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 0, true) }), true
 		case !sp.Muted():
-			return m, m.act("muted for 8 hours (Z again: a week, always, then unmuted)",
+			return m, m.act("muted for 8 hours (Space m z again: a week, always, then unmuted)",
 				func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 8*time.Hour, false) }), true
 		case left <= 8*time.Hour+time.Minute:
 			return m, m.act("muted for a week", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 7*24*time.Hour, false) }), true
@@ -239,7 +239,7 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		return m, m.act(what, func(ctx context.Context) error { return a.DisappearWhatsApp(ctx, sp.Name, next) }), true
 	case "B":
 		if whatsapp.IsGroup(sp.Name) {
-			m.say("B blocks a person; leave a group with narada whatsapp group leave")
+			m.say("Space m b blocks a person; leave a group with narada whatsapp group leave")
 			return m, nil, true
 		}
 		on := !sp.Blocked

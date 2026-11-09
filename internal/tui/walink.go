@@ -233,7 +233,7 @@ func (m Model) linkPanel(w, h int) string {
 			head, foot = head[1:3], foot[1:2]
 		}
 		if len(q)+len(head)+len(foot) > h-2 {
-			center("", s.peach.Render(fmt.Sprintf("The QR code needs %d lines: make the window taller (or press P to type a code instead).", len(q)+2)))
+			center("", s.peach.Render(fmt.Sprintf("The QR code needs %d lines: make the window taller (or Space , L to type a code instead).", len(q)+2)))
 			break
 		}
 		center(head...)

@@ -28,7 +28,7 @@ func TestWrapRunes(t *testing.T) {
 
 func TestChatBoxEditing(t *testing.T) {
 	m := model(t)
-	m = press(m, "2") // chat
+	m = press(m, " ", "t", "c") // chat
 	m = press(m, "i")
 	if m.mode != modeChatMsg {
 		t.Fatal("i should start typing")

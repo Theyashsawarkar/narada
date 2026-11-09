@@ -19,6 +19,9 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/config"
 	"github.com/Theyashsawarkar/narada/internal/store"
 	"github.com/Theyashsawarkar/narada/internal/whatsapp"
+	"github.com/Theyashsawarkar/vyakarana/keymap"
+	vmode "github.com/Theyashsawarkar/vyakarana/mode"
+	"github.com/Theyashsawarkar/vyakarana/popup"
 )
 
 type mode int
@@ -134,10 +137,11 @@ type undo struct {
 }
 
 type review struct {
-	kind      string // mail | chat
-	account   string
-	out       store.Outgoing
-	replaceID int64 // editing a waiting send: it makes way on send
+	armDiscard bool   // n was pressed once: n again discards
+	kind       string // mail | chat
+	account    string
+	out        store.Outgoing
+	replaceID  int64 // editing a waiting send: it makes way on send
 }
 
 type Model struct {
@@ -149,13 +153,17 @@ type Model struct {
 	// Vim's ways: Space starts a leader key (its menu shows after a
 	// moment), v picks a range, : takes a command, and keys can come in
 	// twos (gg, dd, yy, za, gf)
-	leader      bool
+	eng         keymap.Engine // turns keys into keymap.go's actions (counts, gg, Space m s)
+	leader      bool          // a Space sequence is under way (its menu shows after a moment)
 	leaderShown bool
-	leaderAt    int // which Space this is, so an old timer doesn't show the menu
+	prefix      string // the keys of another sequence under way (gg, dd, 3…), for the bar
+	lastCounted bool   // the action running now was given a count
+	confirm     *confirmAsk
+	confirmed   bool           // the action runs because its question was answered y
+	pal         *popup.Palette // Space Space
 	visual      bool
-	visualFrom  int    // where v started in the list
-	prefix      string // the first key of a two-key command (g, d, y, z)
-	swallow     string // a key to ignore once (the second d of a VISUAL dd)
+	visualFrom  int  // where v started in the list
+	vg          bool // VISUAL: g typed, waiting for the second g
 	cmdHist     []string
 	cmdAt       int              // where ↑/↓ are in cmdHist
 	statusN     int              // people with a status update you haven't seen
@@ -271,7 +279,7 @@ type Model struct {
 
 func New(a *app.App, launch string) Model {
 	m := Model{a: a, launch: launch, styles: newStyles(a.Config.Colors, a.Config.NerdFont), acct: -1, hits: &hits{}, selected: map[string]bool{}, counts: map[string]int{}, noOlder: map[string]bool{}, olderN: a.Config.OlderPage,
-		expanded: map[string]bool{}, tagStart: -1, tagOff: -1}
+		expanded: map[string]bool{}, tagStart: -1, tagOff: -1, eng: keymap.NewEngine(narKeys, vmode.Normal)}
 	m.sections = sectionsWithAI(a.Sections())
 	m.accounts = a.AccountNames()
 	// narada --tab chat (a status bar's chat capsule) opens on chat
@@ -1060,7 +1068,7 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 		return nil
 	}
 	if it.Out.ScheduledFor > 0 {
-		m.say("scheduled for " + app.SendTime(time.UnixMilli(it.Out.ScheduledFor), time.Now()) + " · in Scheduled: t moves it, u cancels")
+		m.say("scheduled for " + app.SendTime(time.UnixMilli(it.Out.ScheduledFor), time.Now()) + " · in Scheduled: Space e t moves it, u cancels")
 		if !m.a.DaemonRunning() {
 			m.setErr("the background service isn't running, and it's what sends scheduled mail: narada service install")
 		}
@@ -1214,8 +1222,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, widenRenderer(msg.Height)
 	case tea.MouseMsg:
 		return m.mouse(msg)
-	case leaderTick:
-		if m.leader && msg.at == m.leaderAt {
+	case popup.WhichMsg:
+		if msg.Gen == m.eng.Gen() && m.eng.Waiting() && m.pendingKeys() != "" {
 			m.leaderShown = true
 		}
 		return m, nil
@@ -1318,7 +1326,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.threads = msg.threads
 		m.sel, m.offset = 0, 0
 		m.loadPreview(true)
-		m.say(fmt.Sprintf("%d found · W saves it as a section · [ ] leave", len(msg.threads)))
+		m.say(fmt.Sprintf("%d found · Space a g saves it as a section · [[ ]] leave", len(msg.threads)))
 		return m, nil
 	case aiWriteMsg:
 		return m.afterAIWrite(msg), nil
@@ -1543,7 +1551,30 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case modeCommand:
 		return m.commandKey(k)
 	}
-	return m.normalKey(s)
+	if m.pal != nil {
+		return m.paletteMsg(k)
+	}
+	// keys typed fast (or sent by tmux) can arrive as one message ("dd"):
+	// the engine takes them one at a time
+	var cmds []tea.Cmd
+	var mm tea.Model = m
+	keys := popup.Keys(k)
+	for i, key := range keys {
+		x, ok := mm.(Model)
+		if !ok {
+			break
+		}
+		var cmd tea.Cmd
+		if x.mode != modeNormal || x.pal != nil {
+			// i then text, typed fast: the rest is what you type
+			mm, cmd = x.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: k.Runes[i:], Alt: k.Alt})
+			cmds = append(cmds, cmd)
+			break
+		}
+		mm, cmd = x.normalKey(key)
+		cmds = append(cmds, cmd)
+	}
+	return mm, tea.Batch(cmds...)
 }
 
 func (m Model) inputKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -1808,35 +1839,6 @@ func (m *Model) goToAI(kind string) {
 	m.loadPreview(true)
 }
 
-// normalKey is a key in NORMAL mode: Vim's keys first (vim.go), then
-// the action it names.
-func (m Model) normalKey(s string) (tea.Model, tea.Cmd) {
-	if m.inAISection() && !m.leader && m.prefix == "" && !m.visual {
-		if mm, cmd, done := m.aiKey(s); done {
-			return mm, cmd
-		}
-	}
-	// in an open chat, a key for one message acts on the latest one when
-	// none is picked: e reacts to it rather than archiving the chat
-	if m.focus == 1 && m.tab == tabChat && !m.picking && m.prefix == "" && !m.leader && !m.visual {
-		switch s {
-		case "e", "E", "f", "P", "*", "R":
-			m.startPicking()
-		case "r":
-			if m.isStatus() {
-				m.startPicking() // r answers the latest status
-			}
-		case "y":
-			m.startPicking() // yy copies it
-		}
-	}
-	mm, cmd, old, done := m.vimKey(s)
-	if done {
-		return mm, cmd
-	}
-	return mm.(Model).actKey(old)
-}
-
 // actKey runs an action by its key name (the names before Vim's keys:
 // vimKey translates, so dd reaches here as e).
 func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
@@ -1937,7 +1939,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		m.scroll = max(0, m.scroll-page)
 	case "h", "l":
 		if m.inAISection() {
-			m.say("the AI requests have no sections · 1 2 3 go to Mail, Chat, WhatsApp")
+			m.say("the AI requests have no sections · H / L go to the places")
 			return m, nil
 		}
 		n := len(m.sections)
@@ -2050,7 +2052,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		if m.search != nil {
 			m.mode, m.input = modeSaveName, nil // Enter alone names it after the search
 		} else {
-			m.say("search first (/), then W saves it")
+			m.say("search first (/), then Space a g saves it")
 		}
 	case "X":
 		if m.tab == tabMail && m.search == nil {
@@ -2094,7 +2096,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 			return m, m.sent(it)
 		}
 		if m.tab == tabChat {
-			m.say("R answers a group message privately: pick one first (j/k) · Space r syncs")
+			m.say("R answers a group message privately: pick one first (j/k) · Space r r syncs")
 			return m, nil
 		}
 		return m, m.replyCmd("a") // mail: reply to everyone
@@ -2102,7 +2104,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		if m.wa && m.pickingMsg() {
 			c := m.chatMsgs[m.chatSel]
 			if _, err := m.a.Store.WhatsAppPollOf(c.Name); err != nil {
-				m.say("P votes in a poll: pick one first")
+				m.say("Space c v votes in a poll: pick one first")
 				return m, nil
 			}
 			m.forwarding = c.Name
@@ -2124,7 +2126,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 					m.selected[k] = true
 				}
 			}
-			m.say(fmt.Sprintf("%d picked · m marks them read, M unread · V again clears", len(m.selected)))
+			m.say(fmt.Sprintf("%d picked · ~ toggles them read · e archives · V again clears", len(m.selected)))
 		}
 		return m, nil
 	case "alt+r":
@@ -2325,7 +2327,7 @@ func (m Model) actKey(s string) (tea.Model, tea.Cmd) {
 		return m, m.saveCmd(s == "v") // v opens it (in its app), V only saves
 	case "U":
 		if m.tab != tabChat {
-			m.say("U uploads into a chat space; for mail, reply and press + (or write Attach: in the editor)")
+			m.say("Space a f sends a file into a chat; for mail, reply and press + (or write Attach: in the editor)")
 			return m, nil
 		}
 		return m, m.pickFiles("chat")

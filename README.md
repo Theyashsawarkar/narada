@@ -58,10 +58,10 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
 ## Features
 
 - **Mail and chat in one place**: Gmail threads and Google Chat spaces and
-  DMs, one key apart (`1`, `2`, `3`).
+  DMs, one key apart (`H` / `L`).
 - **Sections, like saved searches**: Inbox, Today, Unread, Starred, or any
-  Gmail search (`from:priya newer_than:7d`). Switch with `h`/`l`; each tab
-  shows its unread count. Search with `s`, keep it as a section with `W`.
+  Gmail search (`from:priya newer_than:7d`). Switch with `]]`/`[[`; each tab
+  shows its unread count. Search with `/`, keep it as a section with `Space a g`.
 - **Opens instantly, works offline**: a background service keeps a local
   copy in sync (Gmail's change feed every minute, chat every 30 seconds),
   so nothing waits on Google. Reading, filtering and local search work
@@ -74,7 +74,7 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
   and post in chat, through an MCP server and a `--json` CLI. In the screen,
   `A` has Claude write your reply in any chat, WhatsApp chat or mail (you
   use, edit, change or drop its draft), `Ctrl+g` polishes what you typed,
-  `@` asks Claude, `S` summarises, `T` gives today's digest.
+  `Space k k` asks Claude, `Space k s` summarises, `Space k t` gives today's digest.
 - **Nothing goes out without you**: an agent's send waits for your `y` in a
   popup (the same idea as [dvarapala](https://github.com/Theyashsawarkar/dvarapala)
   for root commands).
@@ -83,7 +83,7 @@ tell Claude "read today's mails" or "mail Priya that Thursday is fine".
 - **WhatsApp too**: link it like WhatsApp Web (scan a QR code) and your
   chats get a third tab, a status-line count and agent tools. See
   [WhatsApp](#whatsapp) for what that means for your account.
-- **Several accounts**: work and personal side by side; `Space x` focuses on one.
+- **Several accounts**: work and personal side by side; `Space g a` focuses on one.
 - **Safe with your login**: Google's own sign-in in your browser; tokens
   live in the system keyring and are never printed.
 - **Vim keys throughout**, no arrows needed.
@@ -201,8 +201,8 @@ what they count. Then the list on the left, what's open on the right, and
 the mode and the keys that matter now at the bottom. Below 100 columns the
 list and what's open take turns: Enter opens, `h` or Esc goes back.
 
-Places are `1` to `4` (or `gt` / `gT`), sections `Tab` / `Shift+Tab` (or `[`
-/ `]`), as tabs are anywhere. **The mouse works too**: click a place, a
+Places are `H` / `L` (or `gt` / `gT`, `2gt` for Chat, `Space t m/c/w/a`), sections
+`Tab` / `Shift+Tab` (or `]]` / `[[`), as tabs are anywhere. **The mouse works too**: click a place, a
 section, a row (click it again to open it) or a message (to pick it), and the
 wheel scrolls what's under it. Opening a chat lets you read and write it
 (`i`); `j` / `k` pick a message for `r`, `e`, `yy` and the rest, and a key for
@@ -233,160 +233,315 @@ colour of it, and recolours live when the theme changes.
   italics, strikes, `code`, quotes. Nothing is ever drawn to the right of a
   message, so text a terminal measures differently (Hindi, Marathi) can't
   push a frame out of line (see Troubleshooting).
-- **AI requests** (`4`): every send an agent is waiting on, mail, Chat and
+- **AI requests** (`Space t a`): every send an agent is waiting on, mail, Chat and
   WhatsApp in one list, each on a card showing exactly what would go out.
   Only `y` (send), `e` (edit first) and `n` (decline, pressed twice) answer
   one; no other key can send an agent's message.
 
 ## Keys
 
-narada works like Vim. **NORMAL** mode moves and acts; `i` writes (**INSERT**,
-`Esc` back); `v` picks a range (**VISUAL**); `:` runs a command; and
-**Space** is the leader: press it and wait, and a menu of everything else
-appears (typed straight on, it never shows). Keys can come in twos: `gg`,
-`dd`, `yy`, `za`, `gf`. `/` finds anything (an action, a chat, a person, a
-message or a mail) and shows the key for each, and `?` lists every key.
+narada works like Vim, with the key grammar every Vayu tool shares
+([ADR 9](docs/adr/0009-the-shared-space-grammar.md)). **NORMAL** mode moves
+and acts with Vim's own keys: `j`/`k` (`5j` moves five), `gg`/`G` (`5G` the
+fifth), `H`/`L` the places, `]]`/`[[` the sections, `Ctrl+d`/`Ctrl+u` half a
+page, `Ctrl+j`/`Ctrl+k` scroll what's open (`scroll_lines`), `n`/`N` the next
+unread, `i` writes (**INSERT**, `Esc` back), `r` replies, `e` archives (`u`
+undoes it), `dd` deletes (it asks first, and only `y` says yes), `v` picks a
+range (**VISUAL**), `:` runs a command. **Space is the leader**: everything
+else lives under it in groups whose letters mean the same in every Vayu tool
+(`t` tabs, `y` copy, `f` find, `r` refresh, `a` add, `d` delete, `e` edit,
+`o` open, `g` go to, `m` mark, `k` ask the AI), plus narada's own (`c` this
+chat, `i` this message, `w` window, `x` the AI requests). Press Space and
+wait, and a menu shows what can follow (typed straight on, it never shows);
+`Backspace` goes up a level, `Esc` cancels. `Space Space` searches every
+action, `/` finds anything (an action, a chat, a person, a message or a
+mail), and `?` lists every key. A key that moved says where it went.
 
 <p align="center">
   <img alt="Space pressed in the WhatsApp place: a menu along the bottom lists what each next key does, grouped in four columns, with the mode LEADER in the bar" src="assets/screenshots/leader.png" width="80%">
 </p>
 
-**Move**
+<!-- keys: generated from the keymap; run the tests with -update -->
+**Everywhere**
 
-| Key | Does |
+| Keys | What it does |
 |---|---|
-| `j` / `k` | Move to the next / previous thread or chat (j at the end loads older mail) |
-| `gg` / `G` | Jump to the first / last thread, chat or message |
-| `Ctrl+d` / `Ctrl+u` | Scroll what's open half a page down / up |
-| `J` / `K` | Scroll what's open a line down / up |
-| `h` / `l` | Move to the list / to what's open |
-| `Enter` | Open the thread or chat (marks it read) |
-| `q` / `Esc` | Go back (q at the top quits) |
-| `[` / `]` | Switch to the previous / next section (Unread, Groups, Sent…) |
-| `1` / `2` / `3` / `4` | Go to Mail / Chat / WhatsApp / the AI requests |
-| `gt` / `gT` | Go to the next / previous place |
-| `Tab` / `Shift+Tab` | Go to the next / previous of Mail, Chat and WhatsApp |
-| `Ctrl+n` / `Ctrl+p` | Switch to the next / previous chat, staying in the conversation |
-| `n` / `N` | Jump to the next / previous unread thread or chat |
-| `/` | Search everything: actions, chats, people, messages and mail (Gmail's search words work) |
-| `+` / `-` | Set how many older mails j at the end loads (10, 25, 50, 100) |
-| `W` | Save the current search as a section |
-| `X` | Remove the current saved-search section |
+| <kbd>j</kbd> or <kbd>Down</kbd> | Move to the next thread, chat or (picking) message (5j: five) |
+| <kbd>k</kbd> or <kbd>Up</kbd> | Move to the previous thread, chat or (picking) message |
+| <kbd>h</kbd> | Move to the list |
+| <kbd>l</kbd> | Move to what's open |
+| <kbd>g</kbd> <kbd>g</kbd> or <kbd>Home</kbd> | Jump to the first thread, chat or message (5gg: the fifth) |
+| <kbd>G</kbd> or <kbd>End</kbd> | Jump to the last thread, chat or message (5G: the fifth) |
+| <kbd>L</kbd> | Go to the next place (Mail, Chat, WhatsApp, the AI requests) |
+| <kbd>H</kbd> | Go to the previous place |
+| <kbd>g</kbd> <kbd>t</kbd> | Go to the next place (2gt: Chat; 1 Mail, 3 WhatsApp, 4 the AI requests) |
+| <kbd>g</kbd> <kbd>T</kbd> | Go to the previous place |
+| <kbd>]</kbd> <kbd>]</kbd> or <kbd>Tab</kbd> | Switch to the next section (Unread, Groups, Sent…) |
+| <kbd>[</kbd> <kbd>[</kbd> or <kbd>Shift+Tab</kbd> | Switch to the previous section |
+| <kbd>Ctrl+n</kbd> | Switch to the next chat, staying in the conversation |
+| <kbd>Ctrl+p</kbd> | Switch to the previous chat, staying in the conversation |
+| <kbd>J</kbd> | Move to the next message in what's open (mail: the next thread) |
+| <kbd>K</kbd> | Move to the previous message in what's open (mail: the previous thread) |
+| <kbd>n</kbd> | Jump to the next unread thread or chat |
+| <kbd>N</kbd> | Jump to the previous unread thread or chat |
+| <kbd>Ctrl+d</kbd> | Scroll what's open half a page down |
+| <kbd>Ctrl+u</kbd> | Scroll what's open half a page up |
+| <kbd>Ctrl+f</kbd> or <kbd>PgDn</kbd> | Scroll what's open a page down |
+| <kbd>Ctrl+b</kbd> or <kbd>PgUp</kbd> | Scroll what's open a page up |
+| <kbd>Ctrl+j</kbd> | Scroll what's open 3 lines down (scroll_lines sets how many) |
+| <kbd>Ctrl+k</kbd> | Scroll what's open 3 lines up |
+| <kbd>Ctrl+e</kbd> | Scroll what's open a line down |
+| <kbd>Ctrl+y</kbd> | Scroll what's open a line up |
+| <kbd>Enter</kbd> | Open the thread or chat (picking: a photo full size, a reply's original) |
+| <kbd>q</kbd> | Go back a step (q at the top quits) |
+| <kbd>Esc</kbd> | Go back a step: close what's open, clear the picks, the filter, the search |
+| <kbd>/</kbd> or <kbd>Space</kbd> <kbd>f</kbd> <kbd>f</kbd> | Search everything: actions, chats, people, messages and mail (Gmail's search words work) |
+| <kbd>?</kbd> or <kbd>Space</kbd> <kbd>?</kbd> | Show every key |
+| <kbd>:</kbd> | Run a command: archive, trash, read, star, label, mute, account, sync, q (Tab completes) |
+| <kbd>i</kbd> | Start writing: a message in a chat, a reply in mail |
+| <kbd>a</kbd> | Start writing: a message in a chat, a reply to everyone in mail |
+| <kbd>g</kbd> <kbd>i</kbd> | Go back into the message box, to what you were writing |
+| <kbd>r</kbd> | Send a reply (in chat: to the picked message, quoting it) |
+| <kbd>R</kbd> | Send a reply to everyone on the thread (WhatsApp group: privately; a failed send: again) |
+| <kbd>o</kbd> | Create a new mail, or a message in this chat |
+| <kbd>O</kbd> | Start a conversation with someone |
+| <kbd>d</kbd> <kbd>d</kbd> or <kbd>Space</kbd> <kbd>d</kbd> <kbd>d</kbd> | Trash the thread, or delete the picked message (asks first) |
+| <kbd>e</kbd> or <kbd>Space</kbd> <kbd>m</kbd> <kbd>a</kbd> | Move the thread or WhatsApp chat out of the inbox (archive; u undoes it) |
+| <kbd>y</kbd> <kbd>y</kbd> or <kbd>Space</kbd> <kbd>y</kbd> <kbd>y</kbd> | Copy the picked message (else the link to what's open) |
+| <kbd>~</kbd> | Toggle read / unread (or everything picked) |
+| <kbd>u</kbd> | Undo the last change, or cancel a send in its undo window |
+| <kbd>v</kbd> | Pick several (VISUAL): j/k, gg, G grow it, then d, e, ~ or y act on all |
+| <kbd>V</kbd> | Pick the whole list (again clears) |
+| <kbd>g</kbd> <kbd>f</kbd> or <kbd>Space</kbd> <kbd>o</kbd> <kbd>f</kbd> | Open the attachments (kept in ~/Downloads/narada) |
+| <kbd>g</kbd> <kbd>F</kbd> or <kbd>Space</kbd> <kbd>y</kbd> <kbd>f</kbd> | Save the attachments (in ~/Downloads/narada) |
+| <kbd>g</kbd> <kbd>x</kbd> or <kbd>Space</kbd> <kbd>o</kbd> <kbd>l</kbd> | Open a link from what's open, by its number |
+| <kbd>A</kbd> or <kbd>Space</kbd> <kbd>k</kbd> <kbd>d</kbd> | Send this chat or mail to Claude to write your reply (you use, edit, change or drop its draft) |
+| <kbd>Space</kbd> <kbd>Space</kbd> | Search every action and run one (the palette) |
+| <kbd>Space</kbd> <kbd>a</kbd> | *Add…* |
+| <kbd>Space</kbd> <kbd>a</kbd> <kbd>n</kbd> | Create a new mail, or a message in this chat |
+| <kbd>Space</kbd> <kbd>a</kbd> <kbd>c</kbd> | Start a conversation with someone |
+| <kbd>Space</kbd> <kbd>e</kbd> | *Edit…* |
+| <kbd>Space</kbd> <kbd>e</kbd> <kbd>t</kbd> | Set another time for a scheduled send (in Scheduled) |
+| <kbd>Space</kbd> <kbd>f</kbd> | *Find…* |
+| <kbd>Space</kbd> <kbd>f</kbd> <kbd>h</kbd> | Search only here: this section or this chat |
+| <kbd>Space</kbd> <kbd>f</kbd> <kbd>u</kbd> or <kbd>Space</kbd> <kbd>g</kbd> <kbd>u</kbd> | Show only the unread (the Unread section) |
+| <kbd>Space</kbd> <kbd>g</kbd> | *Go to…* |
+| <kbd>Space</kbd> <kbd>g</kbd> <kbd>i</kbd> | Go to the Inbox section |
+| <kbd>Space</kbd> <kbd>g</kbd> <kbd>S</kbd> | Go to the Sent section |
+| <kbd>Space</kbd> <kbd>g</kbd> <kbd>l</kbd> | Go to the Scheduled section |
+| <kbd>Space</kbd> <kbd>g</kbd> <kbd>a</kbd> | Switch account (all, then each) |
+| <kbd>Space</kbd> <kbd>i</kbd> | *This message…* |
+| <kbd>Space</kbd> <kbd>i</kbd> <kbd>f</kbd> | Send the thread or the picked WhatsApp message on to someone (forward) |
+| <kbd>Space</kbd> <kbd>i</kbd> <kbd>R</kbd> | Send a failed mail or message again |
+| <kbd>Space</kbd> <kbd>k</kbd> | *Ask the AI…* |
+| <kbd>Space</kbd> <kbd>k</kbd> <kbd>k</kbd> | Open a question to Claude, with this thread or chat as context |
+| <kbd>Space</kbd> <kbd>k</kbd> <kbd>s</kbd> | Show Claude's summary of the thread or the chat's recent messages |
+| <kbd>Space</kbd> <kbd>k</kbd> <kbd>t</kbd> | Show today's digest: what came in and what needs you |
+| <kbd>Space</kbd> <kbd>m</kbd> | *Mark…* |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>s</kbd> | Toggle the star on the thread or picked message |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>r</kbd> | Set it as read (or everything picked) |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>u</kbd> | Set it as unread (or everything picked) |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>R</kbd> | Set everything in this list as read |
+| <kbd>Space</kbd> <kbd>o</kbd> | *Open…* |
+| <kbd>Space</kbd> <kbd>o</kbd> <kbd>b</kbd> | Open the thread or chat in the browser |
+| <kbd>Space</kbd> <kbd>q</kbd> | Quit narada |
+| <kbd>Space</kbd> <kbd>r</kbd> | *Refresh…* |
+| <kbd>Space</kbd> <kbd>r</kbd> <kbd>r</kbd> | Reload mail and chat from Google now (sync) |
+| <kbd>Space</kbd> <kbd>t</kbd> | *Tabs…* |
+| <kbd>Space</kbd> <kbd>t</kbd> <kbd>m</kbd> | Go to Mail |
+| <kbd>Space</kbd> <kbd>t</kbd> <kbd>c</kbd> | Go to Google Chat |
+| <kbd>Space</kbd> <kbd>t</kbd> <kbd>w</kbd> | Go to WhatsApp |
+| <kbd>Space</kbd> <kbd>t</kbd> <kbd>a</kbd> | Go to the AI requests |
+| <kbd>Space</kbd> <kbd>w</kbd> | *Window…* |
+| <kbd>Space</kbd> <kbd>w</kbd> <kbd>h</kbd> | Move to the list |
+| <kbd>Space</kbd> <kbd>w</kbd> <kbd>l</kbd> | Move to what's open |
+| <kbd>Space</kbd> <kbd>w</kbd> <kbd>w</kbd> | Move to the other pane |
+| <kbd>Space</kbd> <kbd>x</kbd> | *AI requests…* |
+| <kbd>Space</kbd> <kbd>x</kbd> <kbd>x</kbd> | Go to the AI requests (y sends, e edits, n n declines) |
+| <kbd>Space</kbd> <kbd>y</kbd> | *Copy…* |
+| <kbd>Space</kbd> <kbd>y</kbd> <kbd>l</kbd> | Copy the link to the thread or chat |
 
-**Act**
+**In Mail**
 
-| Key | Does |
+| Keys | What it does |
 |---|---|
-| `i` / `a` | Start writing a message in the chat (a in mail: reply to everyone) |
-| `r` | Send a reply (in chat: to the picked message, quoting it) |
-| `R` | Send a reply to everyone on the thread (reply all; WhatsApp group: privately) |
-| `f` | Send the thread or the picked WhatsApp message on to someone (forward) |
-| `c` | Create a new mail, or a message in this chat (compose) |
-| `dd` | Move the thread or WhatsApp chat out of the inbox (archive; picking: delete yours, dd twice) |
-| `e` | Move the thread or WhatsApp chat out of the inbox (archive at once; u undoes it) |
-| `#` | Move the thread to the trash |
-| `u` | Undo the last change, or cancel a send in its undo window |
-| `m` / `M` | Set it as read / unread (or everything picked) |
-| `*` | Toggle the star on the thread or picked message |
-| `L` | Add or remove a label |
-| `v` | Pick several (VISUAL): j/k, gg, G grow it, then d, m, M, * or y act on all |
-| `V` | Pick the whole list (again clears) |
-| `Alt+r` | Set everything in this list as read |
-| `yy` / `Y` | Copy the picked message / the link to the thread or chat |
-| `gf` / `gF` | Open / save the attachments (kept in ~/Downloads/narada) |
-| `gx` / `o` | Open a link from what's open, by its number |
-| `za` | Toggle every message in the thread open / folded |
-| `zq` | Toggle the quoted text in the thread |
-| `b` | Open the thread or chat in the browser |
-| `U` | Send a file into this chat |
-| `t` | Move a scheduled send to another time (in Scheduled) |
-| `p` | Toggle the chat pinned on top (WhatsApp: on your phone too) |
-| `Enter` (picking) | Jump to the message a reply quotes; on a photo, view it full size |
-| `Backspace` (picking) | Jump back to the reply you came from |
-| `e` (picking) | Toggle a reaction on the picked message, or send one to a status (to whoever posted it) |
-| `r` (picking a status) | Send a reply to a WhatsApp status (in your chat with whoever posted it, quoting it) |
-| `E` (picking) | Edit your picked message (WhatsApp: within 15 minutes) |
-| `P` (picking a poll) | Set your vote in the picked WhatsApp poll |
-| `Z` (WhatsApp) | Set the chat muted for 8 hours (again: a week, then always, then unmuted) |
-| `X` (WhatsApp) | Set the chat's messages to disappear after 24 hours (again: 7 days, 90 days, off) |
-| `I` (WhatsApp group) | Show the group's people, admins and description |
-| `B` (WhatsApp) | Set the person in this chat as blocked (B twice; again unblocks) |
-| `L` (WhatsApp, not linked) | Connect this machine to WhatsApp with a QR code (link) |
-| `P` (WhatsApp, not linked) | Connect this machine to WhatsApp with your phone number and a code (link) |
+| <kbd>z</kbd> <kbd>a</kbd> or <kbd>Space</kbd> <kbd>u</kbd> <kbd>z</kbd> | Toggle every message in the thread open / folded |
+| <kbd>z</kbd> <kbd>M</kbd> | Toggle every message in the thread folded |
+| <kbd>z</kbd> <kbd>R</kbd> | Toggle every message in the thread open |
+| <kbd>z</kbd> <kbd>q</kbd> or <kbd>Space</kbd> <kbd>u</kbd> <kbd>q</kbd> | Toggle the quoted text in the thread |
+| <kbd>Space</kbd> <kbd>a</kbd> | *Add…* |
+| <kbd>Space</kbd> <kbd>a</kbd> <kbd>g</kbd> | Save the current search as a section |
+| <kbd>Space</kbd> <kbd>d</kbd> | *Delete…* |
+| <kbd>Space</kbd> <kbd>d</kbd> <kbd>s</kbd> | Remove the current saved-search section (asks first) |
+| <kbd>Space</kbd> <kbd>g</kbd> | *Go to…* |
+| <kbd>Space</kbd> <kbd>g</kbd> <kbd>s</kbd> | Go to the Starred section |
+| <kbd>Space</kbd> <kbd>m</kbd> | *Mark…* |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>l</kbd> | Toggle a label on the thread (add or remove one) |
+| <kbd>Space</kbd> <kbd>r</kbd> | *Refresh…* |
+| <kbd>Space</kbd> <kbd>r</kbd> <kbd>o</kbd> | Update the list with older mail |
+| <kbd>Space</kbd> <kbd>r</kbd> <kbd>+</kbd> | Update how many older mails load at a time: more (10, 25, 50, 100) |
+| <kbd>Space</kbd> <kbd>r</kbd> <kbd>-</kbd> | Update how many older mails load at a time: fewer |
 
-**Space, the leader**
+**On WhatsApp**
 
-| Key | Does |
+| Keys | What it does |
 |---|---|
-| `Space m` / `c` / `w` / `a` | Go to Mail / Chat / WhatsApp / the AI requests |
-| `Space f` | Search everything (the same as /) |
-| `Space /` | Search only here: this section or this chat |
-| `Space n` | Create a new mail or message |
-| `Space N` | Start a conversation with someone |
-| `Space S` | Toggle the star |
-| `Space l` | Add or remove a label |
-| `Space u` | Show only the unread |
-| `Space o` | Open a link |
-| `Space v` / `V` | Open / save the attachments |
-| `Space U` | Send a file into this chat |
-| `Space R` | Rename the chat (spaces and groups for everyone) |
-| `Space p` | Toggle the chat pinned |
-| `Space x` | Switch account (all, then each) |
-| `Space r` | Reload mail and chat from Google now (sync) |
-| `Space b` / `y` | Open in the browser / copy the link |
-| `Space Space` | Open the next unread |
-| `Space ?` | Show every key |
-| `Space q` | Quit narada |
+| <kbd>Space</kbd> <kbd>,</kbd> | *Settings…* |
+| <kbd>Space</kbd> <kbd>,</kbd> <kbd>l</kbd> | Connect this machine to WhatsApp with a QR code (link) |
+| <kbd>Space</kbd> <kbd>,</kbd> <kbd>L</kbd> | Connect this machine to WhatsApp with your phone number and a code (link) |
+| <kbd>Space</kbd> <kbd>c</kbd> | *This chat…* |
+| <kbd>Space</kbd> <kbd>c</kbd> <kbd>i</kbd> | Show the group's people, admins and description |
+| <kbd>Space</kbd> <kbd>c</kbd> <kbd>v</kbd> | Set your vote in the picked WhatsApp poll |
+| <kbd>Space</kbd> <kbd>e</kbd> | *Edit…* |
+| <kbd>Space</kbd> <kbd>e</kbd> <kbd>d</kbd> | Set the chat's messages to disappear after 24 hours (again: 7 days, 90 days, off) |
+| <kbd>Space</kbd> <kbd>g</kbd> | *Go to…* |
+| <kbd>Space</kbd> <kbd>g</kbd> <kbd>t</kbd> | Go to the WhatsApp statuses |
+| <kbd>Space</kbd> <kbd>g</kbd> <kbd>r</kbd> | Go to the archived WhatsApp chats |
+| <kbd>Space</kbd> <kbd>i</kbd> | *This message…* |
+| <kbd>Space</kbd> <kbd>i</kbd> <kbd>p</kbd> | Send a private reply to the picked WhatsApp group message |
+| <kbd>Space</kbd> <kbd>m</kbd> | *Mark…* |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>z</kbd> | Set the chat muted for 8 hours (again: a week, then always, then unmuted) |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>b</kbd> | Set the person in this chat as blocked (asks first; again unblocks) |
 
-**Claude**
+**Picking several (VISUAL)**
 
-| Key | Does |
+| Keys | What it does |
 |---|---|
-| `Space k` / `@` | Start a question to Claude, with this thread or chat as context |
-| `Space s` | Show Claude's summary of the thread or the chat's recent messages |
-| `A` / `Space d` | Create a reply or message with Claude (it reads this chat or mail; you use, edit, change or drop its draft) |
-| `Space t` | Show today's digest: what came in and what needs you |
+| <kbd>j</kbd> or <kbd>k</kbd> or <kbd>gg</kbd> or <kbd>G</kbd> | Grow the range down / up / to the top / to the end |
+| <kbd>d</kbd> | Move everything picked to the trash (asks first) |
+| <kbd>e</kbd> | Move everything picked out of the inbox (archive; u undoes it) |
+| <kbd>~</kbd> | Toggle everything picked read / unread |
+| <kbd>y</kbd> | Copy the subjects or chat names picked |
+| <kbd>Esc</kbd> or <kbd>v</kbd> | Leave VISUAL (nothing stays picked) |
 
-**AI draft** (after `A`; see [Writing with Claude](#writing-with-claude))
+**Writing a message (INSERT)**
 
-| Key | Does |
+| Keys | What it does |
 |---|---|
-| `1` - `4` | Pick one of the four suggested asks for Claude (reply, say yes, say no, …) |
-| `Tab` | Toggle more context for Claude (older messages, or your sent mail for tone) |
-| `y` | Send Claude's draft as yours (through the undo window) |
-| `e` | Edit Claude's draft yourself before sending |
-| `c` | Request changes to Claude's draft (shorter, warmer, in Hindi, or your own words) |
-| `←` / `→` | Show the previous / next version of the draft |
-| `n` / `Esc` | Cancel Claude's draft (nothing is sent) |
+| | *While typing* |
+| <kbd>Esc</kbd> | Go back to NORMAL mode (what you wrote stays) |
+| <kbd>Enter</kbd> | Send the message and keep writing the next one |
+| <kbd>Alt+Enter</kbd> or <kbd>Ctrl+j</kbd> | Start a new line in the message |
+| <kbd>Ctrl+o</kbd> | Add a file to the message |
+| <kbd>Ctrl+v</kbd> | Paste a copied image (a screenshot) into the message |
+| <kbd>Ctrl+t</kbd> | Send the message later (tomorrow 9am, fri 6pm, in 2h) |
+| <kbd>Ctrl+g</kbd> | Edit what you typed with Claude: polish it (your words, fixed up) |
+| <kbd>Ctrl+r</kbd> | Record a voice note on WhatsApp (again stops and adds it; Enter sends it, Esc drops it) |
+| <kbd>Ctrl+p</kbd> | Send what you wrote as a WhatsApp poll: the question, then one option per line |
+| <kbd>@</kbd> | Pick someone to tag on WhatsApp from the list (Up/Down, Enter or Tab; Esc for none) |
+| <kbd>Left</kbd> or <kbd>Right</kbd> or <kbd>Alt+b</kbd> or <kbd>Alt+f</kbd> or <kbd>Ctrl+a</kbd> or <kbd>Ctrl+e</kbd> | Move the cursor by letter, word, line start / end |
+| <kbd>Ctrl+w</kbd> or <kbd>Ctrl+k</kbd> or <kbd>Ctrl+u</kbd> | Delete the word before the cursor / to the end / the whole message |
 
-**Other**
+**Claude writing your reply**
 
-| Key | Does |
+| Keys | What it does |
 |---|---|
-| `:` | Run a command: archive, trash, read, unread, star, label, later, mute, rename, account, sync, q (Tab completes) |
-| `?` | Show every key |
+| <kbd>1</kbd> <kbd>-</kbd> <kbd>4</kbd> | Pick one of the four suggested asks for Claude (reply, say yes, say no, …) |
+| <kbd>Tab</kbd> | Toggle more context for Claude (older messages, or your sent mail for tone) |
+| <kbd>y</kbd> | Send Claude's draft as yours (through the undo window) |
+| <kbd>e</kbd> | Edit Claude's draft yourself before sending |
+| <kbd>c</kbd> | Request changes to Claude's draft (shorter, warmer, in Hindi, or your own words) |
+| <kbd>Left</kbd> or <kbd>Right</kbd> | Show the previous / next version of the draft |
+| <kbd>n</kbd> or <kbd>Esc</kbd> | Cancel Claude's draft (nothing is sent) |
 
-**Writing** (INSERT, in the message box)
+**Writing a mail**
 
-| Key | Does |
+| Keys | What it does |
 |---|---|
-| `Esc` | Go back to NORMAL mode (what you wrote stays) |
-| `Enter` | Send the message and keep writing the next one |
-| `Alt+Enter` / `Ctrl+j` | Start a new line in the message |
-| `Ctrl+o` | Add a file to the message |
-| `Ctrl+v` | Paste a copied image (a screenshot) into the message |
-| `Ctrl+t` | Send the message later (tomorrow 9am, fri 6pm, in 2h) |
-| `Ctrl+g` | Edit what you typed with Claude: polish it (your words, fixed up) |
-| `Ctrl+r` (WhatsApp) | Record a voice note (again stops and adds it; Enter sends it, Esc drops it) |
-| `Ctrl+p` (WhatsApp) | Send what you wrote as a poll: the question, then one option per line |
-| `@` (WhatsApp) | Pick someone to tag from the list (Up/Down, Enter or Tab; Esc for none) |
-| `←→ Alt+b/f Ctrl+a/e` | Move the cursor by letter, word, line start / end |
-| `Ctrl+w` / `Ctrl+k` / `Ctrl+u` | Delete the word before the cursor / to the end / the whole message |
+| | *While typing* |
+| <kbd>Tab</kbd> or <kbd>Shift+Tab</kbd> | Move to the next / previous field (Tab adds what you typed first) |
+| <kbd>Up</kbd> or <kbd>Down</kbd> | Pick a contact from the suggestions |
+| <kbd>Enter</kbd> or <kbd>,</kbd> | Add the picked contact or typed address, and stay for more |
+| <kbd>Backspace</kbd> | Take the last recipient off (in an empty To, Cc or Bcc) |
+| <kbd>Ctrl+s</kbd> | Send the mail (after the undo window) |
+| <kbd>Ctrl+t</kbd> | Send the mail later (pick or type when: tomorrow 9am, fri 6pm, in 2h) |
+| <kbd>Ctrl+d</kbd> | Save the mail as a Gmail draft and close it |
+| <kbd>Ctrl+o</kbd> | Add files to the mail (x takes one off in Files) |
+| <kbd>Ctrl+e</kbd> | Edit the whole mail in your editor, then come back |
+| <kbd>Ctrl+q</kbd> | Toggle the quoted text under a reply or forward |
+| <kbd>Left</kbd> or <kbd>Right</kbd> | Select a recipient pill (in an empty To, Cc or Bcc; Backspace takes it off) |
+| <kbd>Ctrl+b</kbd> | Toggle the Cc and Bcc fields |
+| <kbd>Ctrl+g</kbd> | Toggle your Gmail signature under the mail |
+| <kbd>Ctrl+f</kbd> | Switch the account the mail is sent from |
+| <kbd>PgUp</kbd> or <kbd>PgDn</kbd> | Scroll the message you're replying to |
+| <kbd>Esc</kbd> | Cancel the mail (asks first once something is written) |
+
+**Searching (/)**
+
+| Keys | What it does |
+|---|---|
+| | *While typing* |
+| <kbd>Up</kbd> or <kbd>Down</kbd> | Move between the results (Ctrl+p / Ctrl+n too) |
+| <kbd>Enter</kbd> | Open the result, or do the action |
+| <kbd>Tab</kbd> | Switch where it looks: here, or everywhere |
+| <kbd>Ctrl+u</kbd> | Clear the search |
+| <kbd>Esc</kbd> | Close the search |
+
+**Reviewing what you wrote**
+
+| Keys | What it does |
+|---|---|
+| <kbd>y</kbd> | Send the message you wrote (after the undo window) |
+| <kbd>t</kbd> | Send the message later (pick or type when) |
+| <kbd>e</kbd> | Edit the message again in your editor |
+| <kbd>+</kbd> | Add a file to the message |
+| <kbd>-</kbd> | Take the last file off the message (+ adds it back) |
+| <kbd>d</kbd> | Save the message as a Gmail draft instead of sending |
+| <kbd>n</kbd> | Delete the message you wrote (discard; n twice, so a stray n keeps it) |
+
+**An agent's message waiting**
+
+| Keys | What it does |
+|---|---|
+| <kbd>y</kbd> | Send the message an agent wrote (after the undo window) |
+| <kbd>e</kbd> | Edit the agent's message in your editor first |
+| <kbd>u</kbd> | Undo your edit of the agent's message |
+| <kbd>d</kbd> | Toggle the changes marked in your edit of the agent's message |
+| <kbd>s</kbd> | Move to the next message waiting (leaves this one waiting) |
+| <kbd>J</kbd> or <kbd>K</kbd> | Scroll the details of the agent's message |
+| <kbd>n</kbd> | Cancel the agent's message (decline; nothing is sent) |
+| <kbd>q</kbd> | Leave the agent's message waiting and go back |
+
+**First start**
+
+| Keys | What it does |
+|---|---|
+| <kbd>n</kbd> | Rename the account before signing in |
+| <kbd>c</kbd> | Pick a different OAuth client file |
+| <kbd>y</kbd> | Copy the sign-in link |
+| | *While typing* |
+| <kbd>Tab</kbd> | Switch to the next path completion (Enter on a folder opens it) |
+| <kbd>Enter</kbd> | Save the OAuth client file at this path, or start the Google sign-in |
+| <kbd>Ctrl+t</kbd> | Enter the OAuth client ID and secret by hand instead |
+| <kbd>Ctrl+o</kbd> | Open the Google Cloud console credentials page |
+| <kbd>Ctrl+g</kbd> | Show the steps for creating the OAuth client |
+| <kbd>Ctrl+d</kbd> | Start the demo on example mail instead |
+
+**In Google Chat and On WhatsApp**
+
+| Keys | What it does |
+|---|---|
+| <kbd>z</kbd> <kbd>z</kbd> | Scroll the picked message to the middle |
+| <kbd>z</kbd> <kbd>t</kbd> | Scroll the picked message to the top |
+| <kbd>z</kbd> <kbd>b</kbd> | Scroll the picked message to the bottom |
+| <kbd>g</kbd> <kbd>d</kbd> or <kbd>%</kbd> | Jump to the message the picked reply quotes |
+| <kbd>Backspace</kbd> | Jump back to the reply you came from (after gd) |
+| <kbd>p</kbd> | Paste the clipboard into the message box (text, or a picture as a file) |
+| <kbd>Space</kbd> <kbd>a</kbd> | *Add…* |
+| <kbd>Space</kbd> <kbd>a</kbd> <kbd>f</kbd> | Send a file into this chat |
+| <kbd>Space</kbd> <kbd>e</kbd> | *Edit…* |
+| <kbd>Space</kbd> <kbd>e</kbd> <kbd>e</kbd> | Edit your picked message (WhatsApp: within 15 minutes) |
+| <kbd>Space</kbd> <kbd>e</kbd> <kbd>r</kbd> | Rename the chat (spaces and groups for everyone) |
+| <kbd>Space</kbd> <kbd>i</kbd> | *This message…* |
+| <kbd>Space</kbd> <kbd>i</kbd> <kbd>e</kbd> | Toggle a reaction on the picked message, or send one to a status |
+| <kbd>Space</kbd> <kbd>m</kbd> | *Mark…* |
+| <kbd>Space</kbd> <kbd>m</kbd> <kbd>p</kbd> | Toggle the chat pinned on top (WhatsApp: on your phone too; picking: the message) |
+<!-- /keys -->
 
 **Keys** (`?`): a window in the middle of the screen with every key,
 grouped, and a filter: type `send` and only the keys that send stay.
 
-**Picking files** (`Ctrl+o` in a mail, `+` when reviewing, `U` in chat): a
+**Picking files** (`Ctrl+o` in a mail, `+` when reviewing, `Space a f` in chat): a
 window listing the files under the folder you're in (`Ctrl+r` switches to
 home or Downloads, `Ctrl+h` shows hidden ones). Type to narrow it down; the
 right side previews the highlighted file: text with line numbers, an
@@ -426,11 +581,11 @@ shown); on a reply to a reply, Enter again keeps going back; `Backspace`
 retraces the way you came. Replies others send that quote a
 message show the quote above them (`❝ You: …`).
 
-**Starting a conversation** (`Space N`): type a name and pick the
+**Starting a conversation** (`O`): type a name and pick the
 person (people from chat, contacts from mail, and your Workspace
 directory); `Tab` adds another for a group. With two or more, Enter first
 asks for a name: with one the group is a named space everyone sees, without
-one a group chat (name it later with `Space R`). If your sign-in predates the
+one a group chat (name it later with `Space e r`). If your sign-in predates the
 permission starting chats needs, the window says so and Enter signs you in
 again in the browser, then carries on. narada opens the DM you
 already have with them, fetching the earlier messages if this machine
@@ -440,7 +595,7 @@ words in messages: Enter on a person opens your conversation with them.
 Claude can do the same: `chat_send` takes `to` (email addresses) instead of
 a space.
 
-**Renaming a chat** (`Space R`): a space is renamed on Google Chat, so everyone
+**Renaming a chat** (`Space e r`): a space is renamed on Google Chat, so everyone
 sees the new name; a group chat gets its name on Google Chat too (that makes
 it a space, with the same people and messages) (Google lets only its managers do it; narada asks for the
 permission when you sign in, so an older sign-in needs `narada auth add
@@ -450,7 +605,7 @@ the default.
 
 **Searching** (`/`): a floating window that looks everywhere: all mail, or
 every chat, and narada's own actions (type `archive` or `reply` and the
-action is there with its key; Enter does it). `Space /` looks only where
+action is there with its key; Enter does it). `Space f h` looks only where
 you are: in a mail section that section (Today: today's mail, Sent: what
 you sent); in chat, the chat you're on. `Tab` switches between the two. Results from this machine show a moment after you stop typing,
 matches highlighted, with a preview; then Gmail's own search adds what isn't
@@ -466,7 +621,7 @@ window while it looks. Enter opens a result (a chat at that message).
 | `Ctrl+u` | Clear the search |
 | `Esc` | Close the search |
 
-**Writing a mail** (`c`, `r`, `R`, `f`, or `Space d`): a new mail takes the whole
+**Writing a mail** (`o`, `r`, `R`, `Space i f`, or `A`): a new mail takes the whole
 screen; a reply keeps the message you're answering on the left (PgUp/PgDn
 scrolls it) and your reply on the right. Type a name or part of an address
 in To and your contacts appear, best first (people you write to most, then
@@ -477,7 +632,7 @@ typed letters are highlighted. Recipients become pills; a peach one says
 until `Ctrl+b` (a reply-all shows them). Your Gmail signature is added under
 the body (`Ctrl+g` leaves it out), a reply's original stays folded under it,
 and the draft is saved on disk every few seconds: if the popup closes, the
-same `c` or `r` picks it up again. Prefer your editor? `Ctrl+e` takes the
+same `o` or `r` picks it up again. Prefer your editor? `Ctrl+e` takes the
 whole mail there and back, or set `compose = "editor"`.
 
 | Key | Compose |
@@ -501,7 +656,7 @@ whole mail there and back, or set `compose = "editor"`.
 
 **Reviewing your message** (chat written in the editor, or mail with
 `compose = "editor"`) and **approving an agent's**
-(`4`, or the popup):
+(`Space t a`, or the popup):
 
 | Key | Review | Approve |
 |---|---|---|
@@ -509,9 +664,9 @@ whole mail there and back, or set `compose = "editor"`.
 | `t` | Send the message later (pick or type when) | |
 | `e` | Edit the message again in your editor | Edit the agent's message in your editor first |
 | `+` | Add a file to the message | |
-| `-` | Remove the last file added to the message | |
+| `-` | Take the last file off the message (`+` adds it back) | |
 | `d` | Save the message as a Gmail draft instead of sending | |
-| `n` | Delete the message you wrote (discard) | Cancel the agent's message (decline; nothing is sent) |
+| `n` | Delete the message you wrote (discard; `n` twice, so a stray `n` keeps it) | Cancel the agent's message (decline; nothing is sent) |
 | `u` | | Undo your edit of the agent's message |
 | `s` | | Move to the next message waiting (leaves this one waiting) |
 | `J` / `K` | | Scroll the details of the agent's message |
@@ -534,7 +689,7 @@ message waits in narada's outbox and the background service sends it then
 at that time: if it wasn't, the message goes out as soon as it is, and a
 notification says it went out late. Scheduled mail is listed in its own
 **Scheduled** tab (next to Sent) and scheduled chat messages in the chat's
-**Scheduled** tab, soonest first, with their time: `t` moves one, Enter
+**Scheduled** tab, soonest first, with their time: `Space e t` moves one, Enter
 edits it, `u` cancels it. From the shell: `--at "tomorrow 9am"` on `mail send` and `chat send`;
 `narada outbox reschedule <id> <when>`. Agents can schedule too
 (`send_at`), still after your approval.
@@ -544,15 +699,15 @@ edits it, `u` cancels it. From the shell: `--at "tomorrow 9am"` on `mail send` a
 The **Sent** section (next to Starred) lists mail you sent with who it went
 to (`→ Priya, Arjun`) and whether they answered: `↩ Priya replied 09:58` or
 `no reply yet · 2d`. Mail still in the outbox sits on top: `sending in 7s`
-(`u` cancels), an agent's waiting for your OK (`4`), or `failed` in red (`R`
+(`u` cancels), an agent's waiting for your OK (`Space t a`), or `failed` in red (`R`
 sends it again). Scheduled mail has its own tab, **Scheduled**.
 
 ## Older mail
 
 The first sync is quick: the last `initial_days` (30) of mail, at most
 `max_threads`. Older mail stays on Gmail until you want it: press `j` at the
-end of a list and the next 10 older threads of that section come in (`+` /
-`-` make it 25, 50 or 100; `older_page` sets the default), or search (`/`)
+end of a list and the next 10 older threads of that section come in (`Space r +` /
+`Space r -` make it 25, 50 or 100; `older_page` sets the default), or search (`/`)
 and Gmail finds it wherever it is. Want everything here anyway? `keep =
 "all"` (or `"1y"`, `"6m"`) downloads older mail in the background, ~150
 threads a minute, with a progress bar in the top bar.
@@ -568,7 +723,7 @@ threads a minute, with a progress bar in the top bar.
   save THREAD [N|all]`, `narada chat save MESSAGE [N|all]`, `narada whatsapp
   save MESSAGE [N|all]`.
 - **Upload**: in the mail editor, `Attach: ~/report.pdf, ~/notes.txt`; or `+`
-  on the review screen to pick files. In chat, `U` picks files to post in the
+  on the review screen to pick files. In chat, `Space a f` picks files to post in the
   space. From the shell: `--attach FILE` (repeatable) on `mail send` and
   `chat send`, and on `whatsapp send`. Up to 25 MB per mail or chat message;
   WhatsApp takes files up to 2 GB, as WhatsApp itself does.
@@ -580,9 +735,9 @@ threads a minute, with a progress bar in the top bar.
 ## WhatsApp
 
 narada links to your WhatsApp the way WhatsApp Web does: as a linked
-device of your phone's account. Open WhatsApp (`3`) and
-press `L`: the QR code shows right there; scan it from WhatsApp → Settings
-→ Linked devices. `P` links with your phone number instead (you type a code
+device of your phone's account. Open WhatsApp (`Space t w`) and
+press `Space , l`: the QR code shows right there; scan it from WhatsApp → Settings
+→ Linked devices. `Space , L` links with your phone number instead (you type a code
 on the phone). A progress bar follows while the phone sends your recent
 chats. From a terminal it's the same:
 
@@ -593,7 +748,7 @@ narada whatsapp link --phone +9198…   # or type a code on the phone instead
 
 Keep it open after scanning: it waits until the phone has logged the new
 device in and sent your recent chats (up to two minutes), then hands over
-to the background service. WhatsApp is the third place (`3`), with
+to the background service. WhatsApp is the third place (`Space t w`), with
 sections All, Unread, People, Groups, Scheduled, Archived and Status (a row
 for each person with a status up); `i` types a message, `r` on a picked message replies quoting it,
 `e` reacts to it (one reaction each, as on the phone: another replaces yours,
@@ -601,22 +756,22 @@ picking yours again takes it back, and other people's show under their messages)
 `@` while typing lists who you can tag (a group's members and whoever has written
 there; type to narrow it) and tags show as names: the name you saved, else the name
 they gave themselves, and their number only when neither is known,
-`E` edits a message of yours (for 15 minutes, as WhatsApp allows), `dd`
-twice deletes it for everyone (someone else's: for you, here only), `f` forwards
+`Space e e` edits a message of yours (for 15 minutes, as WhatsApp allows), `dd`
+(then `y`) deletes it for everyone (someone else's: for you, here only), `Space i f` forwards
 the picked message to another chat, and `R` on someone's message in a group
 replies to them privately, quoting it,
-and opening a chat marks it read (the sender sees blue ticks). `dd` archives
-a chat (the Archived section has them), `p` pins it (three at most, as
-WhatsApp allows), `M` marks it unread, `Z` mutes it (8 hours, again a week,
+and opening a chat marks it read (the sender sees blue ticks). `e` archives
+a chat (the Archived section has them), `Space m p` pins it (three at most, as
+WhatsApp allows), `Space m u` marks it unread, `Space m z` mutes it (8 hours, again a week,
 again always, again unmuted; muted chats don't notify), `B B` blocks the
-person, `*` stars the picked message and `p` on a picked message pins it for everyone; all of it reaches your phone, and
-what you change on the phone shows here. In a group, `I` shows its people,
-admins and description, and `Space R` renames it for everyone; `narada whatsapp
+person, `Space m s` stars the picked message and `Space m p` on a picked message pins it for everyone; all of it reaches your phone, and
+what you change on the phone shows here. In a group, `Space c i` shows its people,
+admins and description, and `Space e r` renames it for everyone; `narada whatsapp
 group` makes groups and adds, removes and promotes people, and gives or
 resets the invite link. Polls show their options and votes, kept up to
-date as people vote (yours marked ●): `P` on a poll votes, and `Ctrl+p`
+date as people vote (yours marked ●): `Space c v` on a poll votes, and `Ctrl+p`
 while typing sends the question and the options below it (one per line)
-as a poll. `X` sets a chat's messages to disappear (24 hours, again 7 days,
+as a poll. `Space e d` sets a chat's messages to disappear (24 hours, again 7 days,
 90 days, then off); its top line shows the timer, and what you send there
 disappears too. A place or a contact card goes from the shell: `narada
 whatsapp send --location` and `--contact`. The Status section shows people's
@@ -662,7 +817,7 @@ video previews play, and elsewhere you get coloured blocks. `images` in the
 config chooses (`auto`, `kitty`, `blocks`, `off`). New photos, stickers and
 GIFs up to 8 MB download as they arrive and larger files when you open
 them, into `~/.cache/narada/media`. Pick a message and press `Enter` to see a picture as big as the screen allows; `h`/`l` go through
-the chat's pictures. To send one, press `Ctrl+o` while typing (or `U` in
+the chat's pictures. To send one, press `Ctrl+o` while typing (or `Space a f` in
 the chat), or `Ctrl+v` to paste a copied image such as a screenshot (needs
 `wl-paste` or `xclip`): a small preview of each file shows above the box,
 what you type becomes the first file's caption, and each file goes as its
@@ -731,14 +886,14 @@ claude  → contacts_find → mail_send
 | `contacts_find` | A name to an address you've written to | reads |
 | `digest` | Today's mail and unread chat, ready to summarise | reads |
 
-The `A`, `@`, `S` and `T` keys in the screen run `claude -p` (your
+The `A` and `Space k` keys in the screen run `claude -p` (your
 `ai_command`) with the same server, so they use your Claude login. No API
 key. Any other MCP client works the same way: the server is `narada mcp`
 on stdio.
 
 ### Writing with Claude
 
-In any chat, WhatsApp chat or mail, press `A` (or `Space d`). A pink box
+In any chat, WhatsApp chat or mail, press `A` (or `Space k d`). A pink box
 asks what to write; it shows what Claude will read: the last 30 messages
 of the chat (`Tab`: the last 200) or the whole thread (`Tab`: a few mails
 you sent, so it matches how you write). Type what you want to say, pick
@@ -776,7 +931,7 @@ is written by strangers. So:
   for you. Inside tmux a popup opens on the pane the agent runs in, with
   the exact recipients and text: `y` sends, `e` edits it in your editor
   first, `n` declines. Outside tmux you get a notification; answer with
-  `narada approve` or `4` in the screen. The agent is told what happened
+  `narada approve` or `Space t a` in the screen. The agent is told what happened
   (sent, declined, cancelled) and nothing else.
 - **Every mail waits** `undo_seconds` (10) in the outbox, yours included,
   so `u` (or `narada outbox cancel <id>`, or Ctrl+c on the command line)
@@ -893,7 +1048,7 @@ prints this:
 
 ```toml
 send_policy   = "confirm"   # confirm | known-contacts | allow | trust (see Sending safely)
-undo_seconds  = 10          # every mail waits this long; z cancels
+undo_seconds  = 10          # every mail waits this long; u cancels
 chat_undo_seconds = 0       # the same for chat (default: sent at once)
 agent_undo_seconds = 10     # the least a send by an agent waits (matters under trust)
 mail_interval = "60s"       # how often the background sync checks Gmail
@@ -904,6 +1059,7 @@ notify        = true        # desktop notifications for new mail and DMs
 list_style    = "panel"  # the lists: panel (rows, the picked one a card) or cards (a box each)
 images        = "auto" # photos in the screen: auto (kitty graphics, else coloured blocks), kitty, blocks, off
 whatsapp_per_hour = 30      # at most this many WhatsApp sends an hour
+scroll_lines  = 3           # how far Ctrl+j / Ctrl+k scroll what's open
 ai_command    = ["claude", "-p"]   # what A, Ctrl+g, @, S and T run
 # editor      = "nvim"             # default: $VISUAL, $EDITOR, else the first one installed
 # compose     = "editor"           # write mail in the editor instead of the compose screen
@@ -942,7 +1098,7 @@ file it writes and the screen follows your theme.
 | `~/.local/share/narada/cache.db` | The local copy (SQLite) |
 | `~/.local/share/narada/whatsapp.db` | This device's WhatsApp keys (mode 600; `whatsapp unlink` logs out) |
 | `~/.local/state/narada/agent.log` | What agents did |
-| `~/.local/state/narada/sections.json` | Searches saved with `W` |
+| `~/.local/state/narada/sections.json` | Searches saved with `Space a g` |
 | `~/.config/systemd/user/narada.service` | The background sync (`service install`) |
 
 `NARADA_HOME` puts all of narada's files under one folder (tests and

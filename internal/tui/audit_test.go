@@ -23,7 +23,7 @@ func TestAIRequestOnlyYSends(t *testing.T) {
 		t.Fatal(it, err)
 	}
 	m.reload()
-	m = press(m, "4")
+	m = press(m, " ", "t", "a")
 	if !m.inAISection() || len(m.threads) != 1 {
 		t.Fatalf("4 goes to the AI requests: %v %d", m.inAISection(), len(m.threads))
 	}
@@ -40,11 +40,11 @@ func TestAIRequestOnlyYSends(t *testing.T) {
 // 4 opens the AI requests even when none wait, and gt reaches them.
 func TestAIRequestsAlwaysReachable(t *testing.T) {
 	m := model(t)
-	m = press(m, "4")
+	m = press(m, " ", "t", "a")
 	if !m.inAISection() || !strings.Contains(m.View(), "Waiting for you") {
 		t.Fatalf("4 with nothing waiting:\n%s", m.View())
 	}
-	m = press(m, "1", "g", "T")
+	m = press(m, " ", "t", "m", "g", "T")
 	if !m.inAISection() {
 		t.Fatal("gT from Mail is the AI requests")
 	}
@@ -58,12 +58,12 @@ func TestAIRequestsAlwaysReachable(t *testing.T) {
 // one and pressing e can't crash.
 func TestNoStalePickedMessage(t *testing.T) {
 	m, _ := waModel(t, "120363000000000001@g.us") // the 5-message group, last picked
-	m = press(m, "1", "3")                        // away and back: Amma's, 3 messages
+	m = press(m, " ", "t", "m", " ", "t", "w")    // away and back: Amma's, 3 messages
 	m = press(m, "l", "e")
 	if m.chatSel >= len(m.chatMsgs) {
 		t.Fatalf("picked %d of %d", m.chatSel, len(m.chatMsgs))
 	}
-	m = press(m, "esc", "esc", "esc", "]", "[", "e")
+	m = press(m, "esc", "esc", "esc", "ctrl+n", "ctrl+p", "e")
 	if m.focus != 0 && m.mode == modeNormal && m.pickingMsg() && m.chatSel >= len(m.chatMsgs) {
 		t.Fatal("stale pick")
 	}
@@ -72,7 +72,7 @@ func TestNoStalePickedMessage(t *testing.T) {
 // Esc keeps what you were writing, for that chat.
 func TestEscKeepsTheDraft(t *testing.T) {
 	m := model(t)
-	m = press(m, "2", "i")
+	m = press(m, " ", "t", "c", "i")
 	m = typeText(m, "half written")
 	m = press(m, "esc")
 	if m.mode != modeNormal {
@@ -116,7 +116,7 @@ func TestTabIsSections(t *testing.T) {
 // word starts ("arch" isn't "search").
 func TestFindPrefersResults(t *testing.T) {
 	m := model(t)
-	if got := m.matchActions("arch"); len(got) != 1 || got[0].key != "dd" {
+	if got := m.matchActions("arch"); len(got) != 1 || got[0].key != "e" {
 		t.Fatalf("arch: %+v", got)
 	}
 	m = press(m, "/")
@@ -138,7 +138,7 @@ func TestNarrowWriting(t *testing.T) {
 	m := model(t)
 	nm, _ := m.Update(tea.WindowSizeMsg{Width: 90, Height: 30})
 	m = nm.(Model)
-	m = press(m, "2", "i")
+	m = press(m, " ", "t", "c", "i")
 	m = typeText(m, "hello narrow")
 	if v := m.View(); !strings.Contains(v, "hello narrow") {
 		t.Fatalf("what you type isn't shown:\n%s", v)
@@ -150,7 +150,7 @@ func TestHelpSheet(t *testing.T) {
 	m := model(t)
 	m = press(m, "?")
 	m = typeText(m, "space")
-	if !strings.Contains(m.View(), "Space, then") {
+	if !strings.Contains(m.View(), "Space a · Add") {
 		t.Fatal("the Space group is missing")
 	}
 	nm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 8})
@@ -193,7 +193,7 @@ func TestMouse(t *testing.T) {
 // Space N from Mail opens the people picker on a real Chat place.
 func TestNewConversationFromMail(t *testing.T) {
 	m := model(t)
-	m = press(m, " ", "N")
+	m = press(m, "O")
 	if m.mode != modeConvo || m.tab != tabChat || len(m.spaces) == 0 {
 		t.Fatalf("mode %d tab %d spaces %d", m.mode, m.tab, len(m.spaces))
 	}

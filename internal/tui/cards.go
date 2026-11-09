@@ -675,7 +675,7 @@ func (m *Model) buildPreview(w int) {
 		note := map[string]string{store.StatusQueued: "in its undo window · u cancels", store.StatusSending: "sending now",
 			store.StatusApproval: "an agent's mail waiting for your approval (A)", store.StatusFailed: "failed: " + it.Error + " · R sends it again"}[it.Status]
 		if it.Status == store.StatusQueued && it.Out.ScheduledFor > 0 {
-			note = "⏰ scheduled for " + time.UnixMilli(it.Out.ScheduledFor).Format("Monday 02 January, 15:04") + " · t moves it · enter edits · u cancels"
+			note = "⏰ scheduled for " + time.UnixMilli(it.Out.ScheduledFor).Format("Monday 02 January, 15:04") + " · Space e t moves it · enter edits · u cancels"
 		}
 		m.preview = strings.Split(m.outgoingView(it.Kind, it.Out, note, w), "\n")
 	} else if _, ok := m.curSpace(); ok {

@@ -63,7 +63,7 @@ func pickMsg(t *testing.T, m Model, id string) Model {
 func TestForwardFromTheScreen(t *testing.T) {
 	m, w := waModel(t, "919800000001@s.whatsapp.net")
 	m = pickMsg(t, m, "H3")
-	m = press(m, "f")
+	m = press(m, " ", "i", "f")
 	if m.mode != modeForward {
 		t.Fatalf("f didn't ask where to: mode %d", m.mode)
 	}
@@ -85,7 +85,7 @@ func TestForwardFromTheScreen(t *testing.T) {
 func TestReplyPrivatelyFromTheScreen(t *testing.T) {
 	m, w := waModel(t, "120363000000000001@g.us")
 	m = pickMsg(t, m, "H6") // Ravi's, in the group
-	m = press(m, "R")
+	m = press(m, " ", "i", "p")
 	sp, ok := m.curSpace()
 	if !ok || sp.Name != "919800000002@s.whatsapp.net" || m.mode != modeChatMsg || m.replyTo == nil {
 		t.Fatalf("R should open the chat with Ravi, replying: %+v %v", sp, m.replyTo)
@@ -102,11 +102,10 @@ func TestDeleteForMeFromTheScreen(t *testing.T) {
 	m, w := waModel(t, "919800000002@s.whatsapp.net")
 	m = pickMsg(t, m, "H4") // Ravi's
 	m = press(m, "d", "d")
-	if !strings.Contains(m.toast, "for you") {
-		t.Fatalf("toast %q", m.toast)
+	if m.confirm == nil || !strings.Contains(m.confirm.question, "for you") {
+		t.Fatalf("dd should ask: %+v", m.confirm)
 	}
-	m = press(m, "d")
-	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	m = nm.(Model)
 	if cmd != nil {
 		cmd()
@@ -126,7 +125,7 @@ func TestEditFromTheScreen(t *testing.T) {
 	it, _ = m.a.Store.OutboxItem(it.ID)
 	m.loadPreview(true)
 	m = pickMsg(t, m, strings.TrimPrefix(it.Result, "919800000002@s.whatsapp.net/"))
-	m = press(m, "E")
+	m = press(m, " ", "e", "e")
 	if m.editingMsg == "" {
 		t.Fatalf("E didn't start editing: %q", m.toast)
 	}
@@ -150,9 +149,15 @@ func TestChatStateKeys(t *testing.T) {
 		s, _ := m.a.Store.Space(store.WhatsAppAccount, "919800000002@s.whatsapp.net")
 		return s
 	}
-	run := func(keys ...string) {
-		for _, k := range keys {
-			nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)})
+	// run types each key sequence ("Space m z") and runs what the last key starts
+	run := func(seqs ...string) {
+		for _, seq := range seqs {
+			keys := strings.Fields(strings.ReplaceAll(seq, "Space", " "))
+			if strings.HasPrefix(seq, "Space") {
+				keys = append([]string{" "}, strings.Fields(strings.TrimPrefix(seq, "Space"))...)
+			}
+			m = press(m, keys[:len(keys)-1]...)
+			nm, cmd := m.Update(keyMsgOf(keys[len(keys)-1]))
 			m = nm.(Model)
 			if cmd != nil {
 				if msg := cmd(); msg != nil {
@@ -162,34 +167,33 @@ func TestChatStateKeys(t *testing.T) {
 			}
 		}
 	}
-	run("Z")
+	run("Space m z")
 	if !sp().Muted() || sp().MutedUntil < 0 {
 		t.Fatalf("Z: %+v", sp())
 	}
-	run("Z", "Z")
+	run("Space m z", "Space m z")
 	if sp().MutedUntil != -1 {
 		t.Fatalf("Z Z Z is always: %d", sp().MutedUntil)
 	}
-	run("Z")
+	run("Space m z")
 	if sp().Muted() {
 		t.Fatal("Z after always unmutes")
 	}
-	run("B")
+	run("Space m b", "n")
 	if sp().Blocked {
-		t.Fatal("one B blocked at once")
+		t.Fatal("Space m b blocked without asking")
 	}
-	run("B")
+	run("Space m b", "y")
 	if !sp().Blocked {
-		t.Fatalf("B B didn't block: %q", m.toast)
+		t.Fatalf("Space m b y didn't block: %q", m.toast)
 	}
-	run("p")
+	run("Space m p")
 	if !sp().Pinned {
-		t.Fatal("p pins")
+		t.Fatal("Space m p pins")
 	}
-	run("d")
-	run("d")
+	run("e")
 	if !sp().Archived || sp().Pinned {
-		t.Fatal("dd archives (and unpins)")
+		t.Fatal("e archives (and unpins)")
 	}
 	for _, s := range m.spaces {
 		if s.Name == "919800000002@s.whatsapp.net" {
@@ -212,7 +216,7 @@ func TestChatStateKeys(t *testing.T) {
 	m.focus = 1
 	m.loadPreview(true)
 	m = pickMsg(t, m, "H4")
-	run("*")
+	run("Space m s")
 	if msg, _ := m.a.Store.ChatMessage(store.WhatsAppAccount, "919800000002@s.whatsapp.net/H4"); !msg.Starred {
 		t.Fatal("* didn't star it")
 	}
@@ -253,7 +257,7 @@ func TestTypingAndPresence(t *testing.T) {
 func TestRenameWhatsAppGroup(t *testing.T) {
 	m, w := waModel(t, "120363000000000001@g.us")
 	m.focus = 0
-	m = press(m, " ", "R")
+	m = press(m, " ", "e", "r")
 	if m.mode != modeRename || !strings.Contains(m.renamePrompt(), "WhatsApp") {
 		t.Fatalf("n: mode %d, prompt %q", m.mode, m.renamePrompt())
 	}
@@ -272,7 +276,8 @@ func TestRenameWhatsAppGroup(t *testing.T) {
 func TestGroupInfoKey(t *testing.T) {
 	m, _ := waModel(t, "120363000000000001@g.us")
 	m.focus = 0
-	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("I")})
+	m = press(m, " ", "c")
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
 	m = nm.(Model)
 	msg, ok := cmd().(aiMsg)
 	if !ok || msg.err != nil || !strings.Contains(msg.text, "4 people") || !strings.Contains(msg.text, "Ravi Kulkarni") || !strings.Contains(msg.text, "You +919876500000 · owner") {
@@ -295,7 +300,7 @@ func TestPollFromTheScreen(t *testing.T) {
 	m.loadPreview(true)
 	items, _ := m.a.Store.Outbox(store.StatusSent)
 	m = pickMsg(t, m, strings.TrimPrefix(items[0].Result, "120363000000000001@g.us/"))
-	m = press(m, "P")
+	m = press(m, " ", "c", "v")
 	if m.mode != modeVote {
 		t.Fatalf("P: %q", m.toast)
 	}
@@ -307,7 +312,7 @@ func TestPollFromTheScreen(t *testing.T) {
 	}
 	// P on a message that isn't a poll
 	m = pickMsg(t, m, "H6")
-	m = press(m, "P")
+	m = press(m, " ", "c", "v")
 	if m.mode == modeVote {
 		t.Fatal("voting in a plain message")
 	}
@@ -321,7 +326,8 @@ func TestDisappearKey(t *testing.T) {
 		return s
 	}
 	x := func() {
-		nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+		m = press(m, " ", "e")
+		nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 		m = nm.(Model)
 		if cmd != nil {
 			cmd()
@@ -375,7 +381,7 @@ func TestStatusSection(t *testing.T) {
 func TestPinMessageKey(t *testing.T) {
 	m, w := waModel(t, "120363000000000001@g.us")
 	m = pickMsg(t, m, "H9")
-	m = press(m, "p")
+	m = press(m, " ", "m", "p")
 	m.a.DeliverDue(context.Background())
 	if !strings.Contains(strings.Join(w.Did, "\n"), "pin-message 120363000000000001@g.us/H9 true") {
 		t.Fatalf("did %q (%s %s)", w.Did, m.err, m.toast)

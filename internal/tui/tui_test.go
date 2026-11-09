@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/Theyashsawarkar/vyakarana/keymaptest"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -21,16 +22,9 @@ var update = flag.Bool("update", false, "rewrite scripts/keybindings")
 
 // scripts/keybindings is what Vayu's keybinding search reads.
 func TestKeybindingsFile(t *testing.T) {
-	path := "../../scripts/keybindings"
-	if *update {
-		if err := os.WriteFile(path, []byte(KeybindLines()), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	b, err := os.ReadFile(path)
-	if err != nil || string(b) != KeybindLines() {
-		t.Fatal("scripts/keybindings is out of date: go test ./internal/tui -update")
-	}
+	keymaptest.All(t, narKeys)
+	keymaptest.FileUpToDate(t, "../../scripts/keybindings", KeybindLines(), *update)
+	keymaptest.SectionUpToDate(t, "../../README.md", KeyTables(), *update)
 }
 
 // The README documents every key.
@@ -70,36 +64,7 @@ func model(t *testing.T) Model {
 
 func press(m Model, keys ...string) Model {
 	for _, k := range keys {
-		var msg tea.KeyMsg
-		switch k {
-		case "tab":
-			msg = tea.KeyMsg{Type: tea.KeyTab}
-		case "enter":
-			msg = tea.KeyMsg{Type: tea.KeyEnter}
-		case "esc":
-			msg = tea.KeyMsg{Type: tea.KeyEsc}
-		case "ctrl+s":
-			msg = tea.KeyMsg{Type: tea.KeyCtrlS}
-		case "down":
-			msg = tea.KeyMsg{Type: tea.KeyDown}
-		case "shift+tab":
-			msg = tea.KeyMsg{Type: tea.KeyShiftTab}
-		case "ctrl+t":
-			msg = tea.KeyMsg{Type: tea.KeyCtrlT}
-		case "ctrl+u":
-			msg = tea.KeyMsg{Type: tea.KeyCtrlU}
-		case "ctrl+n":
-			msg = tea.KeyMsg{Type: tea.KeyCtrlN}
-		case "backspace":
-			msg = tea.KeyMsg{Type: tea.KeyBackspace}
-		case "alt+b":
-			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b"), Alt: true}
-		case "end":
-			msg = tea.KeyMsg{Type: tea.KeyEnd}
-		default:
-			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
-		}
-		nm, _ := m.Update(msg)
+		nm, _ := m.Update(keyMsgOf(k))
 		m = nm.(Model)
 	}
 	return m
@@ -118,7 +83,7 @@ func TestScreen(t *testing.T) {
 		t.Fatalf("j j selected %s", th.ID)
 	}
 	// / opens the search window: it searches this section, in the background
-	m = press(m, " ", "/", "l", "u", "n", "c", "h")
+	m = press(m, " ", "f", "h", "l", "u", "n", "c", "h")
 	m = runSearch(t, m)
 	if m.mode != modeFind || len(m.find.mail) != 1 || !strings.Contains(m.View(), "in ") {
 		t.Fatalf("search window: %+v", m.find)
@@ -127,7 +92,7 @@ func TestScreen(t *testing.T) {
 	if th, ok := m.curThread(); !ok || th.ID != "t-rohan" || m.search == nil {
 		t.Fatalf("opened: %+v %v", th, m.search)
 	}
-	m = press(m, "[", "2")
+	m = press(m, "[", "[", " ", "t", "c")
 	if !strings.Contains(m.View(), "portal-dev") {
 		t.Fatal("chat tab")
 	}
@@ -136,7 +101,7 @@ func TestScreen(t *testing.T) {
 	if !strings.Contains(m.View(), "Claude's summary") {
 		t.Fatal("help sheet")
 	}
-	m = press(m, "esc", "esc", "]") // the first Esc clears the filter
+	m = press(m, "esc", "esc", "]", "]") // the first Esc clears the filter
 	if chatSections[m.sec] != "Unread" || len(m.spaces) != 2 {
 		t.Fatalf("chat Unread section: %d", len(m.spaces))
 	}
@@ -154,7 +119,7 @@ func TestComposer(t *testing.T) {
 	if sig := m.a.Signature(context.Background(), "work", true); !strings.Contains(sig, "Example Corp") {
 		t.Fatalf("signature: %q", sig)
 	}
-	m = press(m, "c")
+	m = press(m, "o")
 	if m.mode != modeCompose || !strings.Contains(m.View(), "new mail") {
 		t.Fatal("c should open the compose screen")
 	}
@@ -216,7 +181,7 @@ func TestComposer(t *testing.T) {
 	}
 
 	// Esc: once warns when something is written, twice discards
-	m = press(m, "c", "tab", "tab", "tab")
+	m = press(m, "o", "tab", "tab", "tab")
 	m = typeText(m, "unsent")
 	m = press(m, "esc")
 	if m.mode != modeCompose {
@@ -247,8 +212,8 @@ func runSearch(t *testing.T, m Model) Model {
 func TestSearchScopes(t *testing.T) {
 	m := model(t)
 	// Today: only today's mail; Tab widens to all mail
-	m = press(m, "]") // Today
-	m = press(m, " ", "/")
+	m = press(m, "]", "]") // Today
+	m = press(m, " ", "f", "h")
 	m = typeText(m, "lunch")
 	m = runSearch(t, m)
 	if len(m.find.mail) != 0 || !strings.Contains(m.View(), "Today") {
@@ -261,8 +226,8 @@ func TestSearchScopes(t *testing.T) {
 	}
 	m = press(m, "esc")
 	// a chat space: only its messages
-	m = press(m, "2", "j") // chat, portal-dev
-	m = press(m, " ", "/")
+	m = press(m, " ", "t", "c", "j") // chat, portal-dev
+	m = press(m, " ", "f", "h")
 	m = typeText(m, "smoke")
 	m = runSearch(t, m)
 	if len(m.find.chat) != 1 || len(m.find.mail) != 0 || m.find.chat[0].Space != "spaces/portal-dev" {
@@ -284,7 +249,7 @@ func TestSearchScopes(t *testing.T) {
 
 func TestSchedule(t *testing.T) {
 	m := model(t)
-	m = press(m, "c")
+	m = press(m, "o")
 	m = typeText(m, "rohan.d@example.com")
 	m = press(m, "tab")
 	m = typeText(m, "later")
@@ -305,19 +270,19 @@ func TestSchedule(t *testing.T) {
 	}
 	// it's in the Scheduled tab (not Sent) with its time; t moves it
 	for m.currentSection().Label != "SENT" {
-		m = press(m, "]")
+		m = press(m, "]", "]")
 	}
 	if strings.Contains(m.View(), "⏰") {
 		t.Fatal("Sent shouldn't list scheduled mail")
 	}
-	m = press(m, "]")
+	m = press(m, "]", "]")
 	if m.currentSection().Label != "SCHEDULED" || !strings.Contains(m.View(), "Scheduled 1") {
 		t.Fatalf("no Scheduled tab:\n%s", m.View())
 	}
 	if !strings.Contains(m.View(), "⏰ in 120 min") && !strings.Contains(m.View(), "⏰ today") && !strings.Contains(m.View(), "⏰ tomorrow") {
 		t.Fatalf("Scheduled doesn't show the mail:\n%s", m.View())
 	}
-	m = press(m, "g", "g", "t")
+	m = press(m, "g", "g", " ", "e", "t")
 	m = typeText(m, "tomorrow 10am")
 	m = press(m, "enter")
 	it, _ := m.a.Store.OutboxItem(q[0].ID)
@@ -328,7 +293,7 @@ func TestSchedule(t *testing.T) {
 
 func TestScheduledChat(t *testing.T) {
 	m := model(t)
-	m = press(m, "2", "j", "i") // chat, portal-dev, type
+	m = press(m, " ", "t", "c", "j", "i") // chat, portal-dev, type
 	m = typeText(m, "standup notes")
 	m = press(m, "ctrl+t")
 	m = typeText(m, "tomorrow 9am")
@@ -338,7 +303,7 @@ func TestScheduledChat(t *testing.T) {
 		t.Fatalf("scheduled chat: %+v", q)
 	}
 	for chatSections[m.sec] != "Scheduled" {
-		m = press(m, "]")
+		m = press(m, "]", "]")
 	}
 	if len(m.spaces) != 1 || !strings.Contains(m.View(), "⏰ tomorrow 09:00") || !strings.Contains(m.View(), "Scheduled 1") {
 		t.Fatalf("chat Scheduled tab:\n%s", m.View())
@@ -354,7 +319,7 @@ func TestScheduledChat(t *testing.T) {
 
 func TestNewConversation(t *testing.T) {
 	m := model(t)
-	m = press(m, "2", " ", "N")
+	m = press(m, " ", "t", "c", "O")
 	if m.mode != modeConvo || !strings.Contains(m.View(), "new conversation") {
 		t.Fatal("N should open (and draw) the new conversation window")
 	}
@@ -414,7 +379,7 @@ func TestGroupNameAndSignIn(t *testing.T) {
 	m := model(t)
 	g := lastFake
 	g.NeedsScope = true
-	m = press(m, "2", " ", "N")
+	m = press(m, " ", "t", "c", "O")
 	m = typeText(m, "arj")
 	m = press(m, "tab")
 	m = typeText(m, "neh")
@@ -441,7 +406,7 @@ func TestGroupNameAndSignIn(t *testing.T) {
 
 func TestChatReplies(t *testing.T) {
 	m := model(t)
-	m = press(m, "2") // chat, Priya's DM first
+	m = press(m, " ", "t", "c") // chat, Priya's DM first
 	if sp, _ := m.curSpace(); sp.Name != "spaces/dm-priya" {
 		t.Fatalf("first chat: %s", sp.Name)
 	}
@@ -484,14 +449,14 @@ func TestChatExtras(t *testing.T) {
 	m := model(t)
 	g := lastFake
 	g.AddChat(fake.ChatMessage{Space: "spaces/dm-priya", Sender: "users/2", Text: "from last month", Created: time.Now().AddDate(0, -1, 0)})
-	m = press(m, "2") // Priya's DM
+	m = press(m, " ", "t", "c") // Priya's DM
 	v := m.View()
 	// a DM doesn't list "You, Priya · 2 people": its title says who
 	if !strings.Contains(v, "new") || strings.Contains(v, "2 people") {
 		t.Fatalf("new line / no people header in a DM:\n%s", v)
 	}
 	// react to her message
-	m = press(m, "enter", "e")
+	m = press(m, "enter", " ", "i", "e")
 	if m.mode != modeReact || !strings.Contains(m.View(), "react") {
 		t.Fatal("e should open the reactions")
 	}
@@ -500,7 +465,8 @@ func TestChatExtras(t *testing.T) {
 	if !strings.Contains(m.View(), "🎉 1") {
 		t.Fatalf("reaction not shown:\n%s", m.View())
 	}
-	// e again: yours is marked, and picking it takes it away
+	// Space i e again: yours is marked, and picking it takes it away
+	m = press(m, " ", "i")
 	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
 	m = runCmds(nm.(Model), cmd)
 	if !m.reactMine["🎉"] || !strings.Contains(m.View(), "✓") {
@@ -516,7 +482,7 @@ func TestChatExtras(t *testing.T) {
 	if !m.chatMsgs[m.chatSel].Mine {
 		t.Fatalf("picked: %+v", m.chatMsgs[m.chatSel])
 	}
-	m = press(m, "E", "ctrl+u")
+	m = press(m, " ", "e", "e", "ctrl+u")
 	m = typeText(m, "sent you the notes (v2)")
 	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = runCmds(nm.(Model), cmd)
@@ -530,8 +496,8 @@ func TestChatExtras(t *testing.T) {
 			m.chatSel = i
 		}
 	}
-	m = press(m, "d", "d", "d") // dd asks, dd deletes
-	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m = press(m, "d", "d") // dd asks, y deletes
+	nm, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	m = runCmds(nm.(Model), cmd)
 	for _, c := range m.chatMsgs {
 		if c.Mine {
@@ -546,7 +512,7 @@ func TestChatExtras(t *testing.T) {
 		t.Fatalf("earlier messages: %+v", m.chatMsgs[0])
 	}
 	// pin, and [ ] between chats
-	m = press(m, "h", "j", "p")
+	m = press(m, "h", "j", " ", "m", "p")
 	if !m.spaces[0].Pinned || !strings.Contains(m.View(), "PINNED") {
 		t.Fatalf("pin:\n%s", m.View())
 	}
@@ -569,7 +535,7 @@ func TestJumpToOriginal(t *testing.T) {
 	g.AddChat(fake.ChatMessage{Name: "spaces/dm-priya/messages/C", Space: "spaces/dm-priya", Sender: "users/2", Text: "message C", Created: time.Now(), Quoted: "spaces/dm-priya/messages/B"})
 	m.a.SyncAll(context.Background())
 	m.reload()
-	m = press(m, "2", "enter", "k") // the DM, latest message (C) picked
+	m = press(m, " ", "t", "c", "enter", "k") // the DM, latest message (C) picked
 	if m.chatMsgs[m.chatSel].Text != "message C" {
 		t.Fatalf("picked %q", m.chatMsgs[m.chatSel].Text)
 	}
@@ -596,7 +562,7 @@ func TestJumpToOriginal(t *testing.T) {
 
 func TestPickAndMarkAllRead(t *testing.T) {
 	m := model(t)
-	m = press(m, "2") // chat
+	m = press(m, " ", "t", "c") // chat
 	unread := func() int {
 		n := 0
 		for _, sp := range m.spaces {
@@ -617,10 +583,10 @@ func TestPickAndMarkAllRead(t *testing.T) {
 	if len(m.selected) != 0 {
 		t.Fatal("ctrl+x again clears")
 	}
-	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r"), Alt: true})
+	nm, cmd := m.runKeys("Space m R")
 	m = runCmds(nm.(Model), cmd)
 	m.reload()
 	if n := unread(); n != 0 {
-		t.Fatalf("alt+r leaves %d chats unread", n)
+		t.Fatalf("Space m R leaves %d chats unread", n)
 	}
 }

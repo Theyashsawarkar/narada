@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -116,54 +117,10 @@ func (f *finder) count() int {
 	return len(f.mail) + len(f.convos) + len(f.people) + len(f.chat) + len(f.actions)
 }
 
-// action is something / can do: one key, what it does, where it works.
+// action is something / can do: its key and what it does, from the
+// keymap (keymap.go), so the finder offers exactly what the keys do.
 type action struct {
 	desc, key, run string
-	where          string // "" anywhere, mail, chat (Google Chat and WhatsApp), wa
-}
-
-var actions = []action{
-	{"Archive this thread or chat", "dd", "dd", ""},
-	{"Trash this thread", "#", "#", "mail"},
-	{"Mark it read", "m", "m", ""},
-	{"Mark it unread", "M", "M", ""},
-	{"Star it", "*", "*", "mail"},
-	{"Label it", "L", "L", "mail"},
-	{"Undo the last change", "u", "u", ""},
-	{"Reply", "r", "r", ""},
-	{"Reply to everyone", "R", "R", "mail"},
-	{"Forward it", "f", "f", "mail"},
-	{"Write a new mail", "c", "c", "mail"},
-	{"Write a message here", "i", "i", "chat"},
-	{"Start a conversation", "Space N", "Space N", ""},
-	{"Open the files", "gf", "gf", ""},
-	{"Save the files", "gF", "gF", ""},
-	{"Open a link", "gx", "gx", ""},
-	{"Open in the browser", "b", "b", ""},
-	{"Copy the link", "Y", "Y", ""},
-	{"Send a file here", "U", "U", "chat"},
-	{"Pin this chat", "p", "p", "chat"},
-	{"Mute this chat", "Z", "Z", "wa"},
-	{"Rename this chat", "Space R", "Space R", "chat"},
-	{"Show the group's people", "I", "I", "wa"},
-	{"Fold or unfold the thread", "za", "za", "mail"},
-	{"Show the quoted text", "zq", "zq", "mail"},
-	{"Go to Mail", "1", "1", ""},
-	{"Go to Google Chat", "2", "2", ""},
-	{"Go to WhatsApp", "3", "3", ""},
-	{"Go to the AI requests", "4", "4", ""},
-	{"Show only the unread", "Space u", "Space u", ""},
-	{"Jump to the next unread", "n", "n", ""},
-	{"Pick several (visual)", "v", "v", ""},
-	{"Switch account", "Space x", "Space x", ""},
-	{"Sync now", "Space r", "Space r", ""},
-	{"Save this search as a section", "W", "W", "mail"},
-	{"Draft a reply with Claude", "Space d", "Space d", "mail"},
-	{"Summarise with Claude", "Space s", "Space s", ""},
-	{"Ask Claude", "Space k", "Space k", ""},
-	{"Today's digest", "Space t", "Space t", ""},
-	{"Show every key", "?", "?", ""},
-	{"Quit narada", "Space q", "Space q", ""},
 }
 
 // matchActions finds the actions that work here whose words start with
@@ -173,13 +130,12 @@ func (m Model) matchActions(q string) []action {
 	if len(words) == 0 || strings.Contains(q, ":") {
 		return nil
 	}
-	here := map[string]bool{"": true, "mail": m.tab == tabMail, "chat": m.tab == tabChat, "wa": m.wa}
 	var out []action
-	for _, a := range actions {
-		if !here[a.where] {
-			continue
+	for _, b := range narKeys.Palette(m.where()) {
+		if b.Seq == ":" {
+			continue // the command line lists its own words
 		}
-		have := strings.Fields(strings.ToLower(a.desc))
+		have := strings.FieldsFunc(strings.ToLower(b.Desc), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 		all := true
 		for _, w := range words {
 			hit := false
@@ -189,7 +145,7 @@ func (m Model) matchActions(q string) []action {
 			all = all && hit
 		}
 		if all {
-			out = append(out, a)
+			out = append(out, action{desc: b.Desc, key: b.Seq, run: b.Seq})
 			if len(out) == 5 {
 				break
 			}
@@ -625,7 +581,7 @@ func (m Model) openFound() (tea.Model, tea.Cmd) {
 		m.filter = ""
 		m.reload()
 		m.selectKey(chosen.Account + "/" + chosen.ID)
-		m.say(fmt.Sprintf("%d found in %s · W saves it as a section · [ ] leave", len(f.mail), f.scopeName()))
+		m.say(fmt.Sprintf("%d found in %s · Space a g saves it as a section · [[ ]] leave", len(f.mail), f.scopeName()))
 		return m, nil
 	}
 	kind, i := f.at(f.sel)

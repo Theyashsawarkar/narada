@@ -177,8 +177,11 @@ func (m Model) View() string {
 	case m.mode == modePick && m.pick != nil:
 		box := m.pickerPopup()
 		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/2)), "\n")
+	case m.pal != nil:
+		box := m.palettePopup()
+		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, (bh-len(box))/3)), "\n")
 	case m.leader && m.leaderShown:
-		box := m.leaderMenu()
+		box := m.whichMenu()
 		body = strings.Split(overlayAt(strings.Join(body, "\n"), box, m.w, max(0, bh-len(box))), "\n")
 	}
 	rows = append(rows, body...)

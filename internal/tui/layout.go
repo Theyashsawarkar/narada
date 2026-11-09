@@ -256,7 +256,7 @@ func (m Model) sectionStrip() string {
 			add("⌕ "+m.search.Name, 0, col, true)
 		}
 	case m.wa && !m.waLinked:
-		parts = append(parts, s.muted.Render(" WhatsApp isn't linked yet: L links it with a QR code, P with a code"))
+		parts = append(parts, s.muted.Render(" WhatsApp isn't linked yet: Space , l links it with a QR code, Space , L with a code"))
 	default:
 		unread := m.chatN
 		if m.wa {
@@ -357,8 +357,11 @@ func (m Model) footerView() string {
 	name, col := m.modeLook()
 	pill := lipgloss.NewStyle().Foreground(lipgloss.Color(s.c.Crust)).Background(lipgloss.Color(col)).Bold(true).Padding(0, 1)
 	left := " " + s.round(pill, name)
-	if m.prefix != "" && m.mode == modeNormal {
-		left += " " + s.yellow.Bold(true).Render(m.prefix+"…")
+	if m.eng.Waiting() && m.mode == modeNormal {
+		left += " " + s.yellow.Bold(true).Render(m.eng.Pending()+"…") // Vim's showcmd
+	}
+	if m.confirm != nil {
+		left += " " + s.peach.Bold(true).Render(m.confirm.question)
 	}
 	for _, k := range m.barKeys() {
 		left += "  " + s.round(s.keycap, k[0]) + s.sub.Render(" "+k[1])
@@ -378,27 +381,36 @@ func (m Model) footerView() string {
 
 // barKeys are the keys the bar shows for what you're doing now.
 func (m Model) barKeys() [][2]string {
+	if m.confirm != nil {
+		return [][2]string{{"y", "yes"}, {"any other key", "keep it"}}
+	}
+	if m.pal != nil {
+		return [][2]string{{"type", "to narrow"}, {"↑↓", "pick"}, {"enter", "run"}, {"esc", "close"}}
+	}
 	if m.leader {
-		return [][2]string{{"a key", "from the menu"}, {"esc", "never mind"}}
+		return [][2]string{{"a key", "from the menu"}, {"⌫", "up a level"}, {"esc", "never mind"}}
 	}
 	if m.prefix != "" && m.mode == modeNormal {
 		// a key that takes a second: what the second can be (Vim's showcmd)
-		return map[string][][2]string{
-			"g": {{"gg", "to the top"}, {"gt/gT", "next/previous place"}, {"gf/gF", "open/save files"}, {"gx", "open a link"}},
-			"d": {{"dd", "archive (picking: delete yours)"}},
-			"y": {{"yy", "copy the message"}},
-			"z": {{"za", "fold / unfold"}, {"zq", "quoted text"}},
-		}[m.prefix]
+		var out [][2]string
+		seq := strings.ReplaceAll(m.pendingKeys(), " ", "")
+		for _, h := range m.eng.Hints(m.where()) {
+			if len(out) == 5 {
+				break
+			}
+			out = append(out, [2]string{seq + h.Key, strings.ToLower(h.Desc[:1]) + h.Desc[1:]})
+		}
+		return out
 	}
 	if m.visual && m.mode == modeNormal {
-		return [][2]string{{"j/k", "pick more"}, {"d", "archive"}, {"m/M", "read/unread"}, {"y", "copy"}, {"esc", "stop"}}
+		return [][2]string{{"j/k", "pick more"}, {"e", "archive"}, {"d", "trash"}, {"~", "read/unread"}, {"y", "copy"}, {"esc", "stop"}}
 	}
 	switch m.mode {
 	case modeReview:
 		if m.review != nil && m.review.kind == "chat" {
-			return [][2]string{{"y", "send"}, {"t", "later"}, {"e", "edit"}, {"+", "file"}, {"-", "drop file"}, {"n", "discard"}}
+			return [][2]string{{"y", "send"}, {"t", "later"}, {"e", "edit"}, {"+", "file"}, {"-", "drop file"}, {"n n", "discard"}}
 		}
-		return [][2]string{{"y", "send"}, {"t", "later"}, {"e", "edit"}, {"+", "file"}, {"-", "drop file"}, {"d", "save draft"}, {"n", "discard"}}
+		return [][2]string{{"y", "send"}, {"t", "later"}, {"e", "edit"}, {"+", "file"}, {"-", "drop file"}, {"d", "save draft"}, {"n n", "discard"}}
 	case modeApprove:
 		return [][2]string{{"y", "send"}, {"e", "edit first"}, {"n", "decline"}, {"q", "decide later"}}
 	case modeConvo:
@@ -453,21 +465,21 @@ func (m Model) barKeys() [][2]string {
 	}
 	switch {
 	case m.isStatus() && !m.pickingMsg():
-		return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"r", "reply"}, {"e", "react"}}
+		return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"r", "reply"}, {"␣ie", "react"}}
 	case m.pickingMsg() && m.isStatus():
-		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"e", "react"}, {"gf", "open"}, {"esc", "back"}}
+		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"␣ie", "react"}, {"gf", "open"}, {"esc", "back"}}
 	case m.pickingMsg():
-		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"e", "react"}, {"E", "edit"}, {"yy", "copy"}, {"esc", "back"}}
+		return [][2]string{{"j/k", "pick"}, {"r", "reply"}, {"␣ie", "react"}, {"␣ee", "edit"}, {"yy", "copy"}, {"dd", "delete"}, {"esc", "back"}}
 	case m.inAISection():
-		return [][2]string{{"j/k", "pick"}, {"y", "send"}, {"e", "edit first"}, {"n", "decline"}}
+		return [][2]string{{"j/k", "pick"}, {"y", "send"}, {"e", "edit first"}, {"n n", "decline"}}
 	case m.focus == 1 && m.tab == tabMail:
-		return [][2]string{{"j/k", "scroll"}, {"r", "reply"}, {"R", "reply all"}, {"za", "fold"}, {"h", "list"}}
+		return [][2]string{{"J/K", "next/prev"}, {"ctrl+j/k", "scroll"}, {"r", "reply"}, {"R", "reply all"}, {"za", "fold"}, {"h", "list"}}
 	case m.focus == 1:
-		return [][2]string{{"i", "write"}, {"j/k", "pick a message"}, {"h", "list"}}
+		return [][2]string{{"i", "write"}, {"j/k", "pick a message"}, {"ctrl+j/k", "scroll"}, {"h", "list"}}
 	case m.tab == tabMail:
-		return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"r", "reply"}, {"dd", "archive"}, {"c", "write"}}
+		return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"r", "reply"}, {"e", "archive"}, {"o", "write"}, {"H/L", "places"}}
 	}
-	return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"i", "write"}, {"r", "reply"}}
+	return [][2]string{{"j/k", "move"}, {"enter", "open"}, {"i", "write"}, {"r", "reply"}, {"H/L", "places"}}
 }
 
 // isStatus: the chat open is WhatsApp's status updates.

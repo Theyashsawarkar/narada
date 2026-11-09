@@ -74,7 +74,8 @@ func (m Model) mouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeChatMsg && ev.Y > sectionsRow && !inList {
 		return m, nil // a click in the chat while writing: keep writing
 	}
-	m.leader, m.prefix = false, ""
+	m.eng.Reset()
+	m.syncPending()
 	switch ev.Y {
 	case placesRow:
 		for _, p := range h.places {

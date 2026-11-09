@@ -35,15 +35,16 @@ func TestLinkFromTab(t *testing.T) {
 	m.a.DialWhatsApp = func(ctx context.Context) (app.WhatsAppConn, error) { return w.Conn(ctx) }
 	nm0, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 60})
 	m = nm0.(Model)
-	m = press(m, "3")
+	m = press(m, " ", "t", "w")
 	if !m.wa || !strings.Contains(m.View(), "link with a QR code") {
 		t.Fatalf("the WhatsApp tab should offer linking:\n%s", m.View())
 	}
-	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
+	m = press(m, " ", ",")
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	m = nm.(Model)
 	l := m.waLinking
 	if l == nil {
-		t.Fatal("L didn't start linking")
+		t.Fatal("Space , l didn't start linking")
 	}
 	sawQR := false
 	for msg := range l.ch {
