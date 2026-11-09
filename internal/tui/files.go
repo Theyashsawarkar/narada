@@ -47,7 +47,7 @@ func (m *Model) savables() []savable {
 		}
 		for i, f := range cm.Files {
 			cm, i := cm, i
-			where := "Drive: opens in Chat (b)"
+			where := "Drive: opens in Chat (Space o b)"
 			if f.Ref != "" {
 				where = cli.When(cm.Created)
 			}

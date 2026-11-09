@@ -502,7 +502,7 @@ func (m *Model) listView(w, h int) string {
 				hint := map[string]string{store.StatusQueued: "u cancels", store.StatusFailed: "R sends it again · ⏎ edits",
 					store.StatusApproval: "y send · e edit · n decline", store.StatusSending: "…"}[it.Status]
 				if it.Status == store.StatusQueued && it.Out.ScheduledFor > 0 {
-					hint = "t moves · ⏎ edits · u cancels"
+					hint = "Space e t moves · ⏎ edits · u cancels"
 				}
 				lines = []string{row(s.text.Render(to), fg(col).Render(status), cw), s.text.Render(t.Subject),
 					ansi.Truncate(fg(col).Render(hint)+s.muted.Render("  "+oneLine(it.Out.Body)), cw, "…")}
@@ -615,7 +615,7 @@ func (m *Model) listView(w, h int) string {
 		case m.noOlder[sec]:
 			hint = s.muted.Render("  ✓ that's everything in " + sec)
 		default:
-			hint = s.muted.Render(fmt.Sprintf("  ↓ j at the end loads %d older", m.olderN)) + s.muted.Render(" · + / - for more or fewer")
+			hint = s.muted.Render(fmt.Sprintf("  ↓ j at the end loads %d older", m.olderN)) + s.muted.Render(" · Space r + / - for more or fewer")
 		}
 		if len(out) > 0 && out[len(out)-1] == "" {
 			out = out[:len(out)-1]
@@ -681,7 +681,7 @@ func (m *Model) buildPreview(w int) {
 		m.preview = m.mailLines(t, w)
 	} else if it, ok := m.curOutbox(); ok {
 		note := map[string]string{store.StatusQueued: "in its undo window · u cancels", store.StatusSending: "sending now",
-			store.StatusApproval: "an agent's mail waiting for your approval (A)", store.StatusFailed: "failed: " + it.Error + " · R sends it again"}[it.Status]
+			store.StatusApproval: "an agent's mail waiting for your approval (Space x x)", store.StatusFailed: "failed: " + it.Error + " · R sends it again"}[it.Status]
 		if it.Status == store.StatusQueued && it.Out.ScheduledFor > 0 {
 			note = "⏰ scheduled for " + time.UnixMilli(it.Out.ScheduledFor).Format("Monday 02 January, 15:04") + " · Space e t moves it · enter edits · u cancels"
 		}
@@ -1121,7 +1121,7 @@ func (m *Model) pendingLines(w int) []string {
 		case store.StatusSending:
 			note = s.muted.Render("sending…")
 		case store.StatusApproval:
-			note = s.peach.Render("waiting for your approval") + s.muted.Render(" · A")
+			note = s.peach.Render("waiting for your approval") + s.muted.Render(" · Space x x")
 		}
 		out = append(out, "", padLeft(s.muted.Render(who+" · ")+note, w))
 		for _, l := range bubble(body, w*2/3, m.styles.c.Border, false) {

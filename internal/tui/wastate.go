@@ -199,7 +199,7 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		return m, m.act("muted always", func(ctx context.Context) error { return a.MuteWhatsApp(ctx, sp.Name, 0, false) }), true
 	case "I":
 		if !whatsapp.IsGroup(sp.Name) {
-			m.say("I shows a group's people and description")
+			m.say("Space c i shows a group's people and description")
 			return m, nil, true
 		}
 		m.aiBusy = true
@@ -235,7 +235,7 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		next := map[int]int{0: 86400, 86400: 7 * 86400, 7 * 86400: 90 * 86400}[sp.Disappear] // 90 days → off
 		what := "disappearing messages off"
 		if next > 0 {
-			what = "new messages disappear after " + whatsapp.DisappearName(next) + " (X again: longer, then off)"
+			what = "new messages disappear after " + whatsapp.DisappearName(next) + " (Space e d again: longer, then off)"
 		}
 		return m, m.act(what, func(ctx context.Context) error { return a.DisappearWhatsApp(ctx, sp.Name, next) }), true
 	case "B":
@@ -246,7 +246,7 @@ func (m Model) waChatKey(s string) (Model, tea.Cmd, bool) {
 		on := !sp.Blocked
 		if on && m.armDelete != "block:"+sp.Name {
 			m.armDelete = "block:" + sp.Name
-			m.say(fmt.Sprintf("B again blocks %s: they can't call or message you", cli.SpaceTitle(sp)))
+			m.say(fmt.Sprintf("Space m b again blocks %s: they can't call or message you", cli.SpaceTitle(sp)))
 			return m, nil, true
 		}
 		m.armDelete = ""

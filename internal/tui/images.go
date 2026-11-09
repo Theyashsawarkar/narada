@@ -214,7 +214,7 @@ func (m *Model) mediaSized(account, msgName string, idx int, f store.ChatFile, m
 	defer imgs.mu.Unlock()
 	lines := e.lines(maxCols, maxRows)
 	if video {
-		lines = append(append([]string{}, lines...), s.muted.Render("▶ video · v plays it"))
+		lines = append(append([]string{}, lines...), s.muted.Render("▶ video · gf plays it"))
 	}
 	return lines
 }
