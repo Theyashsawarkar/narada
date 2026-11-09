@@ -63,8 +63,8 @@ func (m *Model) onlineLine(p store.Presence) string {
 // that you stopped.
 func (m *Model) waTyping(stopped bool) {
 	sp, ok := m.curSpace()
-	if !ok || !m.wa || store.IsPending(sp.Name) {
-		return
+	if !ok || !m.wa || store.IsPending(sp.Name) || m.isStatus() {
+		return // statuses are looked at quietly: no typing to anyone
 	}
 	if stopped {
 		if m.typedAt.IsZero() {
@@ -90,8 +90,8 @@ func (m *Model) waTyping(stopped bool) {
 // Web does while it's open.
 func (m *Model) waHere() {
 	sp, ok := m.curSpace()
-	if !ok || !m.wa || sp.Account != store.WhatsAppAccount {
-		return
+	if !ok || !m.wa || sp.Account != store.WhatsAppAccount || m.isStatus() {
+		return // looking at statuses doesn't say you're online, or to whom
 	}
 	if m.watched == nil {
 		m.watched = map[string]time.Time{}

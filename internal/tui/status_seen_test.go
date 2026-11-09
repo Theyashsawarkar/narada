@@ -92,3 +92,28 @@ func TestLeaderSpelledOut(t *testing.T) {
 		t.Fatalf("which-key:\n%s", v)
 	}
 }
+
+// Looking at statuses sends no presence either: no "online", no
+// "typing", no watching the poster, which would tell them you're there.
+func TestStatusesSendNoPresence(t *testing.T) {
+	m, w := waModel(t, "919800000002@s.whatsapp.net")
+	w.Receive(whatsapp.Message{ID: "S1", Chat: whatsapp.StatusChat, Sender: "919800000002@s.whatsapp.net", SenderName: "Ravi", Text: "At the top!"})
+	m.focus, m.picking = 0, false
+	mm, _ := m.goSectionNamed("Status")
+	m = mm.(Model)
+	m.loadPreview(true)
+	m = drain(m, "enter")
+	if !m.isStatus() {
+		t.Fatal("no status open")
+	}
+	before := len(w.Did)
+	m.watched = nil
+	m.waHere()
+	m.waTyping(false)
+	m.waTyping(true)
+	m.a.DeliverDue(context.Background())
+	time.Sleep(300 * time.Millisecond)
+	if did := w.Did[before:]; len(did) > 0 {
+		t.Fatalf("presence went out while looking at statuses: %q", did)
+	}
+}
