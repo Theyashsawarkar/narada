@@ -2,6 +2,18 @@
 
 Newest first.
 
+## Unreleased
+
+- **A document sent with words shows the words.** WhatsApp keeps a
+  document's caption on its file line (`📎 report.pdf: please review…`),
+  and the chat drew that whole line as the file's name, cut short, so the
+  start of the message was lost and only its later paragraphs showed. The
+  words are the message again; the file shows as itself.
+- **Long messages fold.** A message longer than 8 lines shows its first 6,
+  its attachments and "⋯ N more lines · za opens". `za` opens or folds the
+  picked message (none picked: every one), `zo` / `zc` open or close it,
+  `zR` / `zM` open or fold every long message in the chat.
+
 ## v0.12.0 -- 2026-11-09
 
 - **Your messages follow WhatsApp's layout:** each bubble ends at the right edge, no "You" line above them, the time in every bubble.

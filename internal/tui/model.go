@@ -262,6 +262,8 @@ type Model struct {
 	when          *whenPicker
 	convo         *convoPicker
 	chatSel       int               // the message picked in a chat (when the conversation has focus)
+	msgFold       map[string]bool   // long chat messages opened (true) or folded (false) with za / zo / zc
+	chatOpenAll   bool              // zR: every long chat message shown whole (zM folds them again)
 	newMark       map[string]int64  // per chat: what was read when it was opened (the "new" line)
 	mentions      map[string]int    // per chat: unread messages that mention you
 	waNames       map[string]string // WhatsApp names by JID, to show tags by name

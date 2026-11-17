@@ -986,28 +986,37 @@ func (m *Model) chatLines(w int) []string {
 			if len(shown) > 0 && g.Account == store.WhatsAppAccount {
 				text = dropMediaLabel(text)
 			}
-			var files []string
+			// a file line is "📎 name", or "📎 name: caption" for a WhatsApp
+			// document sent with words: the words are the message
+			var files, body []string
 			n := 0
-			for _, l := range strings.Split(text, "\n") {
-				if strings.HasPrefix(l, "📎 ") {
-					if !shown[n] {
-						files = append(files, strings.TrimPrefix(l, "📎 "))
-					}
-					n++
-				}
-			}
-			var body []string
 			for _, l := range strings.Split(text, "\n") {
 				if !strings.HasPrefix(l, "📎 ") {
 					body = append(body, l)
+					continue
 				}
+				name, caption := fileLine(l, g.Files, n)
+				if !shown[n] {
+					files = append(files, name)
+				}
+				if caption != "" {
+					body = append(body, caption)
+				}
+				n++
 			}
+			bodyAt := len(lines)
 			if g.Formatted != "" {
 				lines = append(lines, m.chatFormatted(g.Formatted, bw-4, mention)...)
 			} else if strings.TrimSpace(strings.Join(body, "\n")) != "" {
 				for _, l := range wrap(strings.Join(body, "\n"), bw-8) { // room for a link's [n]
 					lines = append(lines, m.chatLinks(styleMentions(l, s.text, mention)))
 				}
+			}
+			// a long message shows its head (its files still show below);
+			// za opens it, and it stays open
+			if long := len(lines) - bodyAt; long > foldAt && !m.msgOpen(g.Name) {
+				lines = append(lines[:bodyAt+foldKeep], s.muted.Render("⋯ ")+s.peach.Render(fmt.Sprintf("%d more lines", long-foldKeep))+
+					s.muted.Render(" · za opens"))
 			}
 			if g.Edited && len(lines) > 0 {
 				lines[len(lines)-1] += s.muted.Render(" (edited)")
@@ -1410,6 +1419,35 @@ func (m Model) spaceMeta(sp store.Space) string {
 
 // dropMediaLabel leaves a WhatsApp message's caption once its photo or
 // GIF shows: "📷 Photo: the curtains" → "the curtains".
+// A message longer than foldAt lines shows its first foldKeep (za opens it).
+const foldAt, foldKeep = 8, 6
+
+// fileLine splits a "📎 …" line into the file's name and, for a document
+// sent with words ("📎 report.pdf: please review"), those words. The
+// message's own list of files says where the name ends; without it, a
+// name is something with an extension.
+func fileLine(l string, files []store.ChatFile, n int) (name, caption string) {
+	rest := strings.TrimPrefix(l, "📎 ")
+	if n < len(files) && files[n].Name != "" && strings.HasPrefix(rest, files[n].Name+": ") {
+		return files[n].Name, strings.TrimPrefix(rest, files[n].Name+": ")
+	}
+	if m := reFileCaption.FindStringSubmatch(rest); m != nil {
+		return m[1], m[2]
+	}
+	return rest, ""
+}
+
+var reFileCaption = regexp.MustCompile(`^(Document|[^:]*\.[A-Za-z0-9]{1,8}): (.+)$`)
+
+// msgOpen says whether a long chat message is shown whole: what you set
+// on it with za / zo / zc, else what zR / zM set for every message.
+func (m Model) msgOpen(name string) bool {
+	if v, ok := m.msgFold[name]; ok {
+		return v
+	}
+	return m.chatOpenAll
+}
+
 func dropMediaLabel(text string) string {
 	for _, l := range []string{"📷 Photo", "GIF", "Sticker", "🎬 Video"} {
 		if text == l {

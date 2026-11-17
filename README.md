@@ -232,7 +232,9 @@ colour of it, and recolours live when the theme changes.
   and your ticks. Google Chat's formatting shows as sent: bullets, bold,
   italics, strikes, `code`, quotes. Nothing is ever drawn to the right of a
   message, so text a terminal measures differently (Hindi, Marathi) can't
-  push a frame out of line (see Troubleshooting).
+  push a frame out of line (see Troubleshooting). A long message shows its first
+  lines and its attachments, with "⋯ N more lines": `za` opens or folds
+  the picked one, `zR` / `zM` every one.
 - **AI requests** (`Space t a`): every send an agent is waiting on, mail, Chat and
   WhatsApp in one list, each on a card showing exactly what would go out.
   Only `y` (send), `e` (edit first) and `n` (decline, pressed twice) answer
@@ -592,6 +594,11 @@ compose screen's body works the same way (`Ctrl+s` sends the mail).
 | <kbd>g</kbd> <kbd>d</kbd> or <kbd>%</kbd> | Jump to the message the picked reply quotes |
 | <kbd>Backspace</kbd> | Jump back to the reply you came from (after gd) |
 | <kbd>p</kbd> | Paste the clipboard into the message box (text, or a picture as a file) |
+| <kbd>z</kbd> <kbd>a</kbd> or <kbd>Space</kbd> <kbd>u</kbd> <kbd>z</kbd> | Toggle the picked long message open / folded (none picked: every one) |
+| <kbd>z</kbd> <kbd>o</kbd> | Open the picked long message in full |
+| <kbd>z</kbd> <kbd>c</kbd> | Close the picked long message to its first lines |
+| <kbd>z</kbd> <kbd>R</kbd> | Open every long message in the chat |
+| <kbd>z</kbd> <kbd>M</kbd> | Close every long message in the chat to its first lines |
 | <kbd>Space</kbd> <kbd>a</kbd> | *Add…* |
 | <kbd>Space</kbd> <kbd>a</kbd> <kbd>f</kbd> | Send a file into this chat |
 | <kbd>Space</kbd> <kbd>e</kbd> | *Edit…* |

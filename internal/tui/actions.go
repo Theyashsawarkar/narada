@@ -351,6 +351,22 @@ func (m Model) run(act string, count int) (tea.Model, tea.Cmd) {
 	case "fold.close", "fold.open":
 		m.expandAll = act == "fold.open"
 		return m, nil
+	case "msg.fold", "msg.open", "msg.close":
+		g, ok := m.picked()
+		if !ok { // nothing picked: za opens or folds every long message
+			if act == "msg.fold" {
+				m.chatOpenAll, m.msgFold = !m.chatOpenAll, nil
+			}
+			return m, nil
+		}
+		if m.msgFold == nil {
+			m.msgFold = map[string]bool{}
+		}
+		m.msgFold[g.Name] = act == "msg.open" || act == "msg.fold" && !m.msgOpen(g.Name)
+		return m, nil
+	case "msg.open.all", "msg.close.all":
+		m.chatOpenAll, m.msgFold = act == "msg.open.all", nil
+		return m, nil
 	case "quoted":
 		return old("Q")
 	case "files.open":

@@ -94,6 +94,16 @@
 # keybind: Tmux/narada mail:normal | z o | Open the folded messages of the thread (mail has no picked message: all of them)
 # keybind: Tmux/narada mail:normal | z c | Close the messages of the thread to one line each (all of them)
 # keybind: Tmux/narada mail:normal | z q / Space u q | Toggle the quoted text in the thread
+# keybind: Tmux/narada chat:normal | z a / Space u z | Toggle the picked long message open / folded (none picked: every one)
+# keybind: Tmux/narada wa:normal | z a / Space u z | Toggle the picked long message open / folded (none picked: every one)
+# keybind: Tmux/narada chat:normal | z o | Open the picked long message in full
+# keybind: Tmux/narada wa:normal | z o | Open the picked long message in full
+# keybind: Tmux/narada chat:normal | z c | Close the picked long message to its first lines
+# keybind: Tmux/narada wa:normal | z c | Close the picked long message to its first lines
+# keybind: Tmux/narada chat:normal | z R | Open every long message in the chat
+# keybind: Tmux/narada wa:normal | z R | Open every long message in the chat
+# keybind: Tmux/narada chat:normal | z M | Close every long message in the chat to its first lines
+# keybind: Tmux/narada wa:normal | z M | Close every long message in the chat to its first lines
 # keybind: Tmux/narada:normal | g f / Space o f | Open the attachments (kept in ~/Downloads/narada)
 # keybind: Tmux/narada:normal | g F / Space y f | Save the attachments (in ~/Downloads/narada)
 # keybind: Tmux/narada:normal | g x / Space o l | Open a link from what's open, by its number
