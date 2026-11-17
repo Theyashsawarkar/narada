@@ -2,7 +2,7 @@
 
 Newest first.
 
-## Unreleased
+## v0.13.0 -- 2026-11-17
 
 - **A document sent with words shows the words.** WhatsApp keeps a
   document's caption on its file line (`📎 report.pdf: please review…`),
