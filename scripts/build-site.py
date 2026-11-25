@@ -22,19 +22,29 @@ import tomllib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "docs")
 GH = "https://github.com/Theyashsawarkar"
-PAGES = "https://theyashsawarkar.github.io"
+# Every tool's site has its own address: https://<tool>.theyashsawarkar.dev/
+# (a CNAME record per tool, and docs/CNAME, which this writes).
+DOMAIN = "theyashsawarkar.dev"
+
+
+def home(n):
+    return f"https://{n}.{DOMAIN}/"
+
 
 # The family: every project with a site like this one.
 FAMILY = [
-    ("Desktop", [("vayu", "वायु", "the keyboard-driven Wayland desktop", "https://theyashsawarkar.github.io/vayu/")]),
+    ("Desktop", [("vayu", "वायु", "the keyboard-driven Wayland desktop")]),
     ("Apps", [("kosha", "कोश", "package manager"), ("nada", "नाद", "music player"),
-              ("drishya", "दृश्य", "video player"), ("sangam", "संगम", "pull requests in the terminal"),
+              ("drishya", "दृश्य", "video player"), ("darshan", "दर्शन", "document viewer"),
+              ("sangam", "संगम", "pull requests in the terminal"),
               ("narada", "नारद", "mail and chat in the terminal"), ("pattan", "पत्तन", "ports and tunnels"),
               ("nauka", "नौका", "Docker in the terminal"), ("vaikhari", "वैखरी", "posts to X and LinkedIn"),
               ("dvarapala", "द्वारपाल", "commands for AI agents, approved"), ("pramana", "प्रमाण", "password prompts"),
               ("vesha", "वेष", "Claude Code accounts"), ("vishvakarma", "विश्वकर्मा", "skills for every AI agent"),
-              ("ekatva", "एकत्व", "phone and laptop, linked"), ("varna", "वर्ण", "theme engine"),
-              ("vinyasa", "विन्यास", "settings")]),
+              ("sutradhar", "सूत्रधार", "browser hands for AI agents"),
+              ("ekatva", "एकत्व", "phone and laptop, linked"), ("vagdevi", "वाग्देवी", "book reader for Android"),
+              ("varna", "वर्ण", "theme engine"), ("vinyasa", "विन्यास", "settings"),
+              ("vyakarana", "व्याकरण", "key grammar")]),
     ("Vyom", [("vyom", "व्योम", "panels runtime")]),
     ("Vyom tools", [("dvara", "द्वार", "apps"), ("ganit", "गणित", "calculator"), ("smriti", "स्मृति", "clipboard"),
                     ("bhava", "भाव", "emoji"), ("tarang", "तरंग", "Wi‑Fi"), ("setu", "सेतु", "Bluetooth"),
@@ -305,7 +315,7 @@ def page(meta, title, body, depth=0, active="", toc=None, hero=""):
         links = []
         for it in items:
             n, sa, what = it[0], it[1], it[2]
-            url = it[3] if len(it) > 3 else f"{PAGES}/{n}/"
+            url = it[3] if len(it) > 3 else home(n)
             links.append(f'<a href="{url}" class="{"me" if n == name else ""}">{n} <span>{sa} · {what}</span></a>')
         fam.append(f"<div><h4>{group}</h4>{''.join(links)}</div>")
     desc = html.escape(meta["tagline"], quote=True)
@@ -334,7 +344,7 @@ def page(meta, title, body, depth=0, active="", toc=None, hero=""):
 {body}
 </article></div>
 <footer><div class="in">{''.join(fam)}</div>
-<div class="bottom">{name} is free software under the MIT license · <a href="{GH}/{name}">source</a> · <a href="{GH}/{name}/issues">issues</a> · <a href="{up}changelog.html">changelog</a> · part of <a href="https://theyashsawarkar.github.io/vayu/">Vayu</a></div></footer>
+<div class="bottom">{name} is free software under the MIT license · <a href="{GH}/{name}">source</a> · <a href="{GH}/{name}/issues">issues</a> · <a href="{up}changelog.html">changelog</a> · part of <a href="{home('vayu')}">Vayu</a></div></footer>
 <script>{JS}</script>
 </body>
 </html>
@@ -391,6 +401,8 @@ def build():
         if os.path.exists(src):
             files[os.path.join("assets", rel[len("assets/"):])] = open(src, "rb").read()
     files["assets/site.css"] = CSS.strip().encode()
+    # GitHub Pages serves the site at its own address (a CNAME record points it there).
+    files["CNAME"] = f"{name}.{DOMAIN}\n".encode()
 
     # ---- home: the README without its banner/badges block (the hero has the shloka)
     readme = re.sub(r"(?s)<!-- identity -->.*?<!-- /identity -->\s*", "", readme)
