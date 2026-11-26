@@ -96,7 +96,8 @@ the popup and status line, `secret-tool` (libsecret) for the keyring,
 `notify-send` for notifications, `ffmpeg` for GIFs and video previews on
 WhatsApp, `fzf` for the label picker, `wl-copy` or
 `xclip` for copying links, [Claude Code](https://docs.claude.com/en/docs/claude-code)
-for the AI keys.
+for the AI keys, `pranali` (the small pipe agents use to reach the daemon:
+each agent session costs a few MB instead of a whole narada).
 
 With [kosha](https://github.com/Theyashsawarkar/kosha):
 
@@ -104,9 +105,9 @@ With [kosha](https://github.com/Theyashsawarkar/kosha):
 kosha install narada
 ```
 
-Or with the installer, which downloads the release binaries (`narada` and
-its small `narada-pipe`) into `~/.local/share/narada` (or builds them with
-Go) and links `~/.local/bin/narada`:
+Or with the installer, which downloads the release binary into
+`~/.local/share/narada` (or builds it with Go) and links
+`~/.local/bin/narada`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Theyashsawarkar/narada/main/install.sh | bash
@@ -177,7 +178,7 @@ the command line:
 narada auth setup ~/Downloads/client_secret_*.json
 narada auth add work                  # opens Google's sign-in page
 narada auth add personal --no-chat    # a personal Gmail: mail only
-narada service install                # background sync and notifications
+narada service install                # background sync, notifications, agents' socket
 claude mcp add --scope user narada -- narada mcp
 narada doctor                         # checks all of it
 ```
@@ -967,16 +968,24 @@ The `A` and `Space k` keys in the screen run `claude -p` (your
 key. Any other MCP client works the same way: the server is `narada mcp`
 on stdio.
 
-When the daemon runs (`narada service install`), `narada mcp` is only a
-pipe to it: `narada-pipe`, a 3 MB helper installed beside `narada`,
-carries stdin and stdout to the daemon's socket, so each agent session
-costs about 4 MB instead of a whole narada (about 30 MB), and approvals
-still pop up in the agent's tmux pane. The pipe outlives the daemon: when
-an update restarts it, a call that was running answers "narada daemon
-restarted; try again", calls made meanwhile wait for it (up to a minute),
-and the agent's session goes on. Without the daemon, `narada mcp`
-serves the tools itself and says so on stderr; `--in-process` asks for
-that.
+When the daemon runs (`narada service install`) and
+[pranali](https://github.com/Theyashsawarkar/pranali) is on your PATH,
+`narada mcp` becomes `pranali narada`: a small pipe that carries stdin
+and stdout to the daemon's socket, so each agent session costs a few MB
+instead of a whole narada (about 30 MB), and approvals still pop up in
+the agent's tmux pane (its first line hands over the agent's tmux,
+display, PATH and folder: relative attachment paths are the agent's).
+systemd holds the socket (`narada-mcp.socket`), so it outlives the
+daemon: while an update restarts narada.service, calls wait in the
+socket's queue; a call that was running when the daemon stopped gets up
+to 20 s to finish first, and pranali reconnects the session by itself.
+Without pranali, or with no daemon, `narada mcp` serves the tools
+itself; `--in-process` asks for that.
+
+Every tool call has a limit and answers when it is reached (sends: the
+10-minute approval wait plus the undo window; saving attachments: an
+hour; the rest: 2 minutes), and one agent's slow call never holds up
+another's.
 
 ### Writing with Claude
 
@@ -1096,7 +1105,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada auth list` / `auth remove <name>` | The accounts |
 | `narada mcp [--in-process]` | The MCP server (stdio): a pipe to the daemon when it runs, else in this process |
 | `narada daemon` | The background sync, in the foreground |
-| `narada service install\|remove\|status` | The background sync as a systemd user unit |
+| `narada service install\|remove\|status` | The background sync (narada.service) and the agents' socket (narada-mcp.socket) as systemd user units |
 | `narada config` | Print an example config file |
 | `narada demo` | The screen on example mail, with a fake Google inside the process |
 | `narada doctor` | Check the setup |
@@ -1191,8 +1200,9 @@ file it writes and the screen follows your theme.
 | `~/.local/share/narada/whatsapp.db` | This device's WhatsApp keys (mode 600; `whatsapp unlink` logs out) |
 | `~/.local/state/narada/agent.log` | What agents did |
 | `~/.local/state/narada/sections.json` | Searches saved with `Space a g` |
-| `~/.config/systemd/user/narada.service` | The background sync (`service install`) |
-| `$XDG_RUNTIME_DIR/narada/mcp.sock` | The daemon's socket for agents (mode 600; `$NARADA_HOME/run/mcp.sock` under `NARADA_HOME`) |
+| `~/.config/systemd/user/narada.service` | The background sync (`service install`; packages ship it as `systemd/narada.service`) |
+| `~/.config/systemd/user/narada-mcp.socket` | The agents' socket, held by systemd (`service install`; `systemd/narada-mcp.socket`) |
+| `$XDG_RUNTIME_DIR/narada/mcp.sock` | The daemon's socket for agents (mode 600 in a 700 folder; without `XDG_RUNTIME_DIR`, `~/.local/state/narada/run/mcp.sock`, never `/tmp`; `$NARADA_HOME/run/mcp.sock` under `NARADA_HOME`, which `narada mcp` passes to pranali as `PRANALI_SOCKET`) |
 
 `NARADA_HOME` puts all of narada's files under one folder (tests and
 `demo` use it). `NARADA_GOOGLE_URL` sends every API call to a fake Google
@@ -1215,9 +1225,11 @@ file it writes and the screen follows your theme.
   with the daemon, the screen and the MCP server all running.
 - **Agents talk to the daemon.** The daemon serves the MCP tools on a
   unix socket, one session per connection; each agent's `narada mcp` is a
-  pipe to it (`narada-pipe`, standard library only), so six agents don't
-  mean six copies of narada. With no daemon, `narada mcp` serves the tools
-  itself ([ADR 10](docs/adr/0010-agents-pipe-to-the-daemon.md)).
+  pipe to it (pranali, one pipe for every tool), so six agents don't
+  mean six copies of narada. systemd holds the socket; the daemon drains
+  running calls on SIGTERM. With no daemon, `narada mcp` serves the tools
+  itself ([ADR 10](docs/adr/0010-agents-pipe-to-the-daemon.md),
+  [ADR 11](docs/adr/0011-pranali.md)).
 - **Google's APIs, not IMAP.** Chat has no IMAP, so sign-in is needed
   anyway; the Gmail API also gives real labels, threads, drafts that show
   up on your phone, and Gmail's search syntax. Sign-in is the loopback
@@ -1228,7 +1240,7 @@ file it writes and the screen follows your theme.
   something to poll, so one process holds it (the daemon, else whichever
   narada is open) and delivers WhatsApp sends; its chats live in the same
   local copy as Google Chat's.
-- **Written in Go**: one static binary (and the small `narada-pipe`),
+- **Written in Go**: one static binary,
   Bubble Tea for the screen, the official MCP Go SDK, pure-Go SQLite.
 
 Design decisions are recorded in [docs/adr](docs/adr).

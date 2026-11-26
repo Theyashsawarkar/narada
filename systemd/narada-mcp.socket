@@ -1,0 +1,12 @@
+[Unit]
+Description=narada: the socket agents reach the daemon on (pranali)
+Documentation=https://github.com/Theyashsawarkar/narada
+
+[Socket]
+ListenStream=%t/narada/mcp.sock
+SocketMode=0600
+DirectoryMode=0700
+Service=narada.service
+
+[Install]
+WantedBy=sockets.target

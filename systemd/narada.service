@@ -1,0 +1,17 @@
+[Unit]
+Description=narada: Gmail and Google Chat sync
+Documentation=https://github.com/Theyashsawarkar/narada
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=/usr/bin/narada daemon
+Sockets=narada-mcp.socket
+Restart=on-failure
+RestartSec=5
+RestartSteps=5
+RestartMaxDelaySec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

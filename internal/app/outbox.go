@@ -7,13 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/Theyashsawarkar/narada/internal/chatfmt"
 	"github.com/Theyashsawarkar/narada/internal/config"
 	"github.com/Theyashsawarkar/narada/internal/mime"
-	"github.com/Theyashsawarkar/narada/internal/pipe"
 	"github.com/Theyashsawarkar/narada/internal/store"
 	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
@@ -528,10 +528,13 @@ func (a *App) WaitFor(ctx context.Context, id int64, deliver bool, statuses ...s
 }
 
 // Env is the environment of the agent that asked, when it isn't this
-// process's own: `narada mcp` piped to the daemon hands over its tmux
-// (so the approval pops up beside the agent) and its display. nil means
-// this process's environment.
+// process's own: pranali's hello hands the daemon the agent's tmux (so
+// the approval pops up beside the agent), its display (links open on its
+// screen) and PATH. nil means this process's environment.
 type Env map[string]string
+
+// EnvKeys are the agent's surroundings pranali's hello carries.
+var EnvKeys = []string{"TMUX", "TMUX_PANE", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "PATH"}
 
 // Get is the agent's value of k.
 func (e Env) Get(k string) string {
@@ -541,12 +544,21 @@ func (e Env) Get(k string) string {
 	return e[k]
 }
 
-// command runs name with the agent's tmux and display.
+// command runs name with the agent's tmux, display and PATH: none of
+// the daemon's own (it has no tmux; the agent may have none either), the
+// daemon's PATH only when the agent's isn't known.
 func (e Env) command(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	if e != nil {
-		env := os.Environ()
-		for _, k := range pipe.EnvKeys {
+		var env []string
+		for _, kv := range os.Environ() {
+			k, _, _ := strings.Cut(kv, "=")
+			if slices.Contains(EnvKeys, k) && (k != "PATH" || e[k] != "") {
+				continue
+			}
+			env = append(env, kv)
+		}
+		for _, k := range EnvKeys {
 			if v := e[k]; v != "" {
 				env = append(env, k+"="+v)
 			}

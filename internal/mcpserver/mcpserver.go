@@ -59,10 +59,12 @@ func untrusted(s string) string {
 }
 
 type server struct {
-	a   *app.App
-	h   Helpers
-	ctx context.Context // the server's life: WhatsApp stays online for it
-	env app.Env         // the agent's tmux and display (nil: this process's)
+	a     *app.App
+	h     Helpers
+	ctx   context.Context // the server's life: WhatsApp stays online for it
+	env   app.Env         // the agent's tmux and display (nil: this process's)
+	agent string          // pranali's --agent label: the name when the client gives none
+	cwd   string          // the agent's folder, for relative paths
 }
 
 // Run serves the tools on in/out (stdin/stdout) until ctx ends.
@@ -88,8 +90,13 @@ func Run(ctx context.Context, a *app.App, h Helpers, in io.ReadCloser, out io.Wr
 func New(a *app.App, h Helpers) *mcp.Server { return newServer(context.Background(), a, h, nil) }
 
 func newServer(ctx context.Context, a *app.App, h Helpers, env app.Env) *mcp.Server {
-	s := &server{a: a, h: h, ctx: ctx, env: env}
+	return newServerFor(ctx, a, h, env, "", "")
+}
+
+func newServerFor(ctx context.Context, a *app.App, h Helpers, env app.Env, agent, cwd string) *mcp.Server {
+	s := &server{a: a, h: h, ctx: ctx, env: env, agent: agent, cwd: cwd}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "narada", Version: app.Version}, &mcp.ServerOptions{Instructions: instructions})
+	srv.AddReceivingMiddleware(callTimeouts(a))
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(srv, &mcp.Tool{Name: "mail_list", Annotations: ro,
 		Description: "List mail threads from a section (default Inbox), newest first. today/unread narrow it down. Returns one line per thread with its id."}, s.mailList)
@@ -295,7 +302,7 @@ func (s *server) compose(in composeIn) (string, store.Outgoing, error) {
 	}
 	out := store.Outgoing{To: in.To, Cc: in.Cc, Bcc: in.Bcc, Subject: in.Subject, Body: in.Body, HTML: in.HTML, Why: in.Why}
 	for _, p := range in.Attachments {
-		out.Files = append(out.Files, store.File{Source: p})
+		out.Files = append(out.Files, s.file(p))
 	}
 	if err := sendAt(&out, in.SendAt); err != nil {
 		return "", out, err
@@ -379,12 +386,16 @@ func (s *server) mailSend(ctx context.Context, req *mcp.CallToolRequest, in comp
 }
 
 // agentName is who's calling, as the approval should name them: the MCP
-// client's name, made readable ("claude-code" is "Claude Code").
-func agentName(req *mcp.CallToolRequest) string {
-	if req == nil || req.Session == nil || req.Session.InitializeParams() == nil || req.Session.InitializeParams().ClientInfo == nil {
-		return ""
+// client's name, made readable ("claude-code" is "Claude Code"), else the
+// label pranali's hello gave (--agent).
+func (s *server) agentName(req *mcp.CallToolRequest) string {
+	n := ""
+	if req != nil && req.Session != nil && req.Session.InitializeParams() != nil && req.Session.InitializeParams().ClientInfo != nil {
+		n = req.Session.InitializeParams().ClientInfo.Name
 	}
-	n := req.Session.InitializeParams().ClientInfo.Name
+	if n == "" {
+		n = s.agent
+	}
 	switch l := strings.ToLower(n); {
 	case strings.HasPrefix(l, "claude"):
 		return "Claude Code"
@@ -396,10 +407,19 @@ func agentName(req *mcp.CallToolRequest) string {
 	return n
 }
 
+// file is a path the agent gave, relative to its own folder (pranali's
+// hello says which), not the daemon's.
+func (s *server) file(p string) store.File {
+	if s.cwd != "" && p != "" && !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") && !strings.HasPrefix(p, "$") {
+		p = filepath.Join(s.cwd, p)
+	}
+	return store.File{Source: p}
+}
+
 // send queues, asks for approval when the policy says so, and waits for
 // the outcome.
 func (s *server) send(ctx context.Context, req *mcp.CallToolRequest, account, kind string, out store.Outgoing) (*mcp.CallToolResult, any, error) {
-	out.Agent = agentName(req)
+	out.Agent = s.agentName(req)
 	it, err := s.a.Queue(account, kind, out, app.OriginAgent)
 	if err != nil {
 		return fail(err)
@@ -545,7 +565,7 @@ func (s *server) chatSend(ctx context.Context, req *mcp.CallToolRequest, in chat
 	}
 	out := store.Outgoing{Space: sp.Name, SpaceName: s.h.SpaceTitle(sp), Thread: in.Thread, Body: in.Text, AskFirst: in.AskFirst, Why: in.Why}
 	for _, p := range in.Attachments {
-		out.Files = append(out.Files, store.File{Source: p})
+		out.Files = append(out.Files, s.file(p))
 	}
 	if err := sendAt(&out, in.SendAt); err != nil {
 		return fail(err)
@@ -825,7 +845,7 @@ func (s *server) waSend(ctx context.Context, req *mcp.CallToolRequest, in waSend
 		}
 		out := store.Outgoing{Body: in.Text, AskFirst: in.AskFirst, Why: in.Why}
 		for _, p := range in.Attachments {
-			out.Files = append(out.Files, store.File{Source: p})
+			out.Files = append(out.Files, s.file(p))
 		}
 		out, err := s.a.StatusReply(in.ReplyTo, out)
 		if err != nil {
@@ -842,7 +862,7 @@ func (s *server) waSend(ctx context.Context, req *mcp.CallToolRequest, in waSend
 	}
 	out := store.Outgoing{Space: sp.Name, SpaceName: s.h.SpaceTitle(sp), Body: in.Text, AskFirst: in.AskFirst, Why: in.Why}
 	for _, p := range in.Attachments {
-		out.Files = append(out.Files, store.File{Source: p})
+		out.Files = append(out.Files, s.file(p))
 	}
 	if in.ReplyTo != "" {
 		if _, err := s.a.Store.ChatMessage(store.WhatsAppAccount, in.ReplyTo); err != nil {

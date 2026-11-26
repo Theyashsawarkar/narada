@@ -57,12 +57,6 @@ if [ "$BUILD" = 0 ] && [ -n "$arch" ] && command -v curl >/dev/null; then
   say "Downloading $url"
   if curl -fsSL -o "$DIR/narada.new" "$url"; then
     chmod +x "$DIR/narada.new" && mv "$DIR/narada.new" "$DIR/narada" && got=1
-    # the small pipe each agent's `narada mcp` becomes (older releases have none)
-    if curl -fsSL -o "$DIR/narada-pipe.new" "${url/narada-linux/narada-pipe-linux}"; then
-      chmod +x "$DIR/narada-pipe.new" && mv "$DIR/narada-pipe.new" "$DIR/narada-pipe"
-    else
-      rm -f "$DIR/narada-pipe.new"
-    fi
   else
     rm -f "$DIR/narada.new"
     say "No release binary; building from source instead."
@@ -80,10 +74,10 @@ if [ "$got" = 0 ]; then
   fi
   if [ "$REF" = latest ]; then git -C "$src" checkout --quiet main && git -C "$src" pull --quiet --ff-only; else git -C "$src" checkout --quiet "$REF"; fi
   say "Building narada"
-  (cd "$src" && go build -trimpath -o "$DIR/narada" ./cmd/narada &&
-    if [ -d cmd/narada-pipe ]; then CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$DIR/narada-pipe" ./cmd/narada-pipe; fi)
+  (cd "$src" && go build -trimpath -o "$DIR/narada" ./cmd/narada)
 fi
 
+rm -f "$DIR/narada-pipe" # pranali does its job now
 ln -sf "$DIR/narada" "$BIN_DIR/narada"
 say "Linked $BIN_DIR/narada -> $DIR/narada"
 
@@ -98,7 +92,10 @@ cat <<'NEXT'
     narada demo                       try it on example mail
     narada auth setup client.json     your Google OAuth client (see the README)
     narada auth add work              sign in
-    narada service install            background sync and notifications
+    narada service install            background sync, notifications and the agents' socket
     claude mcp add --scope user narada -- narada mcp
 NEXT
+if ! command -v pranali >/dev/null; then
+  say "Optional: with pranali on your PATH, each agent's narada mcp is a few-MB pipe to the daemon instead of a whole narada."
+fi
 "$DIR/narada" doctor || true

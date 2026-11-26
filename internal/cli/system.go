@@ -21,7 +21,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/fake"
 	"github.com/Theyashsawarkar/narada/internal/google"
 	"github.com/Theyashsawarkar/narada/internal/mcpserver"
-	"github.com/Theyashsawarkar/narada/internal/pipe"
+	"github.com/Theyashsawarkar/narada/internal/sock"
 	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
@@ -127,8 +127,13 @@ func daemon(a *app.App, args []string) error {
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
+	// SIGTERM ends ctx: no new syncs or agent sessions. life goes on
+	// through the drain, so calls still running (a send in its undo
+	// window, WhatsApp delivering it) can finish.
 	ctx, cancel := ctxSignal()
 	defer cancel()
+	life, endLife := context.WithCancel(context.Background())
+	defer endLife()
 	log.SetFlags(0)
 	// a soft cap: the GC works harder instead of growing (a first sync
 	// of hundreds of HTML mails once peaked near 400 MB)
@@ -141,17 +146,26 @@ func daemon(a *app.App, args []string) error {
 	}
 	defer release()
 	log.Printf("narada %s daemon: mail every %s, chat every %s", app.Version, a.Config.MailInterval.Duration, a.Config.ChatInterval.Duration)
-	// agents: each `narada mcp` is a pipe to this socket
-	sock := pipe.Socket()
+	// agents: each `narada mcp` is pranali, a pipe to this socket
 	served := make(chan struct{})
-	go func() {
-		defer close(served)
-		if err := mcpserver.Listen(ctx, a, MCPHelpers(), sock); err != nil {
-			log.Printf("mcp socket %s: %v (agents run narada in-process)", sock, err)
+	if l, err := sock.Listen(sock.Path()); err != nil {
+		close(served)
+		log.Printf("mcp socket: %v (agents run narada in-process)", err)
+	} else {
+		how := "bound here"
+		if l.Activated {
+			how = "from systemd"
 		}
-	}()
-	defer func() { cancel(); <-served }()
-	log.Printf("agents: %s", sock)
+		log.Printf("agents: %s (%s)", l.Path, how)
+		go func() {
+			defer close(served)
+			if err := mcpserver.Serve(ctx, l, a, MCPHelpers(), mcpserver.ServeOptions{Life: life}); err != nil {
+				log.Printf("mcp socket %s: %v", l.Path, err)
+			}
+		}()
+	}
+	// on the way out: the drain first, then what it needed
+	defer func() { cancel(); <-served; endLife() }()
 	type backoff struct {
 		next  time.Time
 		delay time.Duration
@@ -189,7 +203,7 @@ func daemon(a *app.App, args []string) error {
 		t := time.NewTicker(time.Second)
 		defer t.Stop()
 		for {
-			for _, sent := range a.DeliverDue(ctx) {
+			for _, sent := range a.DeliverDue(life) {
 				if sent.Status == store.StatusFailed {
 					log.Printf("send #%d failed: %s", sent.ID, sent.Error)
 					if a.Config.Notify {
@@ -198,7 +212,7 @@ func daemon(a *app.App, args []string) error {
 				}
 			}
 			select {
-			case <-ctx.Done():
+			case <-life.Done():
 				return
 			case <-t.C:
 			}
@@ -213,7 +227,7 @@ func daemon(a *app.App, args []string) error {
 		if time.Now().After(waNext) {
 			waNext = time.Now().Add(30 * time.Second)
 			if _, linked := a.Store.WhatsApp(); linked && !a.WhatsAppOnline() {
-				if ok, err := a.StartWhatsApp(ctx); err != nil {
+				if ok, err := a.StartWhatsApp(life); err != nil {
 					log.Printf("whatsapp: %v", err)
 				} else if ok {
 					log.Print("whatsapp: online")
@@ -247,18 +261,20 @@ func service(a *app.App, args []string) error {
 		if err := app.InstallService(); err != nil {
 			return err
 		}
-		fmt.Printf("Installed %s and started it.\nLogs: journalctl --user -u narada -f\n", app.UnitPath())
+		fmt.Printf("Installed %s and %s, and started them.\nLogs: journalctl --user -u narada -f\n", app.UnitPath(), app.SocketPath())
 		return nil
 	case "remove", "uninstall":
-		_ = sc("disable", "--now", "narada.service")
-		if err := os.Remove(app.UnitPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+		_ = sc("disable", "--now", "narada-mcp.socket", "narada.service")
+		for _, p := range []string{app.SocketPath(), app.UnitPath()} {
+			if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
 		}
 		_ = sc("daemon-reload")
 		fmt.Println("Removed the background sync.")
 		return nil
 	case "status":
-		return sc("status", "--no-pager", "narada.service")
+		return sc("status", "--no-pager", "narada-mcp.socket", "narada.service")
 	}
 	return usageError("unknown service command %q", args[0])
 }
@@ -266,28 +282,17 @@ func service(a *app.App, args []string) error {
 // -------------------------------------------------------------------- mcp
 
 func mcpCmd(args []string, in io.ReadCloser, out io.Writer) error {
-	fs := flags("narada mcp", "narada mcp [--in-process]\n\nThe MCP server (stdio) for Claude Code and other agents:\n  claude mcp add --scope user narada -- narada mcp\nWhen narada daemon runs, this is only a pipe to it (its socket,\n$XDG_RUNTIME_DIR/narada/mcp.sock); otherwise it serves the tools itself.")
+	fs := flags("narada mcp", "narada mcp [--in-process]\n\nThe MCP server (stdio) for Claude Code and other agents:\n  claude mcp add --scope user narada -- narada mcp\nWith pranali on PATH this becomes `pranali narada`, a pipe to the daemon's\nsocket (it serves the tools in-process when no daemon answers); without\npranali it serves the tools itself.")
 	inProcess := fs.Bool("in-process", false, "serve the tools in this process even when the daemon runs")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
-	if !*inProcess {
-		// narada-pipe, when it sits beside us, does this in a few MB
-		// instead of the size of all of narada (it falls back to
-		// `narada mcp --in-process` itself)
-		if in == os.Stdin {
-			helper := filepath.Join(filepath.Dir(app.Executable()), "narada-pipe")
-			if fi, err := os.Stat(helper); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0 {
-				err := syscall.Exec(helper, []string{"narada-pipe"}, os.Environ())
-				fmt.Fprintf(os.Stderr, "narada: can't start %s (%v); piping from here\n", helper, err)
-			}
+	if !*inProcess && in == os.Stdin {
+		if p, err := exec.LookPath("pranali"); err == nil {
+			argv, env := pranaliArgs(app.Executable(), os.Environ())
+			err := syscall.Exec(p, argv, env)
+			fmt.Fprintf(os.Stderr, "narada: can't start %s (%v); serving the tools in-process\n", p, err)
 		}
-		sock := pipe.Socket()
-		ok, err := pipe.Run(sock, in, out, pipe.Env())
-		if ok {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "narada: no daemon on %s (%v); serving the tools in-process\n", sock, err)
 	}
 	a, err := app.Open()
 	if err != nil {
@@ -301,6 +306,19 @@ func mcpCmd(args []string, in io.ReadCloser, out io.Writer) error {
 		return nil // the client closed us: a normal end
 	}
 	return err
+}
+
+// pranaliArgs is how `narada mcp` becomes pranali: `pranali narada
+// --fallback <this narada> mcp --in-process`. Under NARADA_HOME (tests,
+// demos) the daemon's socket isn't where pranali looks, so PRANALI_SOCKET
+// says where it is (unless already set).
+func pranaliArgs(self string, environ []string) (argv, env []string) {
+	argv = []string{"pranali", "narada", "--fallback", self, "mcp", "--in-process"}
+	env = environ
+	if os.Getenv("NARADA_HOME") != "" && os.Getenv("PRANALI_SOCKET") == "" {
+		env = append(append([]string{}, environ...), "PRANALI_SOCKET="+sock.Path())
+	}
+	return argv, env
 }
 
 type nopWriteCloser struct{ io.Writer }
@@ -449,6 +467,17 @@ func doctor(a *app.App, args []string) error {
 		} else {
 			warn("background sync: not running (narada service install)")
 		}
+		out, _ = exec.Command("systemctl", "--user", "is-active", "narada-mcp.socket").Output()
+		if strings.TrimSpace(string(out)) == "active" {
+			okf("agents' socket: listening (narada-mcp.socket)")
+		} else {
+			warn("agents' socket: not set up (narada service install adds narada-mcp.socket)")
+		}
+	}
+	if look("pranali") {
+		okf("pranali: agents pipe to the daemon")
+	} else {
+		warn("no pranali on PATH: each agent's narada mcp runs a whole narada (about 30 MB)")
 	}
 	if os.Getenv("TMUX") != "" {
 		out, _ := exec.Command("tmux", "list-keys", "-T", "prefix").Output()
