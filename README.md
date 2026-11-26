@@ -104,9 +104,9 @@ With [kosha](https://github.com/Theyashsawarkar/kosha):
 kosha install narada
 ```
 
-Or with the installer, which downloads the release binary into
-`~/.local/share/narada` (or builds it with Go) and links
-`~/.local/bin/narada`:
+Or with the installer, which downloads the release binaries (`narada` and
+its small `narada-pipe`) into `~/.local/share/narada` (or builds them with
+Go) and links `~/.local/bin/narada`:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Theyashsawarkar/narada/main/install.sh | bash
@@ -967,6 +967,17 @@ The `A` and `Space k` keys in the screen run `claude -p` (your
 key. Any other MCP client works the same way: the server is `narada mcp`
 on stdio.
 
+When the daemon runs (`narada service install`), `narada mcp` is only a
+pipe to it: `narada-pipe`, a 3 MB helper installed beside `narada`,
+carries stdin and stdout to the daemon's socket, so each agent session
+costs about 4 MB instead of a whole narada (about 30 MB), and approvals
+still pop up in the agent's tmux pane. The pipe outlives the daemon: when
+an update restarts it, a call that was running answers "narada daemon
+restarted; try again", calls made meanwhile wait for it (up to a minute),
+and the agent's session goes on. Without the daemon, `narada mcp`
+serves the tools itself and says so on stderr; `--in-process` asks for
+that.
+
 ### Writing with Claude
 
 In any chat, WhatsApp chat or mail, press `A` (or `Space k d`). A pink box
@@ -1083,7 +1094,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada auth setup <client.json>` | Install your OAuth client |
 | `narada auth add <name> [--email E] [--no-chat]` | Sign in a Google account |
 | `narada auth list` / `auth remove <name>` | The accounts |
-| `narada mcp` | The MCP server (stdio) |
+| `narada mcp [--in-process]` | The MCP server (stdio): a pipe to the daemon when it runs, else in this process |
 | `narada daemon` | The background sync, in the foreground |
 | `narada service install\|remove\|status` | The background sync as a systemd user unit |
 | `narada config` | Print an example config file |
@@ -1181,6 +1192,7 @@ file it writes and the screen follows your theme.
 | `~/.local/state/narada/agent.log` | What agents did |
 | `~/.local/state/narada/sections.json` | Searches saved with `Space a g` |
 | `~/.config/systemd/user/narada.service` | The background sync (`service install`) |
+| `$XDG_RUNTIME_DIR/narada/mcp.sock` | The daemon's socket for agents (mode 600; `$NARADA_HOME/run/mcp.sock` under `NARADA_HOME`) |
 
 `NARADA_HOME` puts all of narada's files under one folder (tests and
 `demo` use it). `NARADA_GOOGLE_URL` sends every API call to a fake Google
@@ -1201,6 +1213,11 @@ file it writes and the screen follows your theme.
   window) → claimed by whichever process gets there first → `sent` or
   `failed`. Claiming is one atomic update, so a message is sent once even
   with the daemon, the screen and the MCP server all running.
+- **Agents talk to the daemon.** The daemon serves the MCP tools on a
+  unix socket, one session per connection; each agent's `narada mcp` is a
+  pipe to it (`narada-pipe`, standard library only), so six agents don't
+  mean six copies of narada. With no daemon, `narada mcp` serves the tools
+  itself ([ADR 10](docs/adr/0010-agents-pipe-to-the-daemon.md)).
 - **Google's APIs, not IMAP.** Chat has no IMAP, so sign-in is needed
   anyway; the Gmail API also gives real labels, threads, drafts that show
   up on your phone, and Gmail's search syntax. Sign-in is the loopback
@@ -1211,8 +1228,8 @@ file it writes and the screen follows your theme.
   something to poll, so one process holds it (the daemon, else whichever
   narada is open) and delivers WhatsApp sends; its chats live in the same
   local copy as Google Chat's.
-- **Written in Go**: one static binary, Bubble Tea for the screen, the
-  official MCP Go SDK, pure-Go SQLite.
+- **Written in Go**: one static binary (and the small `narada-pipe`),
+  Bubble Tea for the screen, the official MCP Go SDK, pure-Go SQLite.
 
 Design decisions are recorded in [docs/adr](docs/adr).
 

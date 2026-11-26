@@ -21,6 +21,24 @@ import (
 
 func session(t *testing.T) (*app.App, *fake.Server, *mcp.ClientSession) {
 	t.Helper()
+	a, g := testApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := mcpserver.New(a, cli.MCPHelpers()).Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cs.Close() })
+	return a, g, cs
+}
+
+// testApp is narada on the fake Google, synced, with one account.
+func testApp(t *testing.T) (*app.App, *fake.Server) {
+	t.Helper()
 	g := fake.New()
 	g.Seed()
 	srv := httptest.NewServer(g)
@@ -38,18 +56,7 @@ func session(t *testing.T) (*app.App, *fake.Server, *mcp.ClientSession) {
 	if _, errs := a.SyncAll(context.Background()); len(errs) > 0 {
 		t.Fatal(errs)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	st, ct := mcp.NewInMemoryTransports()
-	if _, err := mcpserver.New(a, cli.MCPHelpers()).Connect(ctx, st, nil); err != nil {
-		t.Fatal(err)
-	}
-	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, ct, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { cs.Close() })
-	return a, g, cs
+	return a, g
 }
 
 func call(t *testing.T, cs *mcp.ClientSession, name string, args map[string]any) string {

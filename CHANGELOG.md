@@ -4,6 +4,7 @@ Newest first.
 
 ## Unreleased
 
+- **Agents share the daemon instead of each starting a narada.** `narada daemon` serves the MCP tools on `$XDG_RUNTIME_DIR/narada/mcp.sock` (0600, one session per connection), and `narada mcp` becomes a pipe to it through the new `narada-pipe` helper: about 4 MB a Claude session instead of about 30 MB, with nothing to change in `claude mcp add`. The pipe survives a daemon restart (an update): a call that was running gets "narada daemon restarted; try again", calls made meanwhile wait for the daemon (up to a minute), and the session goes on without the agent noticing. Approvals still pop up in the agent's tmux pane, and the agent's name still shows on them. With no daemon, `narada mcp` serves the tools itself as before (and says so on stderr); `narada mcp --in-process` asks for that. `make install`, install.sh and the release ship `narada-pipe` beside `narada` (ADR 10).
 - The website, closer to Vayu's own: the tool's screenshot blurred behind the page, a centred hero with the logo and the verse, the page you're on as the white pill, glass "On this page" and footer panels, releases as cards. No glow behind the logo, no coloured line beside the verse.
 - The website has Vayu's Spatial look: graphite glass, a floating navigation bar, near-white for links and the main button, and the tool's own colour only as its signature (the logo's glow, the shloka's line, the release dots). No more all-caps labels.
 

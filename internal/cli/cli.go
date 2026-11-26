@@ -112,6 +112,9 @@ func Run(args []string, tui func(*app.App, string) error) int {
 		return check(demo(rest, tui))
 	case "auth":
 		return withApp(func(a *app.App) error { return auth(a, rest) })
+	case "mcp":
+		// a pipe to the daemon when it runs: no app, no store here
+		return check(mcpCmd(rest, os.Stdin, os.Stdout))
 	}
 	return withApp(func(a *app.App) error {
 		switch cmd {
@@ -129,8 +132,6 @@ func Run(args []string, tui func(*app.App, string) error) int {
 			return outbox(a, rest)
 		case "approve":
 			return approve(a, rest)
-		case "mcp":
-			return mcpCmd(a, rest)
 		case "daemon":
 			return daemon(a, rest)
 		case "service":

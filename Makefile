@@ -10,16 +10,18 @@ VERSION = $(shell sed -n 's/^const Version = "\(.*\)"/\1/p' internal/app/app.go)
 
 build:
 	go build -trimpath -o bin/narada ./cmd/narada
+	CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o bin/narada-pipe ./cmd/narada-pipe
 
 install: build
 	install -Dm755 bin/narada $(BINDIR)/narada
+	install -Dm755 bin/narada-pipe $(BINDIR)/narada-pipe
 	install -Dm644 assets/logo.svg $(SHARE)/narada/logo.svg
 	install -Dm644 README.md $(SHARE)/doc/narada/README.md
 	install -Dm644 CHANGELOG.md $(SHARE)/doc/narada/CHANGELOG.md
 	install -Dm644 LICENSE $(SHARE)/licenses/narada/LICENSE
 
 uninstall:
-	rm -f $(BINDIR)/narada
+	rm -f $(BINDIR)/narada $(BINDIR)/narada-pipe
 	rm -rf $(SHARE)/narada $(SHARE)/doc/narada $(SHARE)/licenses/narada
 
 test:
@@ -41,4 +43,5 @@ dist:
 	mkdir -p dist
 	for arch in amd64 arm64; do \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags='-s -w' -o dist/narada-linux-$$arch ./cmd/narada; \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags='-s -w' -o dist/narada-pipe-linux-$$arch ./cmd/narada-pipe; \
 	done

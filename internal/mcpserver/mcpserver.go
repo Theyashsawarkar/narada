@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Theyashsawarkar/narada/internal/mime"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -61,11 +62,12 @@ type server struct {
 	a   *app.App
 	h   Helpers
 	ctx context.Context // the server's life: WhatsApp stays online for it
+	env app.Env         // the agent's tmux and display (nil: this process's)
 }
 
-// Run serves the tools on stdin/stdout until ctx ends.
-func Run(ctx context.Context, a *app.App, h Helpers) error {
-	srv := newServer(ctx, a, h)
+// Run serves the tools on in/out (stdin/stdout) until ctx ends.
+func Run(ctx context.Context, a *app.App, h Helpers, in io.ReadCloser, out io.WriteCloser) error {
+	srv := newServer(ctx, a, h, nil)
 	// deliver approved sends even when nothing else is running
 	go func() {
 		t := time.NewTicker(time.Second)
@@ -79,14 +81,14 @@ func Run(ctx context.Context, a *app.App, h Helpers) error {
 			}
 		}
 	}()
-	return srv.Run(ctx, &mcp.StdioTransport{})
+	return srv.Run(ctx, &mcp.IOTransport{Reader: in, Writer: out})
 }
 
 // New builds the server with every tool.
-func New(a *app.App, h Helpers) *mcp.Server { return newServer(context.Background(), a, h) }
+func New(a *app.App, h Helpers) *mcp.Server { return newServer(context.Background(), a, h, nil) }
 
-func newServer(ctx context.Context, a *app.App, h Helpers) *mcp.Server {
-	s := &server{a: a, h: h, ctx: ctx}
+func newServer(ctx context.Context, a *app.App, h Helpers, env app.Env) *mcp.Server {
+	s := &server{a: a, h: h, ctx: ctx, env: env}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "narada", Version: app.Version}, &mcp.ServerOptions{Instructions: instructions})
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(srv, &mcp.Tool{Name: "mail_list", Annotations: ro,
@@ -403,7 +405,7 @@ func (s *server) send(ctx context.Context, req *mcp.CallToolRequest, account, ki
 		return fail(err)
 	}
 	if it.Status == store.StatusApproval {
-		s.a.AskApproval(it)
+		s.a.AskApprovalFrom(it, s.env)
 		wctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		it, err = s.a.WaitFor(wctx, it.ID, false, store.StatusApproval)
 		cancel()
@@ -810,7 +812,7 @@ func (s *server) waSend(ctx context.Context, req *mcp.CallToolRequest, in waSend
 		if !strings.HasPrefix(u, "https://wa.me/") || len(u) < len("https://wa.me/")+7 {
 			return fail(fmt.Errorf("WhatsApp isn't linked, so to must be a phone number with country code"))
 		}
-		if err := app.OpenURL(u); err != nil {
+		if err := app.OpenURLFrom(u, s.env); err != nil {
 			return fail(err)
 		}
 		s.a.LogAgent("whatsapp click-to-chat %s", u)

@@ -13,6 +13,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/chatfmt"
 	"github.com/Theyashsawarkar/narada/internal/config"
 	"github.com/Theyashsawarkar/narada/internal/mime"
+	"github.com/Theyashsawarkar/narada/internal/pipe"
 	"github.com/Theyashsawarkar/narada/internal/store"
 	"github.com/Theyashsawarkar/narada/internal/whatsapp"
 )
@@ -526,21 +527,53 @@ func (a *App) WaitFor(ctx context.Context, id int64, deliver bool, statuses ...s
 	}
 }
 
+// Env is the environment of the agent that asked, when it isn't this
+// process's own: `narada mcp` piped to the daemon hands over its tmux
+// (so the approval pops up beside the agent) and its display. nil means
+// this process's environment.
+type Env map[string]string
+
+// Get is the agent's value of k.
+func (e Env) Get(k string) string {
+	if e == nil {
+		return os.Getenv(k)
+	}
+	return e[k]
+}
+
+// command runs name with the agent's tmux and display.
+func (e Env) command(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	if e != nil {
+		env := os.Environ()
+		for _, k := range pipe.EnvKeys {
+			if v := e[k]; v != "" {
+				env = append(env, k+"="+v)
+			}
+		}
+		cmd.Env = env
+	}
+	return cmd
+}
+
 // AskApproval shows the approval prompt: a tmux popup when there is a
 // tmux server to show it on, and a desktop notification either way.
-func (a *App) AskApproval(it store.OutboxItem) {
+func (a *App) AskApproval(it store.OutboxItem) { a.AskApprovalFrom(it, nil) }
+
+// AskApprovalFrom is AskApproval for an agent with its own environment.
+func (a *App) AskApprovalFrom(it store.OutboxItem, env Env) {
 	if a.Config.Notify {
 		Notify("narada: approve a send?", "An agent wants to send "+it.Kind+" "+describe(it.Kind, it.Out)+". Open narada (or run narada approve) to answer.")
 	}
-	if os.Getenv("TMUX") == "" {
+	if env.Get("TMUX") == "" {
 		return
 	}
 	args := []string{"display-popup", "-E", "-B", "-w", "84%", "-h", "80%",
 		fmt.Sprintf("%s approve %d", shellQuote(Executable()), it.ID)}
-	if pane := os.Getenv("TMUX_PANE"); pane != "" {
+	if pane := env.Get("TMUX_PANE"); pane != "" {
 		args = append(args[:1], append([]string{"-t", pane}, args[1:]...)...)
 	}
-	cmd := exec.Command("tmux", args...)
+	cmd := env.command("tmux", args...)
 	_ = cmd.Start()
 	go func() { _ = cmd.Wait() }()
 }

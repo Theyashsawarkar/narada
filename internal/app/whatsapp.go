@@ -874,10 +874,13 @@ func WhatsAppLink(phone, text string) string {
 }
 
 // OpenURL opens a link in the default browser (or app).
-func OpenURL(u string) error {
+func OpenURL(u string) error { return OpenURLFrom(u, nil) }
+
+// OpenURLFrom is OpenURL on the agent's display.
+func OpenURLFrom(u string, env Env) error {
 	for _, c := range []string{"xdg-open", "open"} {
 		if _, err := exec.LookPath(c); err == nil {
-			return exec.Command(c, u).Start()
+			return env.command(c, u).Start()
 		}
 	}
 	return errors.New("no xdg-open to open " + u)

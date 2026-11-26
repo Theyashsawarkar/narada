@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ import (
 	"github.com/Theyashsawarkar/narada/internal/fake"
 	"github.com/Theyashsawarkar/narada/internal/google"
 	"github.com/Theyashsawarkar/narada/internal/mcpserver"
+	"github.com/Theyashsawarkar/narada/internal/pipe"
 	"github.com/Theyashsawarkar/narada/internal/store"
 )
 
@@ -139,6 +141,17 @@ func daemon(a *app.App, args []string) error {
 	}
 	defer release()
 	log.Printf("narada %s daemon: mail every %s, chat every %s", app.Version, a.Config.MailInterval.Duration, a.Config.ChatInterval.Duration)
+	// agents: each `narada mcp` is a pipe to this socket
+	sock := pipe.Socket()
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		if err := mcpserver.Listen(ctx, a, MCPHelpers(), sock); err != nil {
+			log.Printf("mcp socket %s: %v (agents run narada in-process)", sock, err)
+		}
+	}()
+	defer func() { cancel(); <-served }()
+	log.Printf("agents: %s", sock)
 	type backoff struct {
 		next  time.Time
 		delay time.Duration
@@ -252,19 +265,47 @@ func service(a *app.App, args []string) error {
 
 // -------------------------------------------------------------------- mcp
 
-func mcpCmd(a *app.App, args []string) error {
-	fs := flags("narada mcp", "narada mcp\n\nThe MCP server (stdio) for Claude Code and other agents:\n  claude mcp add --scope user narada -- narada mcp")
+func mcpCmd(args []string, in io.ReadCloser, out io.Writer) error {
+	fs := flags("narada mcp", "narada mcp [--in-process]\n\nThe MCP server (stdio) for Claude Code and other agents:\n  claude mcp add --scope user narada -- narada mcp\nWhen narada daemon runs, this is only a pipe to it (its socket,\n$XDG_RUNTIME_DIR/narada/mcp.sock); otherwise it serves the tools itself.")
+	inProcess := fs.Bool("in-process", false, "serve the tools in this process even when the daemon runs")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
+	if !*inProcess {
+		// narada-pipe, when it sits beside us, does this in a few MB
+		// instead of the size of all of narada (it falls back to
+		// `narada mcp --in-process` itself)
+		if in == os.Stdin {
+			helper := filepath.Join(filepath.Dir(app.Executable()), "narada-pipe")
+			if fi, err := os.Stat(helper); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0 {
+				err := syscall.Exec(helper, []string{"narada-pipe"}, os.Environ())
+				fmt.Fprintf(os.Stderr, "narada: can't start %s (%v); piping from here\n", helper, err)
+			}
+		}
+		sock := pipe.Socket()
+		ok, err := pipe.Run(sock, in, out, pipe.Env())
+		if ok {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "narada: no daemon on %s (%v); serving the tools in-process\n", sock, err)
+	}
+	a, err := app.Open()
+	if err != nil {
+		return err
+	}
+	defer a.Close()
 	ctx, cancel := ctxSignal()
 	defer cancel()
-	err := mcpserver.Run(ctx, a, MCPHelpers())
+	err = mcpserver.Run(ctx, a, MCPHelpers(), in, nopWriteCloser{out})
 	if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 		return nil // the client closed us: a normal end
 	}
 	return err
 }
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }
 
 // MCPHelpers hands the CLI's lookups and formatting to the MCP server.
 func MCPHelpers() mcpserver.Helpers {
