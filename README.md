@@ -1096,7 +1096,7 @@ Every command has `--help`; the read commands take `--json`.
 | `narada whatsapp delete <message> [--for-me]` | Delete a message you sent, for everyone; `--for-me` removes any message from this machine only |
 | `narada whatsapp forward <message> <to>` | Forward a message (text, photo, video, voice note, document); it shows as forwarded |
 | `narada whatsapp save <message> [N\|all] [--dir DIR]` | Download a message's photo, video, voice note or document (`whatsapp read` shows the ids and files); when the daemon holds WhatsApp it downloads it and this waits |
-| `narada status [--json\|--tmux]` | Unread counts |
+| `narada status [--json\|--tmux]` | Unread counts (the daemon also keeps them in `~/.local/state/narada/counts.json`, for a bar to watch) |
 | `narada sync` | Sync every account now |
 | `narada outbox` / `outbox cancel <id>` | Sends of the last week; stop one in its undo window |
 | `narada approve [id]` | Answer an agent's send that waits for you |
@@ -1200,6 +1200,7 @@ file it writes and the screen follows your theme.
 | `~/.local/share/narada/whatsapp.db` | This device's WhatsApp keys (mode 600; `whatsapp unlink` logs out) |
 | `~/.local/state/narada/agent.log` | What agents did |
 | `~/.local/state/narada/sections.json` | Searches saved with `Space a g` |
+| `~/.local/state/narada/counts.json` | The unread counts, exactly as `narada status --json` prints them, rewritten (atomically, by rename) only when they change. A status bar should watch this file rather than the database, which changes all the time (WhatsApp, syncs) without the counts moving |
 | `~/.config/systemd/user/narada.service` | The background sync (`service install`; packages ship it as `systemd/narada.service`) |
 | `~/.config/systemd/user/narada-mcp.socket` | The agents' socket, held by systemd (`service install`; `systemd/narada-mcp.socket`) |
 | `$XDG_RUNTIME_DIR/narada/mcp.sock` | The daemon's socket for agents (mode 600 in a 700 folder; without `XDG_RUNTIME_DIR`, `~/.local/state/narada/run/mcp.sock`, never `/tmp`; `$NARADA_HOME/run/mcp.sock` under `NARADA_HOME`, which `narada mcp` passes to pranali as `PRANALI_SOCKET`) |
@@ -1223,6 +1224,12 @@ file it writes and the screen follows your theme.
   window) → claimed by whichever process gets there first → `sent` or
   `failed`. Claiming is one atomic update, so a message is sent once even
   with the daemon, the screen and the MCP server all running.
+  Nothing polls it: queueing a send (or approving, rescheduling, a
+  WhatsApp receipt or download) wakes the deliverer, through the daemon's
+  socket when it comes from another narada, and a timer covers the next
+  scheduled time. The daemon delivers; the screen and `narada mcp
+  --in-process` do only when no daemon runs (or, for WhatsApp, while they
+  hold it).
 - **Agents talk to the daemon.** The daemon serves the MCP tools on a
   unix socket, one session per connection; each agent's `narada mcp` is a
   pipe to it (pranali, one pipe for every tool), so six agents don't

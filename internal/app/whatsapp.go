@@ -298,7 +298,7 @@ func (a *App) onWhatsApp(ctx context.Context, e whatsapp.Event) {
 			_ = a.Store.DeleteChatOlderThan(acc, whatsapp.StatusChat, time.Now().Add(-24*time.Hour).UnixMilli()) // statuses last a day
 			a.waMu.Lock()
 			if a.waReadyOnce != nil {
-				a.waReadyOnce.Do(func() { close(a.waReady) })
+				a.waReadyOnce.Do(func() { close(a.waReady); a.Wake() }) // what waited for it goes now
 			}
 			a.waMu.Unlock()
 			_ = a.Store.SetChatSynced(acc, "")

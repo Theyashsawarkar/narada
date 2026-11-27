@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -339,6 +340,9 @@ func Run(a *app.App, launch string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _, _ = a.StartWhatsApp(ctx) }()
+	// sends due when no daemon runs (and WhatsApp's while this holds it)
+	go a.RunDeliverer(ctx, addDelivered)
+	a.PublishCounts(func() any { return cli.GetCounts(a) })
 	program = tea.NewProgram(first, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	final, err := program.Run()
 	imgs.forget()
@@ -1121,18 +1125,17 @@ func (m *Model) sent(it store.OutboxItem) tea.Cmd {
 	}
 	a := m.a
 	return func() tea.Msg {
+		// queueing woke the deliverer (the daemon's, or this screen's
+		// when none runs); a chat message's mark shows how far it got
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		for _, d := range a.DeliverDue(ctx) {
-			if d.ID == it.ID && d.Status == store.StatusFailed {
-				return doneMsg{err: fmt.Errorf("not sent: %s", d.Error)}
-			}
-			if d.ID == it.ID && !chatKind(it.Kind) {
-				return doneMsg{msg: "sent", sync: true}
-			}
+		d, err := a.WaitFor(ctx, it.ID, true, store.StatusQueued, store.StatusSending) // delivers itself only when nothing else does
+		switch {
+		case err == nil && d.Status == store.StatusFailed:
+			return doneMsg{err: fmt.Errorf("not sent: %s", d.Error)}
+		case err == nil && d.Status == store.StatusSent && !chatKind(it.Kind):
+			return doneMsg{msg: "sent", sync: true}
 		}
-		// another process (the daemon) sends it; a chat message's mark
-		// shows how far it got, so nothing to announce
 		return doneMsg{sync: true}
 	}
 }
@@ -1263,18 +1266,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		var cmds []tea.Cmd
 		cmds = append(cmds, tick())
-		a := m.a
-		cmds = append(cmds, func() tea.Msg {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer cancel()
-			for _, it := range a.DeliverDue(ctx) {
-				if it.Status == store.StatusFailed {
-					return doneMsg{err: fmt.Errorf("send #%d failed: %s", it.ID, it.Error)}
+		// what this screen's deliverer sent meanwhile (it runs only when
+		// no daemon does, or for WhatsApp while the screen holds it)
+		if d := takeDelivered(); len(d) > 0 {
+			it := d[0]
+			for _, x := range d {
+				if x.Status == store.StatusFailed {
+					it = x // a failure is what to show
 				}
-				return doneMsg{msg: "sent", sync: true}
 			}
-			return nil
-		})
+			if it.Status == store.StatusFailed {
+				cmds = append(cmds, func() tea.Msg { return doneMsg{err: fmt.Errorf("send #%d failed: %s", it.ID, it.Error)} })
+			} else {
+				cmds = append(cmds, func() tea.Msg { return doneMsg{msg: "sent", sync: true} })
+			}
+		}
 		if time.Since(m.toastAt) > 4*time.Second {
 			m.toast = ""
 		}
@@ -1286,6 +1292,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// only when another process (the daemon, an agent) wrote
 			// something; Sent also counts down its outbox rows
 			if st := m.a.Store.Stamp(); st != m.dbStamp || len(m.outboxRows) > 0 && time.Now().Unix()%3 == 0 {
+				if st != m.dbStamp {
+					m.a.Wake() // another narada may have queued work for this screen's deliverer
+				}
 				m.dbStamp = st
 				m.reload()
 			}
@@ -2676,4 +2685,25 @@ func (m Model) notOnWhatsApp(s string) string {
 		return "starting a chat here (use narada whatsapp send <number>)"
 	}
 	return ""
+}
+
+// delivered is what this screen's deliverer sent, for the next tick to
+// announce.
+var (
+	deliveredMu sync.Mutex
+	delivered   []store.OutboxItem
+)
+
+func addDelivered(items []store.OutboxItem) {
+	deliveredMu.Lock()
+	delivered = append(delivered, items...)
+	deliveredMu.Unlock()
+}
+
+func takeDelivered() []store.OutboxItem {
+	deliveredMu.Lock()
+	defer deliveredMu.Unlock()
+	d := delivered
+	delivered = nil
+	return d
 }

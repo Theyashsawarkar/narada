@@ -431,3 +431,72 @@ func TestCallsDontBlockEachOther(t *testing.T) {
 		t.Fatal("the stuck call never answered")
 	}
 }
+
+// Another narada (the screen, `narada approve`) queues a send: it kicks
+// the daemon through the socket, and the daemon's deliverer, asleep with
+// nothing due, sends it at once.
+func TestKickWakesTheDaemon(t *testing.T) {
+	home, err := os.MkdirTemp("", "nk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	_, g := testApp(t) // the fake Google
+	t.Setenv("NARADA_HOME", home)
+	d, err := app.Open() // the daemon
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	d.Config.UndoSeconds = 0
+	_ = d.Store.AddAccount(store.Account{Name: "work", Chat: true})
+	if _, errs := d.SyncAll(context.Background()); len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	d.SetDaemon()
+	release, ok := d.HoldDaemonLock()
+	if !ok {
+		t.Fatal("daemon lock")
+	}
+	defer release()
+	kicks := make(chan struct{}, 8)
+	l, err := sock.Listen(sock.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = mcpserver.Serve(ctx, l, d, cli.MCPHelpers(), mcpserver.ServeOptions{Kick: func() { kicks <- struct{}{}; d.Wake() }})
+	}()
+	go d.RunDeliverer(ctx, nil)
+	time.Sleep(300 * time.Millisecond) // its first look: nothing due
+
+	other, err := app.Open() // the screen
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.Config.UndoSeconds = 0
+	it, err := other.Queue("work", "mail", store.Outgoing{To: []string{"priya.k@example.com"}, Subject: "kick", Body: "b"}, app.OriginYou)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.Close() // waits for its kick to land
+	select {
+	case <-kicks:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no kick reached the daemon")
+	}
+	for i := 0; ; i++ {
+		if x, _ := d.Store.OutboxItem(it.ID); x.Status == store.StatusSent {
+			break
+		}
+		if i > 100 {
+			t.Fatal("the daemon didn't send it")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(g.Sent) != 1 {
+		t.Errorf("sent %d", len(g.Sent))
+	}
+}

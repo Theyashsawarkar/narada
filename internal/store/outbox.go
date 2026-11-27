@@ -124,11 +124,12 @@ func (s *Store) AddOutbox(it OutboxItem) (int64, error) {
 	if status == StatusQueued && it.Out.Action != "" {
 		status = statusQueuedAction
 	}
-	res, err := s.db.Exec(`INSERT INTO outbox(account,kind,payload,status,send_at,created,origin,reason) VALUES(?,?,?,?,?,?,?,?)`,
+	res, err := s.exec(`INSERT INTO outbox(account,kind,payload,status,send_at,created,origin,reason) VALUES(?,?,?,?,?,?,?,?)`,
 		it.Account, it.Kind, string(payload), status, it.SendAt, now(), it.Origin, it.Reason)
 	if err != nil {
 		return 0, err
 	}
+	s.queued(nil)
 	return res.LastInsertId()
 }
 
@@ -205,24 +206,27 @@ func (s *Store) Transition(id int64, from, to string, sendAt int64) (bool, error
 	if from == StatusQueued {
 		also = statusQueuedAction
 	}
-	res, err := s.db.Exec(`UPDATE outbox SET status=CASE WHEN ?=? AND json_extract(payload,'$.action') IS NOT NULL THEN ? ELSE ? END,
+	res, err := s.exec(`UPDATE outbox SET status=CASE WHEN ?=? AND json_extract(payload,'$.action') IS NOT NULL THEN ? ELSE ? END,
 	  send_at=CASE WHEN ?>0 THEN ? ELSE send_at END WHERE id=? AND status IN (?,?)`,
 		to, StatusQueued, statusQueuedAction, to, sendAt, sendAt, id, from, also)
 	if err != nil {
 		return false, err
 	}
 	n, _ := res.RowsAffected()
+	if n == 1 && to == StatusQueued {
+		s.queued(nil)
+	}
 	return n == 1, nil
 }
 
 func (s *Store) UpdateOutgoing(id int64, out Outgoing) error {
 	payload, _ := json.Marshal(out)
-	_, err := s.db.Exec(`UPDATE outbox SET payload=? WHERE id=?`, string(payload), id)
+	_, err := s.exec(`UPDATE outbox SET payload=? WHERE id=?`, string(payload), id)
 	return err
 }
 
 func (s *Store) FinishOutbox(id int64, status, errMsg, result string) error {
-	_, err := s.db.Exec(`UPDATE outbox SET status=?, error=?, result=? WHERE id=?`, status, errMsg, result, id)
+	_, err := s.exec(`UPDATE outbox SET status=?, error=?, result=? WHERE id=?`, status, errMsg, result, id)
 	return err
 }
 
@@ -240,7 +244,7 @@ func (s *Store) DueOutbox() ([]OutboxItem, error) {
 // process calls it, so a WhatsApp file (up to 2 GB, uploading for a while)
 // gets two hours before it counts as stuck.
 func (s *Store) RecoverSending() error {
-	_, err := s.db.Exec(`UPDATE outbox SET status=?, error='interrupted while sending; check Sent before retrying' WHERE status=? AND send_at < ?
+	_, err := s.exec(`UPDATE outbox SET status=?, error='interrupted while sending; check Sent before retrying' WHERE status=? AND send_at < ?
 	  AND (kind<>'whatsapp' OR json_array_length(payload,'$.files') IS NULL OR json_array_length(payload,'$.files')=0 OR send_at < ?)`,
 		StatusFailed, StatusSending, time.Now().Add(-time.Minute).UnixMilli(), time.Now().Add(-2*time.Hour).UnixMilli())
 	return err
@@ -249,11 +253,14 @@ func (s *Store) RecoverSending() error {
 // Reschedule moves a waiting send to another time (and its payload too).
 func (s *Store) Reschedule(id int64, out Outgoing, at int64) (bool, error) {
 	payload, _ := json.Marshal(out)
-	res, err := s.db.Exec(`UPDATE outbox SET send_at=?, payload=? WHERE id=? AND status IN (?,?)`, at, string(payload), id, StatusQueued, statusQueuedAction)
+	res, err := s.exec(`UPDATE outbox SET send_at=?, payload=? WHERE id=? AND status IN (?,?)`, at, string(payload), id, StatusQueued, statusQueuedAction)
 	if err != nil {
 		return false, err
 	}
 	n, _ := res.RowsAffected()
+	if n == 1 {
+		s.queued(nil)
+	}
 	return n == 1, nil
 }
 
@@ -263,4 +270,13 @@ func (s *Store) SentSince(kind string, t time.Time) int {
 	var n int
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE kind=? AND created>=? AND status NOT IN (?,?)`, kind, t.UnixMilli(), StatusCancelled, StatusDeclined).Scan(&n)
 	return n
+}
+
+// NextSendAt is when the next queued send is due (0: none). WhatsApp's
+// count only for the process holding WhatsApp (withWhatsApp).
+func (s *Store) NextSendAt(withWhatsApp bool) int64 {
+	var at sql.NullInt64
+	_ = s.db.QueryRow(`SELECT MIN(send_at) FROM outbox WHERE status IN (?,?) AND (kind<>'whatsapp' OR ?)`,
+		StatusQueued, statusQueuedAction, withWhatsApp).Scan(&at)
+	return at.Int64
 }

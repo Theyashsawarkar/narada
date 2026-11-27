@@ -70,19 +70,9 @@ type server struct {
 // Run serves the tools on in/out (stdin/stdout) until ctx ends.
 func Run(ctx context.Context, a *app.App, h Helpers, in io.ReadCloser, out io.WriteCloser) error {
 	srv := newServer(ctx, a, h, nil)
-	// deliver approved sends even when nothing else is running
-	go func() {
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				a.DeliverDue(ctx)
-			}
-		}
-	}()
+	// deliver approved sends when no daemon does (it wakes on a queued
+	// send and at send_at; with a daemon running it leaves them to it)
+	go a.RunDeliverer(ctx, nil)
 	return srv.Run(ctx, &mcp.IOTransport{Reader: in, Writer: out})
 }
 

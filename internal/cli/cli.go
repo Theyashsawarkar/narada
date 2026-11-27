@@ -182,6 +182,10 @@ func withApp(f func(*app.App) error) int {
 		return check(err)
 	}
 	defer a.Close()
+	// a command that changed the unread counts (read, archive, sync...)
+	// updates counts.json once, at the end
+	a.TrackCounts(func() any { return GetCounts(a) })
+	defer a.FlushCounts()
 	return check(f(a))
 }
 
@@ -654,8 +658,8 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 	fmt.Fprint(os.Stderr, "\r\033[K")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	a.DeliverDue(ctx)
-	got, err := a.Store.OutboxItem(it.ID)
+	// the daemon sends it (queueing woke it); with none, this does
+	got, err := a.WaitFor(ctx, it.ID, true, store.StatusQueued, store.StatusSending)
 	if err != nil {
 		return err
 	}
@@ -663,18 +667,6 @@ func waitSend(a *app.App, it store.OutboxItem) error {
 		app.ActPoll: "poll sent", app.ActVote: "voted", app.ActLocation: "location shared", app.ActContact: "contact shared"}[it.Out.Action]
 	if done == "" {
 		done = "done"
-	}
-	switch got.Status {
-	case store.StatusSent:
-		fmt.Fprintln(os.Stderr, "narada: "+done)
-		return nil
-	case store.StatusFailed:
-		return fmt.Errorf("not sent: %s", got.Error)
-	}
-	// another process (the daemon) may have claimed it
-	got, err = a.WaitFor(ctx, it.ID, false, store.StatusQueued, store.StatusSending)
-	if err != nil {
-		return err
 	}
 	if got.Status != store.StatusSent {
 		return fmt.Errorf("not sent: %s %s", got.Status, got.Error)
@@ -1111,7 +1103,9 @@ func syncCmd(a *app.App, args []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "%s: synced in %s\n", n, time.Since(start).Round(100*time.Millisecond))
 	}
-	a.DeliverDue(ctx)
+	if !a.DaemonRunning() {
+		a.DeliverDue(ctx) // nobody else sends what is due
+	}
 	if failed {
 		return exitError{1, ""}
 	}

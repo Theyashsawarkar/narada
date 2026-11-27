@@ -145,6 +145,9 @@ func daemon(a *app.App, args []string) error {
 		return errors.New("another narada daemon is already running")
 	}
 	defer release()
+	a.SetDaemon()
+	// the bar watches this small file, not the database
+	a.PublishCounts(func() any { return GetCounts(a) })
 	log.Printf("narada %s daemon: mail every %s, chat every %s", app.Version, a.Config.MailInterval.Duration, a.Config.ChatInterval.Duration)
 	// agents: each `narada mcp` is pranali, a pipe to this socket
 	served := make(chan struct{})
@@ -159,7 +162,7 @@ func daemon(a *app.App, args []string) error {
 		log.Printf("agents: %s (%s)", l.Path, how)
 		go func() {
 			defer close(served)
-			if err := mcpserver.Serve(ctx, l, a, MCPHelpers(), mcpserver.ServeOptions{Life: life}); err != nil {
+			if err := mcpserver.Serve(ctx, l, a, MCPHelpers(), mcpserver.ServeOptions{Life: life, Kick: a.Wake}); err != nil {
 				log.Printf("mcp socket %s: %v", l.Path, err)
 			}
 		}()
@@ -197,34 +200,30 @@ func daemon(a *app.App, args []string) error {
 			}
 		}
 	}
-	// sends go out on their own clock: a slow sync never delays a
-	// scheduled message or the end of an undo window
-	go func() {
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-		for {
-			for _, sent := range a.DeliverDue(life) {
-				if sent.Status == store.StatusFailed {
-					log.Printf("send #%d failed: %s", sent.ID, sent.Error)
-					if a.Config.Notify {
-						app.Notify("narada: send failed", sent.Error)
-					}
+	// sends go out on their own clock (a slow sync never delays a
+	// scheduled message or the end of an undo window), woken by whatever
+	// queues one, here or in another narada, and by the next send_at:
+	// no ticking
+	go a.RunDeliverer(life, func(sent []store.OutboxItem) {
+		for _, it := range sent {
+			if it.Status == store.StatusFailed {
+				log.Printf("send #%d failed: %s", it.ID, it.Error)
+				if a.Config.Notify {
+					app.Notify("narada: send failed", it.Error)
 				}
 			}
-			select {
-			case <-life.Done():
-				return
-			case <-t.C:
-			}
 		}
-	}()
-	tick := time.NewTicker(time.Second)
-	defer tick.Stop()
+	})
+	// the syncs sleep until the next one is due (at most 30 s, so an
+	// account added meanwhile and WhatsApp's takeover aren't missed)
+	wake := time.NewTimer(0)
+	defer wake.Stop()
+	<-wake.C
 	var waNext time.Time
 	for {
 		// WhatsApp is a connection, not a sync: go online when linked
 		// (and take it over when the screen that held it quits)
-		if time.Now().After(waNext) {
+		if !time.Now().Before(waNext) {
 			waNext = time.Now().Add(30 * time.Second)
 			if _, linked := a.Store.WhatsApp(); linked && !a.WhatsAppOnline() {
 				if ok, err := a.StartWhatsApp(life); err != nil {
@@ -234,15 +233,22 @@ func daemon(a *app.App, args []string) error {
 				}
 			}
 		}
+		next := waNext
 		for _, acc := range a.AccountNames() {
 			step(mailNext, acc, a.Config.MailInterval.Duration, a.SyncMail)
 			step(chatNext, acc, a.Config.ChatInterval.Duration, a.SyncChat)
+			for _, b := range []*backoff{mailNext[acc], chatNext[acc]} {
+				if b != nil && b.next.Before(next) {
+					next = b.next
+				}
+			}
 		}
+		wake.Reset(max(time.Until(next), 100*time.Millisecond))
 		select {
 		case <-ctx.Done():
 			log.Print("stopping")
 			return nil
-		case <-tick.C:
+		case <-wake.C:
 		}
 	}
 }
@@ -299,6 +305,7 @@ func mcpCmd(args []string, in io.ReadCloser, out io.Writer) error {
 		return err
 	}
 	defer a.Close()
+	a.PublishCounts(func() any { return GetCounts(a) })
 	ctx, cancel := ctxSignal()
 	defer cancel()
 	err = mcpserver.Run(ctx, a, MCPHelpers(), in, nopWriteCloser{out})

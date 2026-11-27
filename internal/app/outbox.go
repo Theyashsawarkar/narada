@@ -356,9 +356,9 @@ func (a *App) Cancel(id int64) error {
 	return nil
 }
 
-// DeliverDue sends every queued item whose undo window is over. Any
-// long-running process (daemon, screen, MCP server) calls it; claiming
-// an item is atomic, so each is sent once.
+// DeliverDue sends every queued item whose undo window is over.
+// RunDeliverer calls it when woken (deliver.go); claiming an item is
+// atomic, so each is sent once even when two processes deliver.
 func (a *App) DeliverDue(ctx context.Context) []store.OutboxItem {
 	_ = a.Store.RecoverSending()
 	a.fetchAsked(ctx)
@@ -498,12 +498,14 @@ func (a *App) SaveDraft(ctx context.Context, account string, out store.Outgoing)
 	return c.CreateDraft(ctx, raw, out.ThreadID)
 }
 
-// WaitFor waits until an outbox item leaves the given statuses, or ctx ends.
+// WaitFor waits until an outbox item leaves the given statuses, or ctx
+// ends. With deliver, it sends what is due itself while it waits when
+// this process runs no deliverer (RunDeliverer) and no daemon does.
 func (a *App) WaitFor(ctx context.Context, id int64, deliver bool, statuses ...string) (store.OutboxItem, error) {
 	t := time.NewTicker(500 * time.Millisecond)
 	defer t.Stop()
 	for {
-		if deliver {
+		if deliver && !a.dl().running.Load() && a.delivers() {
 			a.DeliverDue(ctx)
 		}
 		it, err := a.Store.OutboxItem(id)

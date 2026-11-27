@@ -51,6 +51,8 @@ type App struct {
 	// Progress, when set, hears how a mail sync is going (threads fetched
 	// of total); the setup screen draws its bar from it.
 	Progress func(done, total int)
+
+	dlv deliverState // the outbox's wake-ups and the counts file (deliver.go)
 }
 
 func Open() (*App, error) {
@@ -66,10 +68,15 @@ func Open() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{Paths: p, Config: cfg, Store: st, Tokens: google.TokenStore{FallbackDir: p.Config}, clients: map[string]*google.Client{}}, nil
+	a := &App{Paths: p, Config: cfg, Store: st, Tokens: google.TokenStore{FallbackDir: p.Config}, clients: map[string]*google.Client{}}
+	st.OnQueue = a.Kick
+	return a, nil
 }
 
-func (a *App) Close() error { return a.Store.Close() }
+func (a *App) Close() error {
+	a.settle() // the daemon hears what this process queued
+	return a.Store.Close()
+}
 
 // Client returns the API client for an account, signing it in from the
 // stored token.

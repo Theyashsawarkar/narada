@@ -23,6 +23,38 @@ import (
 type Store struct {
 	db   *sql.DB
 	path string
+	// OnWrite is called after a write that changed something (the
+	// unread counts may have moved); OnQueue after work was queued for
+	// whoever delivers: an outbox row, WhatsApp receipts, reactions,
+	// actions and downloads. Set them before use; they must not block.
+	OnWrite, OnQueue func()
+}
+
+// exec is db.Exec, telling OnWrite when rows changed.
+func (s *Store) exec(q string, args ...any) (sql.Result, error) {
+	res, err := s.db.Exec(q, args...)
+	if err == nil && s.OnWrite != nil {
+		if n, e := res.RowsAffected(); e == nil && n > 0 {
+			s.OnWrite()
+		}
+	}
+	return res, err
+}
+
+// commit is tx.Commit, telling OnWrite.
+func (s *Store) commit(tx *sql.Tx) error {
+	err := tx.Commit()
+	if err == nil && s.OnWrite != nil {
+		s.OnWrite()
+	}
+	return err
+}
+
+// queued tells OnQueue (after a write that succeeded).
+func (s *Store) queued(err error) {
+	if err == nil && s.OnQueue != nil {
+		s.OnQueue()
+	}
 }
 
 const schema = `
@@ -338,13 +370,13 @@ func (s *Store) WhatsApp() (acc Account, ok bool) {
 
 // SetMyName keeps your own name on an account (WhatsApp: your profile name).
 func (s *Store) SetMyName(account, name string) error {
-	_, err := s.db.Exec(`UPDATE accounts SET my_name=? WHERE name=?`, name, account)
+	_, err := s.exec(`UPDATE accounts SET my_name=? WHERE name=?`, name, account)
 	return err
 }
 
 // AddWhatsApp records the linked WhatsApp account (me: your JID).
 func (s *Store) AddWhatsApp(phone, me string) error {
-	_, err := s.db.Exec(`INSERT INTO accounts(name,email,chat,chat_user,kind,position) VALUES(?,?,1,?,?,1000)
+	_, err := s.exec(`INSERT INTO accounts(name,email,chat,chat_user,kind,position) VALUES(?,?,1,?,?,1000)
 	  ON CONFLICT(name) DO UPDATE SET email=excluded.email, chat_user=excluded.chat_user, kind=excluded.kind, last_error=''`, WhatsAppAccount, phone, me, KindWhatsApp)
 	return err
 }
@@ -366,7 +398,7 @@ func (s *Store) Account(name string) (Account, error) {
 }
 
 func (s *Store) AddAccount(a Account) error {
-	_, err := s.db.Exec(`INSERT INTO accounts(name,email,chat,position) VALUES(?,?,?,(SELECT COALESCE(MAX(position),0)+1 FROM accounts))
+	_, err := s.exec(`INSERT INTO accounts(name,email,chat,position) VALUES(?,?,?,(SELECT COALESCE(MAX(position),0)+1 FROM accounts))
 	  ON CONFLICT(name) DO UPDATE SET email=excluded.email, chat=excluded.chat`, a.Name, a.Email, a.Chat)
 	return err
 }
@@ -384,21 +416,21 @@ func (s *Store) RemoveAccount(name string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 func (s *Store) SetHistory(account, historyID string) error {
-	_, err := s.db.Exec(`UPDATE accounts SET history_id=?, mail_synced=?, last_error='' WHERE name=?`, historyID, now(), account)
+	_, err := s.exec(`UPDATE accounts SET history_id=?, mail_synced=?, last_error='' WHERE name=?`, historyID, now(), account)
 	return err
 }
 
 func (s *Store) SetChatSynced(account, chatUser string) error {
-	_, err := s.db.Exec(`UPDATE accounts SET chat_synced=?, chat_user=CASE WHEN ?='' THEN chat_user ELSE ? END WHERE name=?`, now(), chatUser, chatUser, account)
+	_, err := s.exec(`UPDATE accounts SET chat_synced=?, chat_user=CASE WHEN ?='' THEN chat_user ELSE ? END WHERE name=?`, now(), chatUser, chatUser, account)
 	return err
 }
 
 func (s *Store) SetError(account, msg string) error {
-	_, err := s.db.Exec(`UPDATE accounts SET last_error=? WHERE name=?`, msg, account)
+	_, err := s.exec(`UPDATE accounts SET last_error=? WHERE name=?`, msg, account)
 	return err
 }
 
@@ -487,7 +519,7 @@ func (s *Store) PutThread(account string, t Thread, msgs []Message) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 func deleteThreadTx(tx *sql.Tx, account, id string) error {
@@ -512,7 +544,7 @@ func (s *Store) DeleteThread(account, id string) error {
 	if _, err := tx.Exec(`DELETE FROM section_threads WHERE account=? AND thread_id=?`, account, id); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 // SetThreadLabels changes labels locally, before (or instead of) the next
@@ -536,7 +568,7 @@ func (s *Store) SetThreadLabels(account, id string, add, remove []string) error 
 	for l := range set {
 		labels = append(labels, l)
 	}
-	_, err = s.db.Exec(`UPDATE threads SET labels=? WHERE account=? AND id=?`, joinLabels(labels), account, id)
+	_, err = s.exec(`UPDATE threads SET labels=? WHERE account=? AND id=?`, joinLabels(labels), account, id)
 	return err
 }
 
@@ -687,7 +719,7 @@ func (s *Store) Messages(account, threadID string) ([]Message, error) {
 // AddSectionThreads adds threads to a search section without replacing it.
 func (s *Store) AddSectionThreads(account, section string, ids []string) error {
 	for _, id := range ids {
-		if _, err := s.db.Exec(`INSERT OR IGNORE INTO section_threads(account,section,thread_id) VALUES(?,?,?)`, account, section, id); err != nil {
+		if _, err := s.exec(`INSERT OR IGNORE INTO section_threads(account,section,thread_id) VALUES(?,?,?)`, account, section, id); err != nil {
 			return err
 		}
 	}
@@ -708,7 +740,7 @@ func (s *Store) SetSectionThreads(account, section string, ids []string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 // FetchedSince reports whether the thread was fetched after `since` (ms).
@@ -735,7 +767,7 @@ func (s *Store) Backfill(account string) Backfill {
 }
 
 func (s *Store) SetBackfill(account string, b Backfill) error {
-	_, err := s.db.Exec(`INSERT INTO backfill(account,page,done,total,query) VALUES(?,?,?,?,?)
+	_, err := s.exec(`INSERT INTO backfill(account,page,done,total,query) VALUES(?,?,?,?,?)
 	  ON CONFLICT(account) DO UPDATE SET page=excluded.page, done=excluded.done, total=excluded.total, query=excluded.query`,
 		account, b.Page, b.Done, b.Total, b.Query)
 	return err
@@ -817,7 +849,7 @@ func (s *Store) NoteContact(account, addr, name string, sent bool, when int64) e
 	if sent {
 		sentN, recvN = 1, 0
 	}
-	_, err := s.db.Exec(`INSERT INTO contacts(account,addr,name,sent,received,last) VALUES(?,?,?,?,?,?)
+	_, err := s.exec(`INSERT INTO contacts(account,addr,name,sent,received,last) VALUES(?,?,?,?,?,?)
 	  ON CONFLICT(account,addr) DO UPDATE SET name=CASE WHEN excluded.name<>'' THEN excluded.name ELSE name END,
 	  sent=sent+excluded.sent, received=received+excluded.received, last=MAX(last,excluded.last)`, account, addr, name, sentN, recvN, when)
 	return err
@@ -894,7 +926,7 @@ func (s *Store) SuggestContacts(account, query string, limit int, skip map[strin
 // PutContact remembers someone from the directory (no mail counted).
 func (s *Store) PutContact(account, addr, name string) error {
 	addr = strings.ToLower(strings.TrimSpace(addr))
-	_, err := s.db.Exec(`INSERT INTO contacts(account,addr,name) VALUES(?,?,?)
+	_, err := s.exec(`INSERT INTO contacts(account,addr,name) VALUES(?,?,?)
 	  ON CONFLICT(account,addr) DO UPDATE SET name=CASE WHEN contacts.name='' THEN excluded.name ELSE contacts.name END`, account, addr, name)
 	return err
 }
@@ -907,7 +939,7 @@ func (s *Store) KnownContact(account, addr string) bool {
 }
 
 func (s *Store) ResetContacts(account string) error {
-	_, err := s.db.Exec(`DELETE FROM contacts WHERE account=?`, account)
+	_, err := s.exec(`DELETE FROM contacts WHERE account=?`, account)
 	return err
 }
 
@@ -933,7 +965,7 @@ func (s *Store) PutLabels(account string, labels []Label) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 func (s *Store) Labels(account string) ([]Label, error) {
@@ -1022,7 +1054,7 @@ func PendingOutboxID(name string) (int64, bool) {
 
 // SetTicks sets a message's ticks (RaiseTicks is for receipts).
 func (s *Store) SetTicks(account, name string, level int) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET ticks=? WHERE account=? AND name=?`, level, account, name)
+	_, err := s.exec(`UPDATE chat_messages SET ticks=? WHERE account=? AND name=?`, level, account, name)
 	return err
 }
 
@@ -1048,7 +1080,7 @@ func (s *Store) SetWhatsAppMembers(space string, jids []string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 // WhatsAppNames is every name known for a WhatsApp number, by JID: your saved
@@ -1135,12 +1167,15 @@ type WhatsAppReaction struct {
 // SetWhatsAppReaction stores a reaction, or forgets one taken back.
 func (s *Store) SetWhatsAppReaction(r WhatsAppReaction) error {
 	if r.Emoji == "" && !r.Pending {
-		_, err := s.db.Exec(`DELETE FROM whatsapp_reactions WHERE space=? AND msg=? AND reactor=?`, r.Space, r.Msg, r.Reactor)
+		_, err := s.exec(`DELETE FROM whatsapp_reactions WHERE space=? AND msg=? AND reactor=?`, r.Space, r.Msg, r.Reactor)
 		return err
 	}
-	_, err := s.db.Exec(`INSERT INTO whatsapp_reactions(space,msg,reactor,emoji,sender,pending,created) VALUES(?,?,?,?,?,?,?)
+	_, err := s.exec(`INSERT INTO whatsapp_reactions(space,msg,reactor,emoji,sender,pending,created) VALUES(?,?,?,?,?,?,?)
 	  ON CONFLICT(space,msg,reactor) DO UPDATE SET emoji=excluded.emoji, sender=excluded.sender, pending=excluded.pending, created=excluded.created`,
 		r.Space, r.Msg, r.Reactor, r.Emoji, r.Sender, r.Pending, time.Now().UnixMilli())
+	if r.Pending {
+		s.queued(err)
+	}
 	return err
 }
 
@@ -1177,7 +1212,7 @@ func (s *Store) WhatsAppReactionSummary(space, msg string) (string, error) {
 // PendingWhatsAppReactions are your reactions still to send, dropping those
 // older than maxAge.
 func (s *Store) PendingWhatsAppReactions(maxAge time.Duration) ([]WhatsAppReaction, error) {
-	if _, err := s.db.Exec(`DELETE FROM whatsapp_reactions WHERE pending=1 AND created<?`, time.Now().Add(-maxAge).UnixMilli()); err != nil {
+	if _, err := s.exec(`DELETE FROM whatsapp_reactions WHERE pending=1 AND created<?`, time.Now().Add(-maxAge).UnixMilli()); err != nil {
 		return nil, err
 	}
 	rows, err := s.db.Query(`SELECT space,msg,reactor,emoji,sender FROM whatsapp_reactions WHERE pending=1 ORDER BY created`)
@@ -1199,10 +1234,10 @@ func (s *Store) PendingWhatsAppReactions(maxAge time.Duration) ([]WhatsAppReacti
 // WhatsAppReactionSent: it reached WhatsApp, unless you changed it since.
 func (s *Store) WhatsAppReactionSent(r WhatsAppReaction) error {
 	if r.Emoji == "" {
-		_, err := s.db.Exec(`DELETE FROM whatsapp_reactions WHERE space=? AND msg=? AND reactor=? AND emoji='' AND pending=1`, r.Space, r.Msg, r.Reactor)
+		_, err := s.exec(`DELETE FROM whatsapp_reactions WHERE space=? AND msg=? AND reactor=? AND emoji='' AND pending=1`, r.Space, r.Msg, r.Reactor)
 		return err
 	}
-	_, err := s.db.Exec(`UPDATE whatsapp_reactions SET pending=0 WHERE space=? AND msg=? AND reactor=? AND emoji=?`, r.Space, r.Msg, r.Reactor, r.Emoji)
+	_, err := s.exec(`UPDATE whatsapp_reactions SET pending=0 WHERE space=? AND msg=? AND reactor=? AND emoji=?`, r.Space, r.Msg, r.Reactor, r.Emoji)
 	return err
 }
 
@@ -1224,13 +1259,15 @@ func (s *Store) AddWhatsAppReads(reads []WhatsAppRead) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	err = s.commit(tx)
+	s.queued(err)
+	return err
 }
 
 // WhatsAppReads are the queued read receipts, dropping those older than
 // maxAge (the phone has long moved on).
 func (s *Store) WhatsAppReads(maxAge time.Duration) ([]WhatsAppRead, error) {
-	if _, err := s.db.Exec(`DELETE FROM whatsapp_reads WHERE created<?`, time.Now().Add(-maxAge).UnixMilli()); err != nil {
+	if _, err := s.exec(`DELETE FROM whatsapp_reads WHERE created<?`, time.Now().Add(-maxAge).UnixMilli()); err != nil {
 		return nil, err
 	}
 	rows, err := s.db.Query(`SELECT space,msg,sender FROM whatsapp_reads ORDER BY created`)
@@ -1252,7 +1289,7 @@ func (s *Store) WhatsAppReads(maxAge time.Duration) ([]WhatsAppRead, error) {
 // DoneWhatsAppReads forgets receipts that went out.
 func (s *Store) DoneWhatsAppReads(reads []WhatsAppRead) error {
 	for _, r := range reads {
-		if _, err := s.db.Exec(`DELETE FROM whatsapp_reads WHERE space=? AND msg=?`, r.Space, r.Msg); err != nil {
+		if _, err := s.exec(`DELETE FROM whatsapp_reads WHERE space=? AND msg=?`, r.Space, r.Msg); err != nil {
 			return err
 		}
 	}
@@ -1289,7 +1326,7 @@ type ChatFile struct {
 }
 
 func (s *Store) PutSpace(sp Space) error {
-	_, err := s.db.Exec(`INSERT INTO spaces(account,name,display_name,type,last_active,threaded,members) VALUES(?,?,?,?,?,?,?)
+	_, err := s.exec(`INSERT INTO spaces(account,name,display_name,type,last_active,threaded,members) VALUES(?,?,?,?,?,?,?)
 	  ON CONFLICT(account,name) DO UPDATE SET display_name=CASE WHEN excluded.display_name<>'' THEN excluded.display_name ELSE display_name END,
 	  type=excluded.type, last_active=MAX(last_active,excluded.last_active), threaded=excluded.threaded,
 	  members=CASE WHEN excluded.members>0 THEN excluded.members ELSE members END`, sp.Account, sp.Name, sp.DisplayName, sp.Type, sp.LastActive, sp.Threaded, sp.Members)
@@ -1353,7 +1390,7 @@ func (s *Store) SearchChat(accounts []string, query string, limit int, space str
 // arrive out of order).
 func (s *Store) RaiseTicks(account string, names []string, level int) error {
 	for _, n := range names {
-		if _, err := s.db.Exec(`UPDATE chat_messages SET ticks=MAX(ticks,?) WHERE account=? AND name=?`, level, account, n); err != nil {
+		if _, err := s.exec(`UPDATE chat_messages SET ticks=MAX(ticks,?) WHERE account=? AND name=?`, level, account, n); err != nil {
 			return err
 		}
 	}
@@ -1375,7 +1412,7 @@ func (s *Store) ChatMessage(account, name string) (ChatMessage, error) {
 
 // ResetDMTitles forgets DM and group titles so they are worked out again.
 func (s *Store) ResetDMTitles(account string) error {
-	_, err := s.db.Exec(`UPDATE spaces SET display_name='' WHERE account=? AND type<>'SPACE'`, account)
+	_, err := s.exec(`UPDATE spaces SET display_name='' WHERE account=? AND type<>'SPACE'`, account)
 	return err
 }
 
@@ -1413,7 +1450,7 @@ func (s *Store) OldestChat(account, space string) (int64, error) {
 
 // SetPinned keeps a chat on top of the list (on this machine).
 func (s *Store) SetPinned(account, space string, on bool) error {
-	_, err := s.db.Exec(`UPDATE spaces SET pinned=? WHERE account=? AND name=?`, on, account, space)
+	_, err := s.exec(`UPDATE spaces SET pinned=? WHERE account=? AND name=?`, on, account, space)
 	return err
 }
 
@@ -1429,7 +1466,7 @@ type WhatsAppPoll struct {
 
 func (s *Store) PutWhatsAppPoll(p WhatsAppPoll) error {
 	opts, _ := json.Marshal(p.Options)
-	_, err := s.db.Exec(`INSERT INTO whatsapp_polls(msg,question,options,multi) VALUES(?,?,?,?)
+	_, err := s.exec(`INSERT INTO whatsapp_polls(msg,question,options,multi) VALUES(?,?,?,?)
 	  ON CONFLICT(msg) DO UPDATE SET question=excluded.question, options=excluded.options, multi=excluded.multi`, p.Msg, p.Question, string(opts), p.Multi)
 	return err
 }
@@ -1437,11 +1474,11 @@ func (s *Store) PutWhatsAppPoll(p WhatsAppPoll) error {
 // SetWhatsAppVote records a vote (no options: taken back).
 func (s *Store) SetWhatsAppVote(msg, voter string, options []string) error {
 	if len(options) == 0 {
-		_, err := s.db.Exec(`DELETE FROM whatsapp_votes WHERE msg=? AND voter=?`, msg, voter)
+		_, err := s.exec(`DELETE FROM whatsapp_votes WHERE msg=? AND voter=?`, msg, voter)
 		return err
 	}
 	b, _ := json.Marshal(options)
-	_, err := s.db.Exec(`INSERT INTO whatsapp_votes(msg,voter,options) VALUES(?,?,?) ON CONFLICT(msg,voter) DO UPDATE SET options=excluded.options`, msg, voter, string(b))
+	_, err := s.exec(`INSERT INTO whatsapp_votes(msg,voter,options) VALUES(?,?,?) ON CONFLICT(msg,voter) DO UPDATE SET options=excluded.options`, msg, voter, string(b))
 	return err
 }
 
@@ -1474,28 +1511,28 @@ func (s *Store) WhatsAppPollOf(msg string) (WhatsAppPoll, error) {
 // SetChatText changes a stored message's text without marking it edited
 // (a poll's tally).
 func (s *Store) SetChatText(account, name, text string) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET text=? WHERE account=? AND name=?`, text, account, name)
+	_, err := s.exec(`UPDATE chat_messages SET text=? WHERE account=? AND name=?`, text, account, name)
 	return err
 }
 
 // SetArchived, SetMuted, SetStarred: WhatsApp chat and message state.
 func (s *Store) SetArchived(account, space string, on bool) error {
-	_, err := s.db.Exec(`UPDATE spaces SET archived=? WHERE account=? AND name=?`, on, account, space)
+	_, err := s.exec(`UPDATE spaces SET archived=? WHERE account=? AND name=?`, on, account, space)
 	return err
 }
 
 func (s *Store) SetMuted(account, space string, until int64) error {
-	_, err := s.db.Exec(`UPDATE spaces SET muted_until=? WHERE account=? AND name=?`, until, account, space)
+	_, err := s.exec(`UPDATE spaces SET muted_until=? WHERE account=? AND name=?`, until, account, space)
 	return err
 }
 
 func (s *Store) SetDisappear(account, space string, secs int) error {
-	_, err := s.db.Exec(`UPDATE spaces SET disappear=? WHERE account=? AND name=?`, max(secs, 0), account, space)
+	_, err := s.exec(`UPDATE spaces SET disappear=? WHERE account=? AND name=?`, max(secs, 0), account, space)
 	return err
 }
 
 func (s *Store) SetBlocked(account, space string, on bool) error {
-	_, err := s.db.Exec(`UPDATE spaces SET blocked=? WHERE account=? AND name=?`, on, account, space)
+	_, err := s.exec(`UPDATE spaces SET blocked=? WHERE account=? AND name=?`, on, account, space)
 	return err
 }
 
@@ -1518,7 +1555,7 @@ type Presence struct {
 
 // SetPresence records someone's online state.
 func (s *Store) SetPresence(jid string, online bool, lastSeen int64) error {
-	_, err := s.db.Exec(`INSERT INTO whatsapp_presence(jid,online,last_seen,at) VALUES(?,?,?,?)
+	_, err := s.exec(`INSERT INTO whatsapp_presence(jid,online,last_seen,at) VALUES(?,?,?,?)
 	  ON CONFLICT(jid) DO UPDATE SET online=excluded.online, last_seen=CASE WHEN excluded.last_seen>0 THEN excluded.last_seen ELSE last_seen END, at=excluded.at`,
 		jid, online, lastSeen, now())
 	return err
@@ -1527,7 +1564,7 @@ func (s *Store) SetPresence(jid string, online bool, lastSeen int64) error {
 // SetTyping records someone typing (or stopping, typing "") in a chat;
 // typing means they're online.
 func (s *Store) SetTyping(jid, chat, typing string) error {
-	_, err := s.db.Exec(`INSERT INTO whatsapp_presence(jid,online,at,typing_in,typing,typing_at) VALUES(?,1,?,?,?,?)
+	_, err := s.exec(`INSERT INTO whatsapp_presence(jid,online,at,typing_in,typing,typing_at) VALUES(?,1,?,?,?,?)
 	  ON CONFLICT(jid) DO UPDATE SET online=1, at=excluded.at, typing_in=excluded.typing_in, typing=excluded.typing, typing_at=excluded.typing_at`,
 		jid, now(), chat, typing, now())
 	return err
@@ -1561,12 +1598,12 @@ func (s *Store) TypingIn(chat string) []Presence {
 
 // SetMessagePinned marks a message pinned in its chat.
 func (s *Store) SetMessagePinned(account, name string, on bool) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET pinned=? WHERE account=? AND name=?`, on, account, name)
+	_, err := s.exec(`UPDATE chat_messages SET pinned=? WHERE account=? AND name=?`, on, account, name)
 	return err
 }
 
 func (s *Store) SetStarred(account, name string, on bool) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET starred=? WHERE account=? AND name=?`, on, account, name)
+	_, err := s.exec(`UPDATE chat_messages SET starred=? WHERE account=? AND name=?`, on, account, name)
 	return err
 }
 
@@ -1609,10 +1646,11 @@ type WhatsAppAction struct {
 }
 
 func (s *Store) AddWhatsAppAction(action, chat, arg string) (int64, error) {
-	res, err := s.db.Exec(`INSERT INTO whatsapp_actions(action,chat,arg,created) VALUES(?,?,?,?)`, action, chat, arg, now())
+	res, err := s.exec(`INSERT INTO whatsapp_actions(action,chat,arg,created) VALUES(?,?,?,?)`, action, chat, arg, now())
 	if err != nil {
 		return 0, err
 	}
+	s.queued(nil)
 	return res.LastInsertId()
 }
 
@@ -1639,12 +1677,12 @@ const actionCols = `id,action,chat,arg,created,done,error,result`
 // PendingWhatsAppActions lists what's waiting, oldest first; older than
 // maxAge is dropped (and finished ones a day old are cleared).
 func (s *Store) PendingWhatsAppActions(maxAge time.Duration) ([]WhatsAppAction, error) {
-	if _, err := s.db.Exec(`DELETE FROM whatsapp_actions WHERE (done<>1 AND created<?) OR (done=1 AND created<?)`,
+	if _, err := s.exec(`DELETE FROM whatsapp_actions WHERE (done<>1 AND created<?) OR (done=1 AND created<?)`,
 		time.Now().Add(-maxAge).UnixMilli(), time.Now().Add(-24*time.Hour).UnixMilli()); err != nil {
 		return nil, err
 	}
 	// one claimed by a process that died doing it goes back
-	_, _ = s.db.Exec(`UPDATE whatsapp_actions SET done=0 WHERE done=2 AND created<?`, time.Now().Add(-5*time.Minute).UnixMilli())
+	_, _ = s.exec(`UPDATE whatsapp_actions SET done=0 WHERE done=2 AND created<?`, time.Now().Add(-5*time.Minute).UnixMilli())
 	return scanActions(s.db.Query(`SELECT ` + actionCols + ` FROM whatsapp_actions WHERE done=0 ORDER BY id`))
 }
 
@@ -1662,7 +1700,7 @@ func (s *Store) WhatsAppActionByID(id int64) (WhatsAppAction, error) {
 // ClaimWhatsAppAction takes an action to do; false when another process
 // (or another flush in this one) has it.
 func (s *Store) ClaimWhatsAppAction(id int64) bool {
-	res, err := s.db.Exec(`UPDATE whatsapp_actions SET done=2 WHERE id=? AND done=0`, id)
+	res, err := s.exec(`UPDATE whatsapp_actions SET done=2 WHERE id=? AND done=0`, id)
 	if err != nil {
 		return false
 	}
@@ -1673,48 +1711,48 @@ func (s *Store) ClaimWhatsAppAction(id int64) bool {
 // FinishWhatsAppAction records how it went; a failure that may pass
 // (offline) leaves it waiting when retry is set.
 func (s *Store) FinishWhatsAppAction(id int64, result, errText string) error {
-	_, err := s.db.Exec(`UPDATE whatsapp_actions SET done=1, result=?, error=? WHERE id=?`, result, errText, id)
+	_, err := s.exec(`UPDATE whatsapp_actions SET done=1, result=?, error=? WHERE id=?`, result, errText, id)
 	return err
 }
 
 // EditChatText changes a stored message's text (after an edit).
 func (s *Store) EditChatText(account, name, text, formatted string) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET text=?, formatted=?, edited=1 WHERE account=? AND name=?`, text, formatted, account, name)
+	_, err := s.exec(`UPDATE chat_messages SET text=?, formatted=?, edited=1 WHERE account=? AND name=?`, text, formatted, account, name)
 	return err
 }
 
 // DeleteChatOlderThan drops a chat's messages from before a time.
 func (s *Store) DeleteChatOlderThan(account, space string, before int64) error {
-	_, err := s.db.Exec(`DELETE FROM chat_messages WHERE account=? AND space=? AND created<?`, account, space, before)
+	_, err := s.exec(`DELETE FROM chat_messages WHERE account=? AND space=? AND created<?`, account, space, before)
 	return err
 }
 
 // DeleteChatMessage drops a deleted message from the local copy.
 func (s *Store) DeleteChatMessage(account, name string) error {
-	_, err := s.db.Exec(`DELETE FROM chat_messages WHERE account=? AND name=?`, account, name)
+	_, err := s.exec(`DELETE FROM chat_messages WHERE account=? AND name=?`, account, name)
 	return err
 }
 
 // SetReactions stores a message's reaction summary.
 func (s *Store) SetReactions(account, name, reactions string) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET reactions=? WHERE account=? AND name=?`, reactions, account, name)
+	_, err := s.exec(`UPDATE chat_messages SET reactions=? WHERE account=? AND name=?`, reactions, account, name)
 	return err
 }
 
 // SetAlias names a chat on this machine only ("" removes the name).
 func (s *Store) SetAlias(account, space, alias string) error {
-	_, err := s.db.Exec(`UPDATE spaces SET alias=? WHERE account=? AND name=?`, alias, account, space)
+	_, err := s.exec(`UPDATE spaces SET alias=? WHERE account=? AND name=?`, alias, account, space)
 	return err
 }
 
 // RenameSpace sets a DM or group's title (they have none of their own).
 func (s *Store) RenameSpace(account, space, name string) error {
-	_, err := s.db.Exec(`UPDATE spaces SET display_name=? WHERE account=? AND name=?`, name, account, space)
+	_, err := s.exec(`UPDATE spaces SET display_name=? WHERE account=? AND name=?`, name, account, space)
 	return err
 }
 
 func (s *Store) SetSpaceRead(account, space string, when int64) error {
-	_, err := s.db.Exec(`UPDATE spaces SET last_read=MAX(last_read,?) WHERE account=? AND name=?`, when, account, space)
+	_, err := s.exec(`UPDATE spaces SET last_read=MAX(last_read,?) WHERE account=? AND name=?`, when, account, space)
 	return err
 }
 
@@ -1733,7 +1771,7 @@ func (s *Store) Stamp() string {
 
 // Tried notes a lookup that failed just now.
 func (s *Store) Tried(account, key string) error {
-	_, err := s.db.Exec(`INSERT INTO tries(account,key,at) VALUES(?,?,?) ON CONFLICT(account,key) DO UPDATE SET at=excluded.at`, account, key, now())
+	_, err := s.exec(`INSERT INTO tries(account,key,at) VALUES(?,?,?) ON CONFLICT(account,key) DO UPDATE SET at=excluded.at`, account, key, now())
 	return err
 }
 
@@ -1755,12 +1793,12 @@ func (s *Store) LastOtherMessage(account, space string) int64 {
 }
 
 func (s *Store) ForceSpaceRead(account, space string, when int64) error {
-	_, err := s.db.Exec(`UPDATE spaces SET last_read=? WHERE account=? AND name=?`, when, account, space)
+	_, err := s.exec(`UPDATE spaces SET last_read=? WHERE account=? AND name=?`, when, account, space)
 	return err
 }
 
 func (s *Store) SetSpaceSynced(account, space string, when int64) error {
-	_, err := s.db.Exec(`UPDATE spaces SET synced_to=MAX(synced_to,?) WHERE account=? AND name=?`, when, account, space)
+	_, err := s.exec(`UPDATE spaces SET synced_to=MAX(synced_to,?) WHERE account=? AND name=?`, when, account, space)
 	return err
 }
 
@@ -1775,7 +1813,7 @@ func (s *Store) PutChatMessages(msgs []ChatMessage) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 func putChatMessage(tx *sql.Tx, m ChatMessage) error {
@@ -1813,7 +1851,7 @@ func (s *Store) ReplacePending(outboxID int64, m ChatMessage) error {
 	if err := putChatMessage(tx, m); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return s.commit(tx)
 }
 
 // Spaces lists spaces, most recently active first, with unread counts
@@ -1939,14 +1977,14 @@ func (s *Store) User(account, id string) (name, email string, ok bool) {
 }
 
 func (s *Store) PutUser(account, id, name, email string) error {
-	_, err := s.db.Exec(`INSERT INTO users(account,id,name,email) VALUES(?,?,?,?) ON CONFLICT(account,id) DO UPDATE SET name=excluded.name, email=excluded.email`,
+	_, err := s.exec(`INSERT INTO users(account,id,name,email) VALUES(?,?,?,?) ON CONFLICT(account,id) DO UPDATE SET name=excluded.name, email=excluded.email`,
 		account, id, name, email)
 	return err
 }
 
 // FixSenderNames fills sender names learned after their messages arrived.
 func (s *Store) FixSenderNames(account string) error {
-	_, err := s.db.Exec(`UPDATE chat_messages SET sender_name=(SELECT name FROM users u WHERE u.account=chat_messages.account AND u.id=chat_messages.sender)
+	_, err := s.exec(`UPDATE chat_messages SET sender_name=(SELECT name FROM users u WHERE u.account=chat_messages.account AND u.id=chat_messages.sender)
 	  WHERE account=? AND EXISTS (SELECT 1 FROM users u WHERE u.account=chat_messages.account AND u.id=chat_messages.sender AND u.name<>'')`, account)
 	return err
 }
@@ -1955,7 +1993,7 @@ func (s *Store) FixSenderNames(account string) error {
 
 // FirstNotify records key and reports whether it was new.
 func (s *Store) FirstNotify(account, key string) bool {
-	res, err := s.db.Exec(`INSERT OR IGNORE INTO notified(account,key) VALUES(?,?)`, account, key)
+	res, err := s.exec(`INSERT OR IGNORE INTO notified(account,key) VALUES(?,?)`, account, key)
 	if err != nil {
 		return false
 	}
@@ -1966,7 +2004,7 @@ func (s *Store) FirstNotify(account, key string) bool {
 // SetUnreadCount sets a chat's read time so its n newest messages from
 // others count as unread (WhatsApp's history gives a count, not a time).
 func (s *Store) SetUnreadCount(account, space string, n int) error {
-	_, err := s.db.Exec(`UPDATE spaces SET last_read=COALESCE((SELECT c.created FROM chat_messages c JOIN accounts a ON a.name=c.account
+	_, err := s.exec(`UPDATE spaces SET last_read=COALESCE((SELECT c.created FROM chat_messages c JOIN accounts a ON a.name=c.account
 	  WHERE c.account=? AND c.space=? AND c.sender<>a.chat_user ORDER BY c.created DESC LIMIT 1 OFFSET ?), CASE WHEN ?>0 THEN 0 ELSE last_read END)
 	  WHERE account=? AND name=?`, account, space, n, n, account, space)
 	return err
@@ -2006,7 +2044,7 @@ func (s *Store) RepairWhatsAppNames() error {
 		    AND (SELECT sp.display_name FROM spaces sp WHERE sp.account=chat_messages.account AND sp.name=chat_messages.space) NOT LIKE '+%'
 		    AND (SELECT sp.display_name FROM spaces sp WHERE sp.account=chat_messages.account AND sp.name=chat_messages.space) <> ''`,
 	} {
-		if _, err := s.db.Exec(q); err != nil {
+		if _, err := s.exec(q); err != nil {
 			return err
 		}
 	}
@@ -2022,8 +2060,9 @@ type MediaFetch struct {
 
 // AskMedia queues a file for download (asking again clears an old error).
 func (s *Store) AskMedia(account, msg string, idx int) error {
-	_, err := s.db.Exec(`INSERT INTO media_fetch(account,msg,idx,asked) VALUES(?,?,?,?)
+	_, err := s.exec(`INSERT INTO media_fetch(account,msg,idx,asked) VALUES(?,?,?,?)
 	  ON CONFLICT(account,msg,idx) DO UPDATE SET asked=excluded.asked, error=''`, account, msg, idx, now())
+	s.queued(err)
 	return err
 }
 
@@ -2063,9 +2102,9 @@ func (s *Store) MediaFetchError(account, msg string, idx int) string {
 func (s *Store) MediaFetched(account, msg string, idx int, err string) error {
 	var e error
 	if err == "" {
-		_, e = s.db.Exec(`DELETE FROM media_fetch WHERE account=? AND msg=? AND idx=?`, account, msg, idx)
+		_, e = s.exec(`DELETE FROM media_fetch WHERE account=? AND msg=? AND idx=?`, account, msg, idx)
 	} else {
-		_, e = s.db.Exec(`UPDATE media_fetch SET error=? WHERE account=? AND msg=? AND idx=?`, err, account, msg, idx)
+		_, e = s.exec(`UPDATE media_fetch SET error=? WHERE account=? AND msg=? AND idx=?`, err, account, msg, idx)
 	}
 	return e
 }
@@ -2074,7 +2113,7 @@ func (s *Store) MediaFetched(account, msg string, idx int, err string) error {
 // (0 Mail, 1 Chat, 2 WhatsApp), its section and the item's key. Marks
 // last across runs.
 func (s *Store) SetMark(letter string, place, section int, item string) error {
-	_, err := s.db.Exec(`INSERT INTO marks (letter, place, section, item, at) VALUES (?,?,?,?,?)
+	_, err := s.exec(`INSERT INTO marks (letter, place, section, item, at) VALUES (?,?,?,?,?)
 		ON CONFLICT(letter) DO UPDATE SET place=excluded.place, section=excluded.section, item=excluded.item, at=excluded.at`,
 		letter, place, section, item, time.Now().Unix())
 	return err
