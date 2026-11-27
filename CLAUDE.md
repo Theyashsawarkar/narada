@@ -18,6 +18,13 @@ behaviour only through the `@narada-*` options and config.toml.
   `internal/fake` an in-memory Google and WhatsApp used by every test and
   `narada demo`. WhatsApp is the account `whatsapp` of kind `whatsapp`:
   `Store.Accounts()` is Google-only, so never hand it to Google code.
+- Agents' MCP sessions reach the daemon through pranali (its protocol:
+  github.com/Theyashsawarkar/pranali docs/PROTOCOL.md; follow it, don't
+  diverge; ADR 11): `narada mcp` execs `pranali narada --fallback <self>
+  mcp --in-process` when pranali is on PATH, else serves in process. The
+  daemon side is `internal/mcpserver/socket.go`; `narada service install`
+  writes narada.service and narada-mcp.socket (`internal/app/service.go`,
+  copies in `systemd/`).
 - WhatsApp is a connection one process holds (lock `whatsapp`); only that
   process delivers `whatsapp` outbox rows. Test with `fake.WhatsApp`
   (`App.DialWhatsApp`), never a real phone or account.
