@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Unreleased
+
+- Website: pranali joins the family list in the footer; the site builder passes ruff.
+
 ## v0.14.0 -- 2026-11-27
 
 - **The outbox no longer ticks.** The daemon, every screen and every in-process `narada mcp` ran the outbox once a second; now only the daemon delivers, woken when something is queued (an outbox row, an approval, a reschedule, WhatsApp receipts, reactions, actions or downloads: in the same process directly, from another narada through the daemon's socket) and by one timer for the next scheduled send. The screen and `narada mcp --in-process` deliver only when no daemon runs, or WhatsApp's while they hold it. The daemon's sync loop also sleeps until the next sync is due instead of waking every second. An idle test daemon (fake Google, no WhatsApp) went from about 7 wake-ups a second to about 1, most of it its syncs.
